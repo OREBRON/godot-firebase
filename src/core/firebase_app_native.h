@@ -11,9 +11,8 @@ class FirebaseAppNative : public godot::Object {
 	GDCLASS(FirebaseAppNative, godot::Object)
 
 public:
-	// iOS reads GoogleService-Info.plist and ignores `p_config_json`.
-	// Desktop needs the google-services JSON content.
-	static godot::Error initialize(const godot::String &p_config_json);
+	// Reads GoogleService-Info.plist from the app bundle.
+	static godot::Error initialize();
 	// nullptr until initialize() succeeded.
 	static firebase::App *get_app();
 	// Deletes the App and every Auth and Firestore object created from it.

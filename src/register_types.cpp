@@ -1,13 +1,16 @@
 // GDExtension entry point. SConstruct defines GODOT_FIREBASE_AUTH and
-// GODOT_FIREBASE_FIRESTORE for the modules selected with `modules=`.
+// GODOT_FIREBASE_FIRESTORE for the modules selected with `modules=`, or
+// GODOT_FIREBASE_EDITOR_STUB for the macOS editor library without Firebase.
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
 
+#ifndef GODOT_FIREBASE_EDITOR_STUB
 #include "core/firebase_app_native.h"
 #include "core/firebase_module_native.h"
+#endif
 #ifdef GODOT_FIREBASE_AUTH
 #include "auth/firebase_auth_native.h"
 #endif
@@ -19,7 +22,8 @@ using namespace godot;
 
 namespace {
 
-void initialize_godot_firebase(ModuleInitializationLevel p_level) {
+void initialize_godot_firebase([[maybe_unused]] ModuleInitializationLevel p_level) {
+#ifndef GODOT_FIREBASE_EDITOR_STUB
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
@@ -31,12 +35,15 @@ void initialize_godot_firebase(ModuleInitializationLevel p_level) {
 #ifdef GODOT_FIREBASE_FIRESTORE
 	GDREGISTER_CLASS(godot_firebase::FirebaseFirestoreNative);
 #endif
+#endif
 }
 
-void uninitialize_godot_firebase(ModuleInitializationLevel p_level) {
+void uninitialize_godot_firebase([[maybe_unused]] ModuleInitializationLevel p_level) {
+#ifndef GODOT_FIREBASE_EDITOR_STUB
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
 		godot_firebase::FirebaseAppNative::shutdown();
 	}
+#endif
 }
 
 } // namespace

@@ -3,7 +3,8 @@
 #   godot-cpp            ~25 MB  (git, pinned commit)
 #   Firebase C++ SDK     ~1.8 GB zip (dl.google.com)
 #   Firebase iOS SDK zip ~340 MB (github.com/firebase/firebase-ios-sdk releases)
-# Only the Apple parts are extracted; archives are verified, then deleted.
+# Only iOS (device + arm64 simulator) and Android arm64-v8a files of the used
+# modules are extracted; archives are verified, then deleted.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source tools/versions.env
@@ -22,16 +23,16 @@ verify() { # file expected_sha256
 }
 
 # fetch_zip url zip sha256 extracted_dir member-patterns...
-# extracted_dir/.complete marks a finished extraction; anything else is redone.
+# extracted_dir/.complete lists the extracted patterns; a different list is redone.
 fetch_zip() {
 	local url=$1 zip=$2 sha=$3 dir=$4
 	shift 4
-	[ -f "$dir/.complete" ] && return
+	[ "$(cat "$dir/.complete" 2>/dev/null)" = "$*" ] && return
 	rm -rf "$dir"
 	[ -f "$zip" ] || curl --fail --location --silent --show-error --output "$zip" "$url"
 	verify "$zip" "$sha"
 	unzip -q "$zip" "$@" -d third_party
-	touch "$dir/.complete"
+	echo "$*" > "$dir/.complete"
 	rm -f "$zip"
 }
 
@@ -41,9 +42,16 @@ fi
 git -C third_party/godot-cpp fetch --quiet origin "$GODOT_CPP_COMMIT"
 git -C third_party/godot-cpp checkout --quiet "$GODOT_CPP_COMMIT"
 
+cpp_members=('firebase_cpp_sdk/include/*' firebase_cpp_sdk/Android/firebase_dependencies.gradle firebase_cpp_sdk/generate_xml_from_google_services_json.py)
+for lib in app auth firestore; do
+	for dir in ios/device-arm64 ios/simulator-arm64 android/arm64-v8a; do
+		cpp_members+=("firebase_cpp_sdk/libs/$dir/libfirebase_$lib.a")
+	done
+	cpp_members+=("firebase_cpp_sdk/libs/android/$lib.pro")
+done
 fetch_zip "https://dl.google.com/firebase/sdk/cpp/firebase_cpp_sdk_${FIREBASE_CPP_VERSION}.zip" \
 	"third_party/firebase_cpp_sdk_${FIREBASE_CPP_VERSION}.zip" "$FIREBASE_CPP_SHA256" third_party/firebase_cpp_sdk \
-	'firebase_cpp_sdk/include/*' 'firebase_cpp_sdk/libs/darwin/*' 'firebase_cpp_sdk/xcframeworks/*'
+	"${cpp_members[@]}"
 
 fetch_zip "https://github.com/firebase/firebase-ios-sdk/releases/download/${FIREBASE_IOS_VERSION}/Firebase.zip" \
 	"third_party/Firebase-${FIREBASE_IOS_VERSION}.zip" "$FIREBASE_IOS_SHA256" third_party/Firebase \

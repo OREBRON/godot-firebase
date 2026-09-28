@@ -269,16 +269,6 @@ void FirebaseFirestoreNative::remove_listener(int64_t p_id) {
 	}
 }
 
-#ifdef DEBUG_ENABLED
-Dictionary FirebaseFirestoreNative::debug_roundtrip(const Dictionary &p_data) {
-	MapFieldValue fields;
-	Dictionary result;
-	result["error"] = to_map_field_value(p_data, true, fields);
-	result["value"] = to_variant(FieldValue::Map(fields));
-	return result;
-}
-#endif
-
 void FirebaseFirestoreNative::_bind_methods() {
 	godot::ClassDB::bind_method(D_METHOD("initialize"), &FirebaseFirestoreNative::initialize);
 	godot::ClassDB::bind_method(D_METHOD("get_doc", "path"), &FirebaseFirestoreNative::get_doc);
@@ -289,9 +279,6 @@ void FirebaseFirestoreNative::_bind_methods() {
 	godot::ClassDB::bind_method(D_METHOD("commit_batch", "ops"), &FirebaseFirestoreNative::commit_batch);
 	godot::ClassDB::bind_method(D_METHOD("listen_doc", "path"), &FirebaseFirestoreNative::listen_doc);
 	godot::ClassDB::bind_method(D_METHOD("remove_listener", "id"), &FirebaseFirestoreNative::remove_listener);
-#ifdef DEBUG_ENABLED
-	godot::ClassDB::bind_static_method("FirebaseFirestoreNative", D_METHOD("debug_roundtrip", "data"), &FirebaseFirestoreNative::debug_roundtrip);
-#endif
 	ADD_SIGNAL(godot::MethodInfo("document_changed",
 			godot::PropertyInfo(Variant::INT, "listener_id"), godot::PropertyInfo(Variant::BOOL, "ok"),
 			godot::PropertyInfo(Variant::DICTIONARY, "snapshot"), godot::PropertyInfo(Variant::INT, "error_code"),

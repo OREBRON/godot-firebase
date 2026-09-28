@@ -6,12 +6,13 @@ extends FirebaseTest
 func _run() -> void:
 	var firebase: Node = FirebaseNode.new()
 	root.add_child(firebase)
-	check(firebase.auth is FirebaseAuth and firebase.firestore is FirebaseFirestore, "both module APIs start")
-	for module in ["auth", "firestore"]:
+	check(firebase.auth is FirebaseAuth and firebase.firestore is FirebaseFirestore, "auth and firestore APIs start")
+	check(firebase.storage is FirebaseStorage and firebase.database is FirebaseDatabase and firebase.functions is FirebaseFunctions, "storage, database and functions APIs start")
+	for module in firebase.MODULES:
 		check(firebase.is_available(module), "%s has a backend" % module)
 		if not ClassDB.class_exists(&"FirebaseAppNative"):
 			check(firebase.is_mock(module), "%s uses the mock without native" % module)
-	check(not firebase.is_available("storage"), "unknown module is unavailable")
+	check(not firebase.is_available("analytics"), "unknown module is unavailable")
 
 	var result: FirebaseResult = await firebase.auth.sign_in_anonymously().wait()
 	check(result.ok, "auth works through the autoload")

@@ -1,26 +1,25 @@
 extends Node
-## Autoload "Firebase". Starts the modules whose folders are present:
-## `Firebase.auth` (auth/) and `Firebase.firestore` (firestore/).
-## A module whose folder was removed stays null.
+## Autoload "Firebase". Starts the modules whose folders are present, for
+## example `Firebase.auth` from auth/. A module whose folder was removed stays null.
+## Module `x` has x/firebase_x.gd (API), x/firebase_x_mock.gd and the native
+## class FirebaseXNative.
 ##
 ## Backend of each module:
-## - its native class, when the GDExtension was built with that module;
-## - its mock on desktop when native is missing or not configured;
+## - its native class on iOS, when the GDExtension was built with that module;
+## - its mock in the editor and on desktop (the macOS library is a stub);
 ## - none on mobile when native fails. Requests then fail with
 ##   FirebaseResult.ERR_UNAVAILABLE instead of silently losing data.
 
 const ROOT := "res://addons/godot_firebase/"
-const MODULES := {
-	"auth": {"api": ROOT + "auth/firebase_auth.gd", "mock": ROOT + "auth/firebase_auth_mock.gd", "native": &"FirebaseAuthNative"},
-	"firestore": {"api": ROOT + "firestore/firebase_firestore.gd", "mock": ROOT + "firestore/firebase_firestore_mock.gd", "native": &"FirebaseFirestoreNative"},
-}
-const CONFIG_SETTING := "firebase/desktop_config_path"
-const DEFAULT_CONFIG_PATH := "res://google-services-desktop.json"
+const MODULES: Array[String] = ["auth", "firestore", "storage", "database", "functions"]
 
-## FirebaseAuth, or null without the auth module.
+## Each is the module API (FirebaseAuth, FirebaseFirestore, ...) or null
+## when the module folder is missing.
 var auth: RefCounted
-## FirebaseFirestore, or null without the firestore module.
 var firestore: RefCounted
+var storage: RefCounted
+var database: RefCounted
+var functions: RefCounted
 ## Module name -> backend object (null when unavailable).
 var backends: Dictionary[String, Object] = {}
 
@@ -37,7 +36,7 @@ func setup(module_backends: Dictionary) -> void:
 	for module in MODULES:
 		var api: RefCounted = null
 		if backends.has(module):
-			api = load(MODULES[module].api).new(FirebaseRequests.new(backends[module]))
+			api = load(_api_path(module)).new(FirebaseRequests.new(backends[module]))
 		set(module, api)
 
 
@@ -53,13 +52,13 @@ func _create_backends() -> Dictionary:
 	var native_app := _start_native_app()
 	var created := {}
 	for module in MODULES:
-		if ResourceLoader.exists(MODULES[module].api):
+		if ResourceLoader.exists(_api_path(module)):
 			created[module] = _create_backend(module, native_app)
 	return created
 
 
 func _create_backend(module: String, native_app: bool) -> Object:
-	var native_class: StringName = MODULES[module].native
+	var native_class := StringName("Firebase%sNative" % module.capitalize())
 	if native_app and ClassDB.class_exists(native_class):
 		var native: Object = ClassDB.instantiate(native_class)
 		var error: int = native.initialize()
@@ -69,22 +68,18 @@ func _create_backend(module: String, native_app: bool) -> Object:
 	if OS.has_feature("mobile"):
 		push_error("Firebase: %s unavailable; its requests will fail" % module)
 		return null
-	return load(MODULES[module].mock).new()
+	return load(_api_path(module).replace(".gd", "_mock.gd")).new()
 
 
 func _start_native_app() -> bool:
 	if not ClassDB.class_exists(&"FirebaseAppNative"):
 		return false
-	var error: int = ClassDB.class_call_static(&"FirebaseAppNative", &"initialize", _desktop_config())
+	var error: int = ClassDB.class_call_static(&"FirebaseAppNative", &"initialize")
 	if error != OK and error != ERR_ALREADY_IN_USE:
 		push_warning("Firebase: app initialize failed (%s)" % error_string(error))
 		return false
 	return true
 
 
-## iOS reads GoogleService-Info.plist from the app bundle; desktop needs JSON.
-func _desktop_config() -> String:
-	if OS.has_feature("mobile"):
-		return ""
-	var path: String = ProjectSettings.get_setting(CONFIG_SETTING, DEFAULT_CONFIG_PATH)
-	return FileAccess.get_file_as_string(path) if FileAccess.file_exists(path) else ""
+func _api_path(module: String) -> String:
+	return ROOT + "%s/firebase_%s.gd" % [module, module]

@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 # Builds the Godot Firebase GDExtension with the selected modules.
 #
-#   scons platform=macos target=template_debug modules=auth,firestore
 #   scons platform=ios arch=arm64 ios_simulator=no target=template_release modules=auth
+#   scons platform=macos target=template_debug
+#
+# macOS builds an editor stub without Firebase: it only keeps the editor from
+# reporting a missing library, and the addon uses its mocks there.
 #
 # Dependencies come from tools/bootstrap.sh; tools/build.sh runs every variant.
 
@@ -39,13 +42,16 @@ if platform not in ("ios", "macos"):
     Exit("platform=%s is not supported yet (ios, macos)" % platform)
 
 env.Append(CPPPATH=["src", FIREBASE_CPP + "/include"])
-env.Append(CPPDEFINES=["GODOT_FIREBASE_" + name.upper() for name in modules])
-
-sources = ["src/register_types.cpp"] + Glob("src/core/*.cpp")
-for name in modules:
-    sources += Glob("src/%s/*.cpp" % name)
-if "auth" in modules:
-    sources += ["src/auth/platform/platform_credentials_ios.mm" if platform == "ios" else "src/auth/platform/platform_credentials_stub.cpp"]
+sources = ["src/register_types.cpp"]
+if platform == "macos":
+    env.Append(CPPDEFINES=["GODOT_FIREBASE_EDITOR_STUB"])
+else:
+    env.Append(CPPDEFINES=["GODOT_FIREBASE_" + name.upper() for name in modules])
+    sources += Glob("src/core/*.cpp")
+    for name in modules:
+        sources += Glob("src/%s/*.cpp" % name)
+    if "auth" in modules:
+        sources += ["src/auth/platform/platform_credentials_ios.mm"]
 
 cpp_libraries = [lib for name in modules for lib in MODULES[name]["cpp"]] + CORE["cpp"]
 
@@ -70,21 +76,14 @@ def link_static_framework(xcframework, slice_name):
     env.Append(LINKFLAGS=["-F", framework_dir, "-framework", name])
 
 
-if platform == "macos":
-    # Firebase desktop libraries are a beta for development builds (editor, tests).
-    lib_dir = first_existing([FIREBASE_CPP + "/libs/darwin/universal", FIREBASE_CPP + "/libs/darwin/*"], "Firebase C++ desktop libraries")
-    env.Append(LIBPATH=[lib_dir], LIBS=cpp_libraries)
-    for framework in ["CoreFoundation", "Foundation", "GSS", "Kerberos", "Security", "SystemConfiguration"]:
-        env.Append(LINKFLAGS=["-framework", framework])
-    env.Append(LIBS=["pthread"])
-else:
+if platform == "ios":
     simulator = env["ios_simulator"]
     slice_name = "ios-arm64_x86_64-simulator" if simulator else "ios-arm64"
     sdk = "iphonesimulator" if simulator else "iphoneos"
+    lib_dir = FIREBASE_CPP + "/libs/ios/" + ("simulator-arm64" if simulator else "device-arm64")
     for lib in cpp_libraries:
-        # The C++ SDK ships firebase_app as firebase.xcframework.
-        framework = "firebase" if lib == "firebase_app" else lib
-        link_static_framework(first_existing([FIREBASE_CPP + "/xcframeworks/%s.xcframework" % framework], framework + ".xcframework"), slice_name)
+        first_existing([lib_dir + "/lib%s.a" % lib], "lib%s.a" % lib)
+    env.Append(LIBPATH=[lib_dir], LIBS=cpp_libraries)
     linked = set()
     folders = [(FIREBASE_IOS + "/FirebaseAnalytics", CORE["ios_frameworks"])] + [(FIREBASE_IOS + "/" + MODULES[name]["ios_folder"], None) for name in modules]
     for folder, only in folders:

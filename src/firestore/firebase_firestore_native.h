@@ -31,11 +31,6 @@ public:
 	int64_t listen_doc(const godot::String &p_path);
 	void remove_listener(int64_t p_id);
 
-#ifdef DEBUG_ENABLED
-	// Converts `p_data` to Firestore values and back, for tests of value_convert.
-	static godot::Dictionary debug_roundtrip(const godot::Dictionary &p_data);
-#endif
-
 protected:
 	static void _bind_methods();
 

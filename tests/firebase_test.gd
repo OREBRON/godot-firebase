@@ -40,7 +40,10 @@ func check(condition: bool, message: String) -> void:
 
 
 ## Returns a Firebase node wired to `backends`; default: fresh mocks for every module.
-func mock_firebase(backends: Dictionary = {"auth": FirebaseAuthMock.new(), "firestore": FirebaseFirestoreMock.new()}) -> Node:
+func mock_firebase(backends: Dictionary = {
+	"auth": FirebaseAuthMock.new(), "firestore": FirebaseFirestoreMock.new(), "storage": FirebaseStorageMock.new(),
+	"database": FirebaseDatabaseMock.new(), "functions": FirebaseFunctionsMock.new(),
+}) -> Node:
 	var firebase: Node = FirebaseNode.new()
 	firebase.setup(backends)
 	root.add_child(firebase)

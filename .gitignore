@@ -12,3 +12,6 @@
 # Per-game Firebase config never belongs to the addon.
 GoogleService-Info.plist
 google-services*.json
+
+# Local agent tooling.
+.serena/
