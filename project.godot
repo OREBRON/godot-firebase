@@ -1,0 +1,12 @@
+; Test project for the addon. Games copy only addons/godot_firebase/.
+
+config_version=5
+
+[application]
+
+config/name="Godot Firebase"
+config/features=PackedStringArray("4.7")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_firebase/plugin.cfg")

@@ -1,0 +1,14 @@
+.godot/
+.DS_Store
+.sconsign.dblite
+*.os
+*.o
+
+# Built and downloaded binaries; produced by tools/, published as release assets.
+/addons/godot_firebase/bin/
+/third_party/
+/build/
+
+# Per-game Firebase config never belongs to the addon.
+GoogleService-Info.plist
+google-services*.json

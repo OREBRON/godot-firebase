@@ -1,0 +1,99 @@
+name: Build addon
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The runner keeps third_party/ between runs; one build at a time.
+concurrency:
+  group: godot-firebase-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      GODOT: godot
+      # Persistent cache on the self-hosted runner: ~2.2 GB of SDK downloads plus godot-cpp objects.
+      THIRD_PARTY_CACHE: ${{ github.workspace }}/../godot-firebase-third-party
+
+    steps:
+      - name: Check self-hosted toolchain
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          DEVELOPER_DIR="$(xcode-select -p)"
+          if ! test -x "$DEVELOPER_DIR/usr/bin/xcodebuild"; then
+            DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+          fi
+          test -x "$DEVELOPER_DIR/usr/bin/xcodebuild" || {
+            echo '::error::Full Xcode is required on this runner.'
+            exit 1
+          }
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          xcodebuild -version
+          command -v uvx >/dev/null || {
+            echo '::error::uv is required on this runner (SCons runs through uvx).'
+            exit 1
+          }
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Check Godot version
+        run: |
+          set -euo pipefail
+          source tools/versions.env
+          actual="$(godot --version)"
+          case "$actual" in
+            "$GODOT_VERSION.stable"|"$GODOT_VERSION.stable".*) ;;
+            *)
+              echo "::error::Godot $GODOT_VERSION is required; runner has $actual"
+              exit 1
+              ;;
+          esac
+
+      - name: Download pinned dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p "$THIRD_PARTY_CACHE"
+          ln -sfn "$THIRD_PARTY_CACHE" third_party
+          tools/bootstrap.sh
+
+      - name: Test GDScript API with mocks
+        run: tools/run_tests.sh
+
+      # Each variant builds macOS (desktop tests) and iOS, runs the tests
+      # against the native build and packages an addon zip.
+      - name: Build auth
+        run: |
+          set -euo pipefail
+          tools/build.sh --modules auth
+          tools/run_tests.sh
+          tools/package.sh
+
+      - name: Build auth + firestore
+        run: |
+          set -euo pipefail
+          tools/build.sh --modules auth,firestore
+          tools/run_tests.sh
+          tools/package.sh
+
+      - name: Upload addon packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: godot_firebase-${{ github.sha }}
+          path: build/dist/*.zip
+          if-no-files-found: error

@@ -1,0 +1,12 @@
+[configuration]
+
+entry_symbol = "godot_firebase_library_init"
+compatibility_minimum = "4.7"
+reloadable = false
+
+[libraries]
+
+ios.debug = "res://addons/godot_firebase/bin/ios/godot_firebase.ios.template_debug.xcframework"
+ios.release = "res://addons/godot_firebase/bin/ios/godot_firebase.ios.template_release.xcframework"
+macos.debug = "res://addons/godot_firebase/bin/macos/libgodot_firebase.macos.template_debug.dylib"
+macos.release = "res://addons/godot_firebase/bin/macos/libgodot_firebase.macos.template_release.dylib"
