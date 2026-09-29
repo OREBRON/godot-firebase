@@ -18,6 +18,7 @@ public:
 	godot::Error initialize();
 	// `p_provider`: "anonymous", "game_center" or "apple". `p_link` keeps the current uid.
 	int64_t sign_in(const godot::String &p_provider, bool p_link);
+	int64_t sign_in_play_games(const godot::String &p_server_auth_code, bool p_link);
 	void sign_out();
 	int64_t delete_user();
 	int64_t get_id_token(bool p_force_refresh);

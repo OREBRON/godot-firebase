@@ -104,6 +104,24 @@ int64_t FirebaseAuthNative::sign_in(const String &p_provider, bool p_link) {
 	});
 }
 
+int64_t FirebaseAuthNative::sign_in_play_games(const String &p_server_auth_code, bool p_link) {
+	const std::string code = to_std(p_server_auth_code);
+	return start([this, code, p_link](Completion done) {
+		if (auth == nullptr) {
+			done(unavailable());
+		} else if (code.empty()) {
+			done(Outcome::failure(kInvalidArgument, "Play Games server auth code is required"));
+#ifdef __ANDROID__
+		} else {
+			sign_in_with_credential(auth, firebase::auth::PlayGamesAuthProvider::GetCredential(code.c_str()), p_link, done);
+#else
+		} else {
+			done(Outcome::failure(kUnsupported, "Play Games sign-in requires Android"));
+#endif
+		}
+	});
+}
+
 void FirebaseAuthNative::sign_out() {
 	if (auth) {
 		auth->SignOut();
@@ -150,6 +168,7 @@ void FirebaseAuthNative::OnAuthStateChanged(firebase::auth::Auth *p_auth) {
 void FirebaseAuthNative::_bind_methods() {
 	godot::ClassDB::bind_method(D_METHOD("initialize"), &FirebaseAuthNative::initialize);
 	godot::ClassDB::bind_method(D_METHOD("sign_in", "provider", "link"), &FirebaseAuthNative::sign_in);
+	godot::ClassDB::bind_method(D_METHOD("sign_in_play_games", "server_auth_code", "link"), &FirebaseAuthNative::sign_in_play_games);
 	godot::ClassDB::bind_method(D_METHOD("sign_out"), &FirebaseAuthNative::sign_out);
 	godot::ClassDB::bind_method(D_METHOD("delete_user"), &FirebaseAuthNative::delete_user);
 	godot::ClassDB::bind_method(D_METHOD("get_id_token", "force_refresh"), &FirebaseAuthNative::get_id_token);

@@ -21,6 +21,11 @@ func _run() -> void:
 	result = await auth.link_with_game_center().wait()
 	check(result.ok and result.value.uid == uid and not result.value.is_anonymous, "link keeps uid")
 
+	result = await auth.link_with_play_games("test-code").wait()
+	check(result.ok and result.value.uid == uid, "Play Games link keeps uid")
+	result = await auth.sign_in_with_play_games("").wait()
+	check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "Play Games requires an auth code")
+
 	result = await auth.get_id_token().wait()
 	check(result.ok and result.value is String and not result.value.is_empty(), "id token is a string")
 
@@ -32,6 +37,10 @@ func _run() -> void:
 	check(result.ok and not auth.is_signed_in(), "delete signs out")
 	await process_frame
 	check(states.size() >= 3 and states[-1].is_empty(), "state_changed reports sign-in and sign-out")
+	result = await auth.link_with_play_games("test-code").wait()
+	check(not result.ok and result.error_code == FirebaseResult.ERR_NO_USER, "Play Games link requires a user")
+	result = await auth.sign_in_with_play_games("test-code").wait()
+	check(result.ok and not result.value.is_anonymous, "Play Games sign-in succeeds")
 
 	firebase.setup({"auth": null})
 	check(not firebase.is_available("auth"), "backend can be missing")

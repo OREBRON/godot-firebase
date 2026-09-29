@@ -1,7 +1,7 @@
 # Godot Firebase
 
-Godot 4.7.2 için modüler Firebase eklentisi. iOS'ta Firebase C++ SDK 13.13.0
-(Firebase iOS SDK 12.19) üzerinde çalışır; Android planlanıyor. Oyun yalnızca
+Godot 4.7.2 için modüler Firebase eklentisi. Firebase C++ SDK 13.13.0
+(iOS'ta Firebase iOS SDK 12.19) kullanır. Oyun yalnızca
 ihtiyaç duyduğu modülleri alır:
 
 | Modül | Klasör | Native sınıf | İçerik |
@@ -14,8 +14,8 @@ ihtiyaç duyduğu modülleri alır:
 | functions | `functions/` | `FirebaseFunctionsNative` | Callable HTTPS fonksiyon çağrısı |
 
 Durum: GDScript API ve mock testleri geçiyor. Beş modülün native kodu iOS
-(device + simulator) için Firebase SDK ile derleniyor ve eksiksiz link
-ediliyor. Cihazda henüz denenmedi (bkz. [Doğrulanmamış noktalar](#doğrulanmamış-noktalar)).
+(device + simulator) ve Android (arm64-v8a) için derlenip link ediliyor.
+Cihazlarda henüz denenmedi (bkz. [Doğrulanmamış noktalar](#doğrulanmamış-noktalar)).
 
 ## Oyuna ekleme
 
@@ -39,6 +39,35 @@ ediliyor. Cihazda henüz denenmedi (bkz. [Doğrulanmamış noktalar](#doğrulanm
 5. `templates/firestore.rules` kurallarını Firebase projesine yükle.
 6. Functions varsayılan bölgesi `us-central1`. Başka bölge için proje ayarı
    `firebase/functions/region` ekle.
+
+### Android
+
+Android SDK (platform 35), NDK, JDK ve Godot Android Gradle build template'i
+gerekir. `ANDROID_HOME` SDK dizinine işaret etmeli. Kurulu NDK varsayılan
+28.1.13356709 değilse `NDK_VERSION` ortam değişkenini ayarla. Firebase
+konsolundan oyunun Android paket kimliğine ait `google-services.json` indir:
+
+```bash
+ANDROID_HOME="$HOME/Library/Android/sdk" NDK_VERSION=28.2.13676358 \
+  tools/build.sh --platforms android,macos --modules auth,firestore \
+  --google-services /path/to/google-services.json --android-package com.example.game
+tools/package.sh
+```
+
+`--android-package`, Android export preset'inin paket kimliğiyle aynı olmalı;
+uyuşmazlık build'i durdurur. JSON oyunun dosyasıdır, eklentiye eklenmez.
+Build, Firebase'in JSON dönüştürücüsüyle kaynak XML'i ve seçili modüllerin
+ProGuard kurallarını AAR'a koyar. Android export preset'inde **Use Gradle
+Build** açılmalı, yalnızca **arm64-v8a** etkin olmalı; Gradle export eklentisi
+AAR'ı ve Firebase Maven bağımlılıklarını ekler. Android'da anonim giriş ve
+diğer çekirdek modüller derlenir; Apple / Game Center girişleri Android'da
+desteklenmez. Play Games v2 SDK ile oyunda alınan tek kullanımlık server auth
+code, `Firebase.auth.sign_in_with_play_games(code)` veya anonim hesabı korumak
+için `Firebase.auth.link_with_play_games(code)` ile Firebase'e verilebilir.
+Play Console'da oyun sunucusu için tanımlanan Web OAuth client ID kullanılmalı;
+Play Games SDK'nın başlatılması, proje kimliği ve `requestServerSideAccess`
+çağrısı oyunun Android entegrasyonuna aittir. Eklenti oyun kimliklerini veya
+auth code'u saklamaz.
 
 ## Kullanım
 
@@ -105,7 +134,7 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 GODOT=/Applications/Godot.app/Contents/MacOS/Godot tools/run_tests.sh
 ```
 
-Testler mock'larla çalışır. Native kod yalnızca iOS (ve ileride Android) için
+Testler mock'larla çalışır. Native kod yalnızca iOS ve Android için
 Firebase ile derlenir; gerçek davranış cihazda denenir.
 
 ### CI (self-hosted runner)
@@ -134,5 +163,5 @@ kontrol edilecekler:
 - Çalışma zamanı: Objective-C kategorileri ve Swift kütüphanelerinin yüklenmesi.
 - Uygulama boyutuna etkisi. Beş modüllü iOS kütüphanesi release'te ~20 MB
   (arm64, strip edilmemiş); modül başına ölçüm henüz yapılmadı.
-- Android: henüz yok. Aynı C++ modülleri, JNI köprüsü ve Gradle bağımlılıkları
-  ile eklenecek.
+- Android: JNI, AAR, bağımlılıklar ve arm64-v8a build'i eklendi; Android
+  cihazda export, Firebase başlatma ve modül istekleri henüz doğrulanmadı.

@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # Builds addons/godot_firebase/bin/ for the selected modules.
-#   tools/build.sh [--modules auth,firestore] [--platforms ios,macos]
+#   tools/build.sh [--modules auth,firestore] [--platforms ios,android,macos]
 # Needs tools/bootstrap.sh first. SCons runs through uv unless SCONS is set.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 modules="auth,firestore"
 platforms="ios,macos"
+google_services=""
+android_package=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--modules) modules="$2"; shift 2 ;;
 		--platforms) platforms="$2"; shift 2 ;;
+		--google-services) google_services="$2"; shift 2 ;;
+		--android-package) android_package="$2"; shift 2 ;;
 		*) echo "unknown option $1" >&2; exit 2 ;;
 	esac
 done
@@ -51,6 +55,19 @@ if [[ ",$platforms," == *",ios,"* ]]; then
 	while IFS= read -r bundle; do
 		cp -R "$bundle" "$BIN/ios/resources/"
 	done < build/ios/resource_bundles.txt
+fi
+
+if [[ ",$platforms," == *",android,"* ]]; then
+	if [[ -z "$google_services" || -z "$android_package" ]]; then
+		echo "Android build needs --google-services and --android-package" >&2
+		exit 2
+	fi
+	mkdir -p "$BIN/android"
+	for target in template_debug template_release; do
+		build android "$target" arch=arm64 ndk_version="${NDK_VERSION:-28.1.13356709}"
+		cp "build/android/libgodot_firebase.android.$target.so" "$BIN/android/"
+	done
+	bash tools/build_android_aar.sh "$google_services" "$android_package" "$modules"
 fi
 
 echo "$modules" > "$BIN/modules.txt"

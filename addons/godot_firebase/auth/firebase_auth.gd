@@ -10,6 +10,7 @@ signal state_changed(user: Dictionary)
 const ANONYMOUS := "anonymous"
 const GAME_CENTER := "game_center"
 const APPLE := "apple"
+const PLAY_GAMES := "play_games"
 
 var _requests: FirebaseRequests
 
@@ -34,6 +35,11 @@ func sign_in_with_apple() -> FirebaseTask:
 	return _sign_in(APPLE, false)
 
 
+## Pass a fresh single-use server auth code from Play Games Services v2.
+func sign_in_with_play_games(server_auth_code: String) -> FirebaseTask:
+	return _sign_in(PLAY_GAMES, false, server_auth_code)
+
+
 ## Keeps the current (usually anonymous) uid and its data.
 func link_with_game_center() -> FirebaseTask:
 	return _sign_in(GAME_CENTER, true)
@@ -41,6 +47,10 @@ func link_with_game_center() -> FirebaseTask:
 
 func link_with_apple() -> FirebaseTask:
 	return _sign_in(APPLE, true)
+
+
+func link_with_play_games(server_auth_code: String) -> FirebaseTask:
+	return _sign_in(PLAY_GAMES, true, server_auth_code)
 
 
 func sign_out() -> void:
@@ -66,7 +76,11 @@ func is_signed_in() -> bool:
 	return not current_user().is_empty()
 
 
-func _sign_in(provider: String, link: bool) -> FirebaseTask:
+func _sign_in(provider: String, link: bool, server_auth_code := "") -> FirebaseTask:
 	if link and not is_signed_in():
 		return _requests.failed(FirebaseResult.ERR_NO_USER, "link needs a signed-in user")
+	if provider == PLAY_GAMES:
+		if server_auth_code.is_empty():
+			return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, "Play Games server auth code is required")
+		return _requests.send(&"sign_in_play_games", [server_auth_code, link])
 	return _requests.send(&"sign_in", [provider, link])

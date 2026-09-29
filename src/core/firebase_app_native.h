@@ -11,8 +11,11 @@ class FirebaseAppNative : public godot::Object {
 	GDCLASS(FirebaseAppNative, godot::Object)
 
 public:
-	// Reads GoogleService-Info.plist from the app bundle.
+	// Reads platform Firebase resources (iOS plist / Android XML).
 	static godot::Error initialize();
+#ifdef __ANDROID__
+	static godot::Error initialize_android(JNIEnv *jni_env, jobject activity);
+#endif
 	// nullptr until initialize() succeeded.
 	static firebase::App *get_app();
 	// Deletes the App and every Auth and Firestore object created from it.

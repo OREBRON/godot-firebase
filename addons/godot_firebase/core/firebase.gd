@@ -5,7 +5,7 @@ extends Node
 ## class FirebaseXNative.
 ##
 ## Backend of each module:
-## - its native class on iOS, when the GDExtension was built with that module;
+## - its native class on iOS and Android, when built with that module;
 ## - its mock in the editor and on desktop (the macOS library is a stub);
 ## - none on mobile when native fails. Requests then fail with
 ##   FirebaseResult.ERR_UNAVAILABLE instead of silently losing data.
@@ -74,7 +74,23 @@ func _create_backend(module: String, native_app: bool) -> Object:
 func _start_native_app() -> bool:
 	if not ClassDB.class_exists(&"FirebaseAppNative"):
 		return false
-	var error: int = ClassDB.class_call_static(&"FirebaseAppNative", &"initialize")
+	var error: int
+	if OS.has_feature("android"):
+		var runtime := Engine.get_singleton("AndroidRuntime")
+		if runtime == null:
+			push_error("Firebase: AndroidRuntime is unavailable")
+			return false
+		var wrapper := Engine.get_singleton("JavaClassWrapper")
+		if wrapper == null:
+			push_error("Firebase: JavaClassWrapper is unavailable")
+			return false
+		var bridge: Object = wrapper.wrap("org.godotengine.godotfirebase.FirebaseBridge")
+		if bridge == null:
+			push_error("Firebase: Android bridge is unavailable")
+			return false
+		error = bridge.initialize(runtime.getActivity())
+	else:
+		error = ClassDB.class_call_static(&"FirebaseAppNative", &"initialize")
 	if error != OK and error != ERR_ALREADY_IN_USE:
 		push_warning("Firebase: app initialize failed (%s)" % error_string(error))
 		return false

@@ -1,0 +1,14 @@
+{
+  "project_info": {
+    "project_number": "123456789",
+    "project_id": "firebase-test",
+    "storage_bucket": "firebase-test.firebasestorage.app"
+  },
+  "client": [{
+    "client_info": {
+      "mobilesdk_app_id": "1:123456789:android:0123456789abcdef",
+      "android_client_info": {"package_name": "org.godotengine.firebase.test"}
+    },
+    "api_key": [{"current_key": "fake-api-key"}]
+  }]
+}

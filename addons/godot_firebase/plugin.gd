@@ -3,8 +3,10 @@ extends EditorPlugin
 
 const AUTOLOAD := "Firebase"
 const IOSExportPlugin := preload("res://addons/godot_firebase/export/firebase_ios_export_plugin.gd")
+const AndroidExportPlugin := preload("res://addons/godot_firebase/export/firebase_android_export_plugin.gd")
 
-var _export_plugin: EditorExportPlugin
+var _ios_export_plugin: EditorExportPlugin
+var _android_export_plugin: EditorExportPlugin
 
 
 func _enable_plugin() -> void:
@@ -16,10 +18,14 @@ func _disable_plugin() -> void:
 
 
 func _enter_tree() -> void:
-	_export_plugin = IOSExportPlugin.new()
-	add_export_plugin(_export_plugin)
+	_ios_export_plugin = IOSExportPlugin.new()
+	_android_export_plugin = AndroidExportPlugin.new()
+	add_export_plugin(_ios_export_plugin)
+	add_export_plugin(_android_export_plugin)
 
 
 func _exit_tree() -> void:
-	remove_export_plugin(_export_plugin)
-	_export_plugin = null
+	remove_export_plugin(_android_export_plugin)
+	remove_export_plugin(_ios_export_plugin)
+	_android_export_plugin = null
+	_ios_export_plugin = null

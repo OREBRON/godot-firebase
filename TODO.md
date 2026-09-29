@@ -72,10 +72,12 @@ Done on 2026-09-29; compiled and linked, not yet run on a device.
 
 ## 4. Android
 
-- [ ] `FirebaseAppNative::initialize()` on Android needs `App::Create(jni_env, activity)`. Get the activity from a small Godot Android plugin v2 in Kotlin, or through JNI from `org.godotengine.godot.Godot`.
-- [ ] Gradle: `firebase_cpp_sdk/Android/firebase_dependencies.gradle` plus the `.pro` ProGuard files. Turn `google-services.json` into resources with `generate_xml_from_google_services_json.py`.
-- [ ] Build `arm64-v8a` only; the moonlight Play build exports only that ABI.
-- [ ] Platform sign-in: Play Games via `PlayGamesAuthProvider`, which needs a server auth code. `src/auth/platform/` currently has only the iOS implementation.
+- [x] `FirebaseAppNative` uses `App::Create(jni_env, activity)` via the JNI bridge and Godot's built-in `AndroidRuntime` singleton.
+- [x] Android AAR includes the converted `google-services.json` resources and selected SDK `.pro` files; export plugin adds the equivalent Maven dependencies from SDK BOM 34.19.0.
+- [x] Build `arm64-v8a` only; the moonlight Play build exports only that ABI.
+- [ ] Verify Android Gradle export and Firebase initialization on a device (including release minification).
+- [x] Play Games server auth code -> `PlayGamesAuthProvider` for Android sign-in/linking; iOS-only platform sign-in UIs fail explicitly on Android.
+- [ ] Obtain the server auth code from Play Games v2 in the game (requires its Play Console project ID and Web OAuth client ID), then call `sign_in_with_play_games` or `link_with_play_games`.
 
 ## 5. Docs
 

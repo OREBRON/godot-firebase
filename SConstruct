@@ -2,6 +2,7 @@
 # Builds the Godot Firebase GDExtension with the selected modules.
 #
 #   scons platform=ios arch=arm64 ios_simulator=no target=template_release modules=auth
+#   scons platform=android arch=arm64 target=template_release modules=auth
 #   scons platform=macos target=template_debug
 #
 # macOS builds an editor stub without Firebase: it only keeps the editor from
@@ -43,8 +44,8 @@ if unknown or not modules:
     Exit("modules must be a non-empty subset of %s, got %s" % (",".join(MODULES), env["modules"]))
 
 platform = env["platform"]
-if platform not in ("ios", "macos"):
-    Exit("platform=%s is not supported yet (ios, macos)" % platform)
+if platform not in ("ios", "android", "macos"):
+    Exit("platform=%s is not supported (ios, android, macos)" % platform)
 
 env.Append(CPPPATH=["src", FIREBASE_CPP + "/include"])
 sources = ["src/register_types.cpp"]
@@ -56,7 +57,7 @@ else:
     for name in modules:
         sources += Glob("src/%s/*.cpp" % name)
     if "auth" in modules:
-        sources += ["src/auth/platform/platform_credentials_ios.mm"]
+        sources += ["src/auth/platform/platform_credentials_ios.mm" if platform == "ios" else "src/auth/platform/platform_credentials_android.cpp"]
 
 cpp_libraries = [lib for name in modules for lib in MODULES[name]["cpp"]] + CORE["cpp"]
 
@@ -91,6 +92,13 @@ def resource_bundles(xcframework):
                 dirs.remove(name)
     return bundles
 
+
+if platform == "android":
+    lib_dir = FIREBASE_CPP + "/libs/android/arm64-v8a"
+    for lib in cpp_libraries:
+        first_existing([lib_dir + "/lib%s.a" % lib], "lib%s.a" % lib)
+    env.Append(LIBPATH=[lib_dir], LIBS=cpp_libraries + ["log"])
+    env.Append(LINKFLAGS=["-Wl,--no-undefined"])
 
 if platform == "ios":
     simulator = env["ios_simulator"]
@@ -132,6 +140,7 @@ suffix = ".%s.%s%s" % (platform, env["target"], ".simulator" if platform == "ios
 library_name = "libgodot_firebase%s%s" % (suffix, env["SHLIBSUFFIX"])
 # Without this the install name is the relative build path. Godot's iOS export
 # rewrites it only when install_name_tool is available on the export host.
-env.Append(LINKFLAGS=["-Wl,-install_name,@rpath/" + library_name])
+if platform == "ios":
+    env.Append(LINKFLAGS=["-Wl,-install_name,@rpath/" + library_name])
 library = env.SharedLibrary("build/%s/%s" % (platform, library_name), source=sources)
 Default(library)

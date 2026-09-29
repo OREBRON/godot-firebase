@@ -20,6 +20,10 @@ func sign_in(provider: String, link: bool) -> int:
 	return id
 
 
+func sign_in_play_games(_server_auth_code: String, link: bool) -> int:
+	return sign_in("play_games", link)
+
+
 func sign_out() -> void:
 	_user = {}
 	auth_state_changed.emit.call_deferred({})
