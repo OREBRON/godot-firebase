@@ -4,7 +4,7 @@ extends RefCounted
 ##
 ## Firebase error codes (AuthError, firestore::Error) are positive. The
 ## negative codes below come from this addon; the native backend uses the same
-## values in src/outcome.h.
+## values in src/core/outcome.h.
 
 const ERR_INVALID_ARGUMENT := -1
 const ERR_UNSUPPORTED := -2

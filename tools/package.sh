@@ -12,8 +12,11 @@ trap 'rm -rf "$stage"' EXIT
 
 mkdir -p "$stage/addons" build/dist
 cp -R "$ADDON" "$stage/addons/"
-for module in auth firestore; do
-	[[ ",$modules," == *",$module,"* ]] || rm -rf "$stage/$ADDON/$module"
+# A module folder holds firebase_<module>.gd; core/, export/ and bin/ do not.
+for folder in "$stage/$ADDON"/*/; do
+	module=$(basename "$folder")
+	[ -f "$folder/firebase_$module.gd" ] || continue
+	[[ ",$modules," == *",$module,"* ]] || rm -rf "$folder"
 done
 find "$stage" -name ".DS_Store" -delete
 

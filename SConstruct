@@ -21,7 +21,12 @@ CORE = {"cpp": ["firebase_app"], "ios_frameworks": ["FirebaseCore", "FirebaseCor
 MODULES = {
     "auth": {"cpp": ["firebase_auth"], "ios_folder": "FirebaseAuth", "system_frameworks": ["AuthenticationServices", "GameKit", "SafariServices"]},
     "firestore": {"cpp": ["firebase_firestore"], "ios_folder": "FirebaseFirestore", "system_frameworks": []},
+    "storage": {"cpp": ["firebase_storage"], "ios_folder": "FirebaseStorage", "system_frameworks": []},
+    "database": {"cpp": ["firebase_database"], "ios_folder": "FirebaseDatabase", "system_frameworks": []},
+    "functions": {"cpp": ["firebase_functions"], "ios_folder": "FirebaseFunctions", "system_frameworks": []},
 }
+# tools/build.sh copies the resource bundles listed here into the addon.
+RESOURCE_BUNDLES_LIST = "build/ios/resource_bundles.txt"
 
 ARGUMENTS.setdefault("api_version", "4.7")
 ARGUMENTS.setdefault("ios_min_version", "15.0")
@@ -76,6 +81,17 @@ def link_static_framework(xcframework, slice_name):
     env.Append(LINKFLAGS=["-F", framework_dir, "-framework", name])
 
 
+def resource_bundles(xcframework):
+    """*.bundle directories (certificates, privacy manifests) of the device slice."""
+    bundles = []
+    for root, dirs, _ in os.walk(os.path.join(xcframework, "ios-arm64")):
+        for name in sorted(dirs):
+            if name.endswith(".bundle"):
+                bundles.append(os.path.join(root, name))
+                dirs.remove(name)
+    return bundles
+
+
 if platform == "ios":
     simulator = env["ios_simulator"]
     slice_name = "ios-arm64_x86_64-simulator" if simulator else "ios-arm64"
@@ -85,6 +101,7 @@ if platform == "ios":
         first_existing([lib_dir + "/lib%s.a" % lib], "lib%s.a" % lib)
     env.Append(LIBPATH=[lib_dir], LIBS=cpp_libraries)
     linked = set()
+    bundles = []
     folders = [(FIREBASE_IOS + "/FirebaseAnalytics", CORE["ios_frameworks"])] + [(FIREBASE_IOS + "/" + MODULES[name]["ios_folder"], None) for name in modules]
     for folder, only in folders:
         for xcframework in sorted(glob.glob(folder + "/*.xcframework")):
@@ -93,6 +110,10 @@ if platform == "ios":
                 continue
             linked.add(name)
             link_static_framework(xcframework, slice_name)
+            bundles += resource_bundles(xcframework)
+    os.makedirs(os.path.dirname(RESOURCE_BUNDLES_LIST), exist_ok=True)
+    with open(RESOURCE_BUNDLES_LIST, "w") as bundle_list:
+        bundle_list.writelines(bundle + "\n" for bundle in bundles)
     system_frameworks = ["Foundation", "UIKit", "Security", "SystemConfiguration", "CoreTelephony"]
     system_frameworks += [framework for name in modules for framework in MODULES[name]["system_frameworks"]]
     for framework in system_frameworks:

@@ -9,7 +9,7 @@
 
 namespace godot_firebase {
 
-// Same values as FirebaseResult.ERR_* in addons/godot_firebase/firebase_result.gd.
+// Same values as FirebaseResult.ERR_* in addons/godot_firebase/core/firebase_result.gd.
 enum AddonError : int {
 	kInvalidArgument = -1,
 	kUnsupported = -2,

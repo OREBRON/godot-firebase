@@ -19,8 +19,8 @@ Bu depo Godot 4.7.2 için Firebase GDExtension eklentisidir: GDScript API (`addo
 
 ## Modül sözleşmesi
 
-- Her modül (`auth`, `firestore`) üç parçadan oluşur: GDScript API (`<modül>/firebase_<modül>.gd`), mock (`<modül>/firebase_<modül>_mock.gd`) ve native sınıf (`src/<modül>/firebase_<modül>_native.*`). Mock ile native sınıf aynı metot adlarını, argümanları ve sinyalleri kullanır; birini değiştirirken diğerini ve testleri de güncelle.
-- Modüller birbirine bağımlı değildir; ortak kod yalnızca `core/` ve `src/core/` içindedir. Yeni modül `core/firebase.gd` içindeki `MODULES`, `SConstruct` içindeki `MODULES` ve `src/register_types.cpp` ile kaydedilir.
+- Her modül (`auth`, `firestore`, `storage`, `database`, `functions`) üç parçadan oluşur: GDScript API (`<modül>/firebase_<modül>.gd`), mock (`<modül>/firebase_<modül>_mock.gd`) ve native sınıf `Firebase<Modül>Native` (`src/<modül>/firebase_<modül>_native.*`). Mock ile native sınıf aynı metot adlarını, argümanları ve sinyalleri kullanır; birini değiştirirken diğerini ve testleri de güncelle.
+- Modüller birbirine bağımlı değildir; ortak kod yalnızca `core/` ve `src/core/` içindedir (`firebase::Variant` dönüşümü: `src/core/variant_convert.*`). Yeni modül şuralara kaydedilir: `core/firebase.gd` içindeki `MODULES` listesine adıyla ve aynı adlı bir özellikle (yollar ve native sınıf adı addan türetilir), `SConstruct` içindeki `MODULES`, `src/register_types.cpp` ve `tools/bootstrap.sh` içindeki kütüphane ve Firebase.zip klasör listeleri.
 - Native kod geçersiz girdide çökmemelidir: Firebase C++ SDK birçok hatalı argümanda süreci sonlandırır. Kullanıcıya okunur hata GDScript katmanında verilir, native katman aynı kuralları savunma amaçlı tekrarlar.
 - Firebase yanıtları başka thread'lerde gelir; sinyaller yalnızca `FirebaseModuleNative` üzerinden ana thread'e taşınarak yayılır.
 

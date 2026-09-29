@@ -31,7 +31,7 @@ void FirebaseModuleNative::emit_deferred(const StringName &p_signal, const Array
 }
 
 void FirebaseModuleNative::emit_deferred_to(uint64_t p_object_id, const StringName &p_signal, const Array &p_args) {
-	godot::callable_mp_static(&FirebaseModuleNative::deliver).call_deferred(p_object_id, p_signal, p_args);
+	callable_mp_static(&FirebaseModuleNative::deliver).call_deferred(p_object_id, p_signal, p_args);
 }
 
 void FirebaseModuleNative::deliver(uint64_t p_object_id, const StringName &p_signal, const Array &p_args) {

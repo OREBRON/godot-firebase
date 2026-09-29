@@ -6,7 +6,7 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
 
-#include "outcome.h"
+#include "../core/outcome.h"
 
 using firebase::firestore::DocumentSnapshot;
 using firebase::firestore::FieldValue;
@@ -20,7 +20,7 @@ namespace godot_firebase {
 
 namespace {
 
-// Tags of addons/godot_firebase/firebase_value.gd.
+// Tags of addons/godot_firebase/firestore/firebase_value.gd.
 const char *const kTag = "__firebase__";
 const char *const kTimestamp = "timestamp";
 const char *const kServerTimestamp = "server_timestamp";
@@ -70,7 +70,7 @@ String convert_tagged(const Dictionary &p_value, bool p_in_array, FieldValue &r_
 		return convert_timestamp(p_value, r_out);
 	}
 	if (p_in_array) {
-		return tag + " cannot be inside an array";
+		return tag + String(" cannot be inside an array");
 	}
 	if (tag == kServerTimestamp) {
 		r_out = FieldValue::ServerTimestamp();
@@ -112,7 +112,7 @@ String convert_map(const Dictionary &p_data, bool p_allow_delete, MapFieldValue 
 		} else {
 			const String reason = convert(value, false, field);
 			if (!reason.is_empty()) {
-				return name + ": " + reason;
+				return name + String(": ") + reason;
 			}
 		}
 		r_out[to_std(name)] = field;

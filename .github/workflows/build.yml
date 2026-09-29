@@ -5,6 +5,10 @@ on:
     branches: ['main']
   pull_request:
   workflow_dispatch:
+    inputs:
+      variants:
+        description: 'Space-separated module lists, for example "auth auth,storage". Empty builds the default variants.'
+        required: false
 
 permissions:
   contents: read
@@ -23,8 +27,13 @@ jobs:
         shell: bash
     env:
       GODOT: godot
-      # Persistent cache on the self-hosted runner: ~2.2 GB of SDK downloads plus godot-cpp objects.
+      # Extracted SDK sources stay on the runner between runs (about 1.5 GB);
+      # archives, build products and the workspace are removed after every run.
       THIRD_PARTY_CACHE: ${{ github.workspace }}/../godot-firebase-third-party
+      # Downloads (~2.1 GB) plus iOS builds need this much free space.
+      MIN_FREE_GB: 10
+      # One addon package per module list. The last one compiles every native module.
+      VARIANTS: ${{ github.event.inputs.variants || 'auth auth,firestore auth,firestore,storage,database,functions' }}
 
     steps:
       - name: Check self-hosted toolchain
@@ -46,6 +55,16 @@ jobs:
             echo '::error::uv is required on this runner (SCons runs through uvx).'
             exit 1
           }
+
+      - name: Check free disk space
+        run: |
+          set -euo pipefail
+          df -h "$GITHUB_WORKSPACE"
+          free_gb=$(df -g "$GITHUB_WORKSPACE" | awk 'NR == 2 {print $4}')
+          if [ "$free_gb" -lt "$MIN_FREE_GB" ]; then
+            echo "::error::Runner has ${free_gb} GB free; this build needs ${MIN_FREE_GB} GB."
+            exit 1
+          fi
 
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -75,21 +94,19 @@ jobs:
       - name: Test GDScript API with mocks
         run: tools/run_tests.sh
 
-      # Each variant builds macOS (desktop tests) and iOS, runs the tests
-      # against the native build and packages an addon zip.
-      - name: Build auth
+      # Each variant builds the macOS editor stub and iOS, runs the tests again
+      # with the stub library loaded and packages an addon zip.
+      - name: Build variants
         run: |
           set -euo pipefail
-          tools/build.sh --modules auth
-          tools/run_tests.sh
-          tools/package.sh
-
-      - name: Build auth + firestore
-        run: |
-          set -euo pipefail
-          tools/build.sh --modules auth,firestore
-          tools/run_tests.sh
-          tools/package.sh
+          read -ra variants <<< "$VARIANTS"
+          for modules in "${variants[@]}"; do
+            echo "::group::Build $modules"
+            tools/build.sh --modules "$modules"
+            tools/run_tests.sh
+            tools/package.sh
+            echo "::endgroup::"
+          done
 
       - name: Upload addon packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -97,3 +114,23 @@ jobs:
           name: godot_firebase-${{ github.sha }}
           path: build/dist/*.zip
           if-no-files-found: error
+
+      # Runs after success, failure and cancellation so the shared runner disk never fills.
+      - name: Clean workspace and dependency leftovers
+        if: always()
+        run: |
+          set -uo pipefail
+          # Everything untracked in the checkout: build/, addons/godot_firebase/bin/,
+          # .godot/, compiled objects and the third_party link.
+          git -C "$GITHUB_WORKSPACE" clean -ffdxq
+          if [ -d "$THIRD_PARTY_CACHE" ]; then
+            rm -f "$THIRD_PARTY_CACHE"/*.zip
+            for dir in "$THIRD_PARTY_CACHE/firebase_cpp_sdk" "$THIRD_PARTY_CACHE/Firebase"; do
+              [ -f "$dir/.complete" ] || rm -rf "$dir"
+            done
+            # godot-cpp keeps its sources; generated bindings and libraries go.
+            [ -d "$THIRD_PARTY_CACHE/godot-cpp/.git" ] && git -C "$THIRD_PARTY_CACHE/godot-cpp" clean -ffdxq
+            du -sh "$THIRD_PARTY_CACHE"
+          fi
+          rm -rf "$HOME/Library/Application Support/Godot/app_userdata/Godot Firebase"
+          df -h "$GITHUB_WORKSPACE"

@@ -44,13 +44,13 @@ if [[ ",$platforms," == *",ios,"* ]]; then
 			-output "$out"
 	done
 
-	# Firebase resource bundles (certificates, privacy manifests) belong in the app bundle.
-	folders=(third_party/Firebase/FirebaseAnalytics)
-	[[ ",$modules," == *",auth,"* ]] && folders+=(third_party/Firebase/FirebaseAuth)
-	[[ ",$modules," == *",firestore,"* ]] && folders+=(third_party/Firebase/FirebaseFirestore)
+	# Firebase resource bundles (certificates, privacy manifests) of the linked
+	# frameworks belong in the app bundle. SConstruct lists them.
 	rm -rf "$BIN/ios/resources"
 	mkdir -p "$BIN/ios/resources"
-	find "${folders[@]}" -path "*ios-arm64/*" -name "*.bundle" -type d -prune -exec cp -R {} "$BIN/ios/resources/" \;
+	while IFS= read -r bundle; do
+		cp -R "$bundle" "$BIN/ios/resources/"
+	done < build/ios/resource_bundles.txt
 fi
 
 echo "$modules" > "$BIN/modules.txt"

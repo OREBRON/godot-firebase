@@ -11,7 +11,7 @@
 
 #include <firebase/auth.h>
 
-#include "../outcome.h"
+#include "../../core/outcome.h"
 
 using godot_firebase::CredentialCallback;
 using godot_firebase::PlatformCredential;

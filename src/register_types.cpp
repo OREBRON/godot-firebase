@@ -1,6 +1,7 @@
-// GDExtension entry point. SConstruct defines GODOT_FIREBASE_AUTH and
-// GODOT_FIREBASE_FIRESTORE for the modules selected with `modules=`, or
-// GODOT_FIREBASE_EDITOR_STUB for the macOS editor library without Firebase.
+// GDExtension entry point. SConstruct defines GODOT_FIREBASE_<MODULE> (AUTH,
+// FIRESTORE, STORAGE, DATABASE, FUNCTIONS) for the modules selected with
+// `modules=`, or GODOT_FIREBASE_EDITOR_STUB for the macOS editor library
+// without Firebase.
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/class_db.hpp>
@@ -16,6 +17,15 @@
 #endif
 #ifdef GODOT_FIREBASE_FIRESTORE
 #include "firestore/firebase_firestore_native.h"
+#endif
+#ifdef GODOT_FIREBASE_STORAGE
+#include "storage/firebase_storage_native.h"
+#endif
+#ifdef GODOT_FIREBASE_DATABASE
+#include "database/firebase_database_native.h"
+#endif
+#ifdef GODOT_FIREBASE_FUNCTIONS
+#include "functions/firebase_functions_native.h"
 #endif
 
 using namespace godot;
@@ -34,6 +44,15 @@ void initialize_godot_firebase([[maybe_unused]] ModuleInitializationLevel p_leve
 #endif
 #ifdef GODOT_FIREBASE_FIRESTORE
 	GDREGISTER_CLASS(godot_firebase::FirebaseFirestoreNative);
+#endif
+#ifdef GODOT_FIREBASE_STORAGE
+	GDREGISTER_CLASS(godot_firebase::FirebaseStorageNative);
+#endif
+#ifdef GODOT_FIREBASE_DATABASE
+	GDREGISTER_CLASS(godot_firebase::FirebaseDatabaseNative);
+#endif
+#ifdef GODOT_FIREBASE_FUNCTIONS
+	GDREGISTER_CLASS(godot_firebase::FirebaseFunctionsNative);
 #endif
 #endif
 }

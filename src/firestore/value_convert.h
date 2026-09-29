@@ -8,7 +8,7 @@
 namespace godot_firebase {
 
 // Conversion between Godot Variants and Firestore values. Special values use
-// the tagged dictionaries of addons/godot_firebase/firebase_value.gd.
+// the tagged dictionaries of addons/godot_firebase/firestore/firebase_value.gd.
 //
 // The GDScript layer validates input first and reports readable errors. These
 // checks repeat the rules the Firestore SDK enforces by aborting the process,
