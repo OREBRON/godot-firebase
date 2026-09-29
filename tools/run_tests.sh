@@ -6,7 +6,7 @@ GODOT="${GODOT:-godot}"
 "$GODOT" --headless --editor --quit >/dev/null 2>&1 # builds the class_name cache
 failed=0
 for test in tests/test_*.gd; do
-	output=$(timeout 60 "$GODOT" --headless --script "res://$test" 2>&1)
+	output=$(perl -e 'alarm shift; exec @ARGV' 60 "$GODOT" --headless --script "res://$test" 2>&1)
 	status=$?
 	echo "$output" | grep -E "^(test_|SCRIPT ERROR|ERROR)" | grep -v -E "GDExtension|godot_firebase\.gdextension|libgodot_firebase"
 	# A parse error exits with 0 before the test base can report it.
