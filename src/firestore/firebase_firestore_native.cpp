@@ -1,5 +1,7 @@
 #include "firebase_firestore_native.h"
 
+#include <cstdint>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -32,8 +34,8 @@ Outcome invalid(const String &p_reason) {
 }
 
 String add_filter(const Array &p_filter, Query &r_query) {
-	if (p_filter.size() != 3) {
-		return "filter must be [field, op, value]";
+	if (p_filter.size() != 3 || !is_field_path(p_filter[0])) {
+		return "filter must be [field path, op, value]";
 	}
 	const std::string field = to_std(p_filter[0]);
 	const String op = p_filter[1];
@@ -42,7 +44,7 @@ String add_filter(const Array &p_filter, Query &r_query) {
 		std::vector<FieldValue> values;
 		for (int64_t i = 0; i < items.size(); i++) {
 			FieldValue value;
-			const String reason = to_field_value(items[i], value);
+			const String reason = to_query_value(items[i], value);
 			if (!reason.is_empty()) {
 				return reason;
 			}
@@ -55,7 +57,7 @@ String add_filter(const Array &p_filter, Query &r_query) {
 		return String();
 	}
 	FieldValue value;
-	const String reason = to_field_value(p_filter[2], value);
+	const String reason = to_query_value(p_filter[2], value);
 	if (!reason.is_empty()) {
 		return reason;
 	}
@@ -88,11 +90,14 @@ String build_query(Query &r_query, const Array &p_filters, const Array &p_order_
 	}
 	for (int64_t i = 0; i < p_order_by.size(); i++) {
 		const Array order = p_order_by[i];
-		if (order.size() != 2) {
-			return "order must be [field, \"asc\" | \"desc\"]";
+		if (order.size() != 2 || !is_field_path(order[0]) || (String(order[1]) != "asc" && String(order[1]) != "desc")) {
+			return "order must be [field path, \"asc\" | \"desc\"]";
 		}
 		const bool descending = String(order[1]) == "desc";
 		r_query = r_query.OrderBy(to_std(order[0]), descending ? Query::Direction::kDescending : Query::Direction::kAscending);
+	}
+	if (p_limit > std::numeric_limits<int32_t>::max()) {
+		return "limit must be at most 2147483647";
 	}
 	if (p_limit > 0) {
 		r_query = r_query.Limit(static_cast<int32_t>(p_limit));
@@ -100,30 +105,50 @@ String build_query(Query &r_query, const Array &p_filters, const Array &p_order_
 	return String();
 }
 
-String add_batch_op(firebase::firestore::Firestore *p_db, const Dictionary &p_op, WriteBatch &r_batch) {
-	const String path = p_op.get("path", "");
-	if (!is_document_path(path)) {
-		return "batch op needs a document path: " + path;
+bool is_string(const Variant &p_value) {
+	return p_value.get_type() == Variant::STRING || p_value.get_type() == Variant::STRING_NAME;
+}
+
+String add_batch_op(firebase::firestore::Firestore *p_db, const Variant &p_op, WriteBatch &r_batch) {
+	if (p_op.get_type() != Variant::DICTIONARY) {
+		return "batch op must be a dictionary";
+	}
+	const Dictionary op = p_op;
+	const Variant path = op.get("path", Variant());
+	if (!is_string(path) || !is_document_path(path)) {
+		return "batch op needs a document path";
+	}
+	const Variant kind = op.get("op", Variant());
+	if (!is_string(kind) || (String(kind) != "set" && String(kind) != "update" && String(kind) != "delete")) {
+		return "unknown batch op";
 	}
 	const DocumentReference document = p_db->Document(to_std(path));
-	const String op = p_op.get("op", "");
-	if (op == "delete") {
+	if (String(kind) == "delete") {
 		r_batch.Delete(document);
 		return String();
 	}
-	const bool merge = p_op.get("merge", false);
+	const Variant data = op.get("data", Variant());
+	if (data.get_type() != Variant::DICTIONARY) {
+		return "batch " + String(kind) + " needs data";
+	}
 	MapFieldValue fields;
-	const String reason = to_map_field_value(p_op.get("data", Dictionary()), op == "update" || merge, fields);
+	if (String(kind) == "update") {
+		const String reason = to_update_field_value(data, fields);
+		if (!reason.is_empty()) {
+			return reason;
+		}
+		r_batch.Update(document, fields);
+		return String();
+	}
+	const Variant merge = op.get("merge", false);
+	if (merge.get_type() != Variant::BOOL) {
+		return "batch merge must be a bool";
+	}
+	const String reason = to_map_field_value(data, merge, fields);
 	if (!reason.is_empty()) {
 		return reason;
 	}
-	if (op == "update") {
-		r_batch.Update(document, fields);
-	} else if (op == "set") {
-		r_batch.Set(document, fields, merge ? SetOptions::Merge() : SetOptions());
-	} else {
-		return "unknown batch op " + op;
-	}
+	r_batch.Set(document, fields, bool(merge) ? SetOptions::Merge() : SetOptions());
 	return String();
 }
 
@@ -187,7 +212,7 @@ int64_t FirebaseFirestoreNative::set_doc(const String &p_path, const Dictionary 
 int64_t FirebaseFirestoreNative::update_doc(const String &p_path, const Dictionary &p_data) {
 	return start_with_document(p_path, [&p_data](DocumentReference document, Completion done) {
 		MapFieldValue fields;
-		const String reason = to_map_field_value(p_data, true, fields);
+		const String reason = to_update_field_value(p_data, fields);
 		if (!reason.is_empty()) {
 			done(invalid(reason));
 			return;

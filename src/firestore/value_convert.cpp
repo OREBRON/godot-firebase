@@ -27,19 +27,28 @@ const char *const kServerTimestamp = "server_timestamp";
 const char *const kIncrement = "increment";
 const char *const kDelete = "delete";
 
+// Reasons server_timestamp(), increment() and delete_field() are not allowed.
+const char *const kInArray = "cannot be inside an array";
+const char *const kInQuery = "cannot be used in a query";
+
 // firebase::Timestamp aborts outside 0001-01-01 .. 9999-12-31.
 constexpr int64_t kMinSeconds = -62135596800;
 constexpr int64_t kMaxSeconds = 253402300799;
 constexpr int64_t kNanosPerSecond = 1000000000;
 
-String convert(const Variant &p_value, bool p_in_array, FieldValue &r_out);
+bool is_string(const Variant &p_value) {
+	return p_value.get_type() == Variant::STRING || p_value.get_type() == Variant::STRING_NAME;
+}
 
-String convert_array(const Array &p_items, FieldValue &r_out) {
+// `p_sentinel_reason` is null when server_timestamp() and increment() are allowed.
+String convert(const Variant &p_value, bool p_in_array, const char *p_sentinel_reason, FieldValue &r_out);
+
+String convert_array(const Array &p_items, const char *p_sentinel_reason, FieldValue &r_out) {
 	std::vector<FieldValue> values;
 	values.reserve(static_cast<size_t>(p_items.size()));
 	for (int64_t i = 0; i < p_items.size(); i++) {
 		FieldValue item;
-		const String reason = convert(p_items[i], true, item);
+		const String reason = convert(p_items[i], true, p_sentinel_reason ? p_sentinel_reason : kInArray, item);
 		if (!reason.is_empty()) {
 			return reason;
 		}
@@ -64,13 +73,17 @@ String convert_timestamp(const Dictionary &p_value, FieldValue &r_out) {
 	return String();
 }
 
-String convert_tagged(const Dictionary &p_value, bool p_in_array, FieldValue &r_out) {
-	const String tag = p_value[kTag];
+String convert_tagged(const Dictionary &p_value, const char *p_sentinel_reason, FieldValue &r_out) {
+	const Variant tag_value = p_value[kTag];
+	if (!is_string(tag_value)) {
+		return "unknown tag of type " + Variant::get_type_name(tag_value.get_type());
+	}
+	const String tag = tag_value;
 	if (tag == kTimestamp) {
 		return convert_timestamp(p_value, r_out);
 	}
-	if (p_in_array) {
-		return tag + String(" cannot be inside an array");
+	if (p_sentinel_reason && (tag == kServerTimestamp || tag == kIncrement || tag == kDelete)) {
+		return tag + String(" ") + p_sentinel_reason;
 	}
 	if (tag == kServerTimestamp) {
 		r_out = FieldValue::ServerTimestamp();
@@ -94,23 +107,23 @@ String convert_tagged(const Dictionary &p_value, bool p_in_array, FieldValue &r_
 	return "unknown tag " + tag;
 }
 
-String convert_map(const Dictionary &p_data, bool p_allow_delete, MapFieldValue &r_out) {
+String convert_map(const Dictionary &p_data, bool p_allow_delete, const char *p_sentinel_reason, MapFieldValue &r_out) {
 	const Array keys = p_data.keys();
 	for (int64_t i = 0; i < keys.size(); i++) {
 		const Variant key = keys[i];
-		if (key.get_type() != Variant::STRING && key.get_type() != Variant::STRING_NAME) {
+		if (!is_string(key)) {
 			return "field names must be strings";
 		}
 		const String name = key;
-		if (name.is_empty()) {
-			return "field names must not be empty";
+		if (name.is_empty() || name.split(".").has("")) {
+			return "field names must be non-empty: " + name;
 		}
 		const Variant value = p_data[key];
 		FieldValue field;
 		if (p_allow_delete && value.get_type() == Variant::DICTIONARY && String(Dictionary(value).get(kTag, "")) == kDelete) {
 			field = FieldValue::Delete();
 		} else {
-			const String reason = convert(value, false, field);
+			const String reason = convert(value, false, p_sentinel_reason, field);
 			if (!reason.is_empty()) {
 				return name + String(": ") + reason;
 			}
@@ -120,7 +133,7 @@ String convert_map(const Dictionary &p_data, bool p_allow_delete, MapFieldValue 
 	return String();
 }
 
-String convert(const Variant &p_value, bool p_in_array, FieldValue &r_out) {
+String convert(const Variant &p_value, bool p_in_array, const char *p_sentinel_reason, FieldValue &r_out) {
 	switch (p_value.get_type()) {
 		case Variant::NIL:
 			r_out = FieldValue::Null();
@@ -152,14 +165,14 @@ String convert(const Variant &p_value, bool p_in_array, FieldValue &r_out) {
 			if (p_in_array) {
 				return "arrays cannot contain arrays";
 			}
-			return convert_array(p_value, r_out);
+			return convert_array(p_value, p_sentinel_reason, r_out);
 		case Variant::DICTIONARY: {
 			const Dictionary map = p_value;
 			if (map.has(kTag)) {
-				return convert_tagged(map, p_in_array, r_out);
+				return convert_tagged(map, p_sentinel_reason, r_out);
 			}
 			MapFieldValue fields;
-			const String reason = convert_map(map, false, fields);
+			const String reason = convert_map(map, false, p_sentinel_reason, fields);
 			if (reason.is_empty()) {
 				r_out = FieldValue::Map(std::move(fields));
 			}
@@ -181,11 +194,21 @@ int segment_count(const String &p_path) {
 } // namespace
 
 String to_map_field_value(const Dictionary &p_data, bool p_allow_delete, MapFieldValue &r_out) {
-	return convert_map(p_data, p_allow_delete, r_out);
+	return convert_map(p_data, p_allow_delete, nullptr, r_out);
 }
 
-String to_field_value(const Variant &p_value, FieldValue &r_out) {
-	return convert(p_value, false, r_out);
+String to_update_field_value(const Dictionary &p_data, MapFieldValue &r_out) {
+	const Array keys = p_data.keys();
+	for (int64_t i = 0; i < keys.size(); i++) {
+		if (!is_field_path(keys[i])) {
+			return "update keys must be field paths without ~*/[]: " + String(keys[i]);
+		}
+	}
+	return convert_map(p_data, true, nullptr, r_out);
+}
+
+String to_query_value(const Variant &p_value, FieldValue &r_out) {
+	return convert(p_value, false, kInQuery, r_out);
 }
 
 Variant to_variant(const FieldValue &p_value) {
@@ -258,6 +281,22 @@ bool is_document_path(const String &p_path) {
 
 bool is_collection_path(const String &p_path) {
 	return segment_count(p_path) % 2 == 1;
+}
+
+bool is_field_path(const Variant &p_path) {
+	if (!is_string(p_path)) {
+		return false;
+	}
+	const String path = p_path;
+	if (path.is_empty() || path.split(".").has("")) {
+		return false;
+	}
+	for (const char *forbidden : { "~", "*", "/", "[", "]" }) {
+		if (path.contains(forbidden)) {
+			return false;
+		}
+	}
+	return true;
 }
 
 } // namespace godot_firebase
