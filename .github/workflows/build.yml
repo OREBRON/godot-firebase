@@ -3,6 +3,7 @@ name: Build addon
 on:
   push:
     branches: ['main']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -22,6 +23,9 @@ jobs:
   build:
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 90
+    permissions:
+      # Tag builds attach their addon zips to the GitHub release.
+      contents: write
     defaults:
       run:
         shell: bash
@@ -55,6 +59,12 @@ jobs:
             echo '::error::uv is required on this runner (SCons runs through uvx).'
             exit 1
           }
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            command -v gh >/dev/null || {
+              echo '::error::GitHub CLI is required on this runner to publish releases.'
+              exit 1
+            }
+          fi
 
       - name: Check free disk space
         run: |
@@ -108,12 +118,20 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: Upload addon packages
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: godot_firebase-${{ github.sha }}
-          path: build/dist/*.zip
-          if-no-files-found: error
+      # The zips from tools/package.sh become release assets as they are.
+      # A release created by hand for the tag gets the zips added to it.
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" build/dist/*.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" build/dist/*.zip --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+          fi
 
       # Runs after success, failure and cancellation so the shared runner disk never fills.
       - name: Clean workspace and dependency leftovers
