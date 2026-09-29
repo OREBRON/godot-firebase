@@ -21,7 +21,7 @@ FIREBASE_IOS = "third_party/Firebase"
 CORE = {"cpp": ["firebase_app"], "ios_frameworks": ["FirebaseCore", "FirebaseCoreInternal", "FirebaseInstallations", "GoogleUtilities", "FBLPromises", "nanopb"]}
 MODULES = {
     "auth": {"cpp": ["firebase_auth"], "ios_folder": "FirebaseAuth", "system_frameworks": ["AuthenticationServices", "GameKit", "SafariServices"]},
-    "firestore": {"cpp": ["firebase_firestore"], "ios_folder": "FirebaseFirestore", "system_frameworks": []},
+    "firestore": {"cpp": ["firebase_firestore"], "ios_folder": "FirebaseFirestore", "system_frameworks": ["Network"]},
     "storage": {"cpp": ["firebase_storage"], "ios_folder": "FirebaseStorage", "system_frameworks": []},
     "database": {"cpp": ["firebase_database"], "ios_folder": "FirebaseDatabase", "system_frameworks": []},
     "functions": {"cpp": ["firebase_functions"], "ios_folder": "FirebaseFunctions", "system_frameworks": []},
