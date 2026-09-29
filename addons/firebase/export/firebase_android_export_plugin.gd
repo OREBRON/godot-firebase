@@ -1,8 +1,8 @@
 @tool
 extends EditorExportPlugin
 
-const AAR := "res://addons/godot_firebase/bin/android/godot_firebase.aar"
-const MODULES_FILE := "res://addons/godot_firebase/bin/modules.txt"
+const AAR := "res://addons/firebase/bin/android/godot_firebase.aar"
+const MODULES_FILE := "res://addons/firebase/bin/modules.txt"
 const DEPENDENCIES := {
 	"auth": "com.google.firebase:firebase-auth:24.2.0",
 	"firestore": "com.google.firebase:firebase-firestore:26.6.0",

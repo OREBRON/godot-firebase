@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds addons/godot_firebase/bin/ for the selected modules.
+# Builds addons/firebase/bin/ for the selected modules.
 #   tools/build.sh [--modules auth,firestore] [--platforms ios,android,macos]
 # Needs tools/bootstrap.sh first. SCons runs through uv unless SCONS is set.
 set -euo pipefail
@@ -20,7 +20,7 @@ while [ $# -gt 0 ]; do
 done
 
 SCONS="${SCONS:-uvx scons}"
-BIN=addons/godot_firebase/bin
+BIN=addons/firebase/bin
 JOBS=$(sysctl -n hw.ncpu)
 
 build() { # platform target extra-args...

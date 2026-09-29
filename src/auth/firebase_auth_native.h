@@ -7,7 +7,7 @@
 
 namespace godot_firebase {
 
-// Firebase Authentication. Method names match addons/godot_firebase/auth/firebase_auth_mock.gd.
+// Firebase Authentication. Method names match addons/firebase/auth/firebase_auth_mock.gd.
 // Users are {uid, email, display_name, is_anonymous}; {} means signed out.
 class FirebaseAuthNative : public FirebaseModuleNative, private firebase::auth::AuthStateListener {
 	GDCLASS(FirebaseAuthNative, FirebaseModuleNative)

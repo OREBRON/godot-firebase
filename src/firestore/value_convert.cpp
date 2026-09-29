@@ -20,7 +20,7 @@ namespace godot_firebase {
 
 namespace {
 
-// Tags of addons/godot_firebase/firestore/firebase_value.gd.
+// Tags of addons/firebase/firestore/firebase_value.gd.
 const char *const kTag = "__firebase__";
 const char *const kTimestamp = "timestamp";
 const char *const kServerTimestamp = "server_timestamp";

@@ -2,15 +2,15 @@
 extends EditorPlugin
 
 const AUTOLOAD := "Firebase"
-const IOSExportPlugin := preload("res://addons/godot_firebase/export/firebase_ios_export_plugin.gd")
-const AndroidExportPlugin := preload("res://addons/godot_firebase/export/firebase_android_export_plugin.gd")
+const IOSExportPlugin := preload("res://addons/firebase/export/firebase_ios_export_plugin.gd")
+const AndroidExportPlugin := preload("res://addons/firebase/export/firebase_android_export_plugin.gd")
 
 var _ios_export_plugin: EditorExportPlugin
 var _android_export_plugin: EditorExportPlugin
 
 
 func _enable_plugin() -> void:
-	add_autoload_singleton(AUTOLOAD, "res://addons/godot_firebase/core/firebase.gd")
+	add_autoload_singleton(AUTOLOAD, "res://addons/firebase/core/firebase.gd")
 
 
 func _disable_plugin() -> void:

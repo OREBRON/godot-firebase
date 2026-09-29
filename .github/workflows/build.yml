@@ -140,7 +140,7 @@ jobs:
         if: always()
         run: |
           set -uo pipefail
-          # Everything untracked in the checkout: build/, addons/godot_firebase/bin/,
+          # Everything untracked in the checkout: build/, addons/firebase/bin/,
           # .godot/, compiled objects and the third_party link.
           git -C "$GITHUB_WORKSPACE" clean -ffdxq
           if [ -d "$THIRD_PARTY_CACHE" ]; then

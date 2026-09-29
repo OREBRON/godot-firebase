@@ -7,7 +7,7 @@
 namespace godot_firebase {
 
 // Cloud Functions (callable HTTPS functions). Method names match
-// addons/godot_firebase/functions/firebase_functions_mock.gd.
+// addons/firebase/functions/firebase_functions_mock.gd.
 class FirebaseFunctionsNative : public FirebaseModuleNative {
 	GDCLASS(FirebaseFunctionsNative, FirebaseModuleNative)
 

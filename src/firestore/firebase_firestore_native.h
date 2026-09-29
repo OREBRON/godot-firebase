@@ -11,7 +11,7 @@
 namespace godot_firebase {
 
 // Cloud Firestore. Method names and argument shapes match
-// addons/godot_firebase/firestore/firebase_firestore_mock.gd.
+// addons/firebase/firestore/firebase_firestore_mock.gd.
 // Documents are returned as snapshots: {id, path, exists, data}.
 class FirebaseFirestoreNative : public FirebaseModuleNative {
 	GDCLASS(FirebaseFirestoreNative, FirebaseModuleNative)

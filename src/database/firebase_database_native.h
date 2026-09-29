@@ -11,7 +11,7 @@
 namespace godot_firebase {
 
 // Realtime Database. Method names and signals match
-// addons/godot_firebase/database/firebase_database_mock.gd.
+// addons/firebase/database/firebase_database_mock.gd.
 // Paths are slash-separated keys, "" is the root. Snapshots are {key, exists, value}.
 class FirebaseDatabaseNative : public FirebaseModuleNative {
 	GDCLASS(FirebaseDatabaseNative, FirebaseModuleNative)

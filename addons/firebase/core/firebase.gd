@@ -10,7 +10,7 @@ extends Node
 ## - none on mobile when native fails. Requests then fail with
 ##   FirebaseResult.ERR_UNAVAILABLE instead of silently losing data.
 
-const ROOT := "res://addons/godot_firebase/"
+const ROOT := "res://addons/firebase/"
 const MODULES: Array[String] = ["auth", "firestore", "storage", "database", "functions"]
 
 ## Each is the module API (FirebaseAuth, FirebaseFirestore, ...) or null

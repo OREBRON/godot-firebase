@@ -1,6 +1,6 @@
 # Agent yönergeleri
 
-Bu depo Godot 4.7.2 için Firebase GDExtension eklentisidir: GDScript API (`addons/godot_firebase/`) ve Firebase C++ SDK üzerine C++ modülleri (`src/`). Değişiklikleri mevcut modül, betik ve test düzenine uygun, anlaşılır ve yalnızca istenen kapsamda tut.
+Bu depo Godot 4.7.2 için Firebase GDExtension eklentisidir: GDScript API (`addons/firebase/`) ve Firebase C++ SDK üzerine C++ modülleri (`src/`). Değişiklikleri mevcut modül, betik ve test düzenine uygun, anlaşılır ve yalnızca istenen kapsamda tut.
 
 ## Kod tasarımı
 

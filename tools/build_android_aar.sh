@@ -14,8 +14,8 @@ fi
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
-output="${ANDROID_AAR_OUTPUT:-$PWD/addons/godot_firebase/bin/android/godot_firebase.aar}"
-mkdir -p "$stage/classes" "$stage/aar/res/values" addons/godot_firebase/bin/android
+output="${ANDROID_AAR_OUTPUT:-$PWD/addons/firebase/bin/android/godot_firebase.aar}"
+mkdir -p "$stage/classes" "$stage/aar/res/values" addons/firebase/bin/android
 javac --release 8 -Xlint:-options -cp "$sdk/platforms/android-35/android.jar" -d "$stage/classes" android/src/org/godotengine/godotfirebase/FirebaseBridge.java
 jar --create --file "$stage/aar/classes.jar" -C "$stage/classes" .
 python3 third_party/firebase_cpp_sdk/generate_xml_from_google_services_json.py \

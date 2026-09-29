@@ -5,7 +5,7 @@ extends SceneTree
 ## ends the running coroutine, counts as a failure.
 
 const WATCHDOG_SECONDS := 10.0
-const FirebaseNode := preload("res://addons/godot_firebase/core/firebase.gd")
+const FirebaseNode := preload("res://addons/firebase/core/firebase.gd")
 
 var failures: Array[String] = []
 var _script_errors := ScriptErrorLogger.new()

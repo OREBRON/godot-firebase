@@ -2,11 +2,11 @@
 # Zips the built addon with only the modules it was built for.
 #   tools/package.sh   ->  build/dist/godot-firebase-<modules>.zip
 #   (build/dist/godot-firebase.zip when every module is built)
-# Unzip into a game's project root; it creates addons/godot_firebase/.
+# Unzip into a game's project root; it creates addons/firebase/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ADDON=addons/godot_firebase
+ADDON=addons/firebase
 modules=$(cat "$ADDON/bin/modules.txt")
 all_modules=""
 stage=$(mktemp -d)

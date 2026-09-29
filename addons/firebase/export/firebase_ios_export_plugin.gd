@@ -9,7 +9,7 @@ extends EditorExportPlugin
 const PLIST_OPTION := "firebase/google_service_info_plist"
 const APPLE_OPTION := "firebase/sign_in_with_apple"
 const GAME_CENTER_OPTION := "firebase/sign_in_with_game_center"
-const RESOURCES_DIR := "res://addons/godot_firebase/bin/ios/resources"
+const RESOURCES_DIR := "res://addons/firebase/bin/ios/resources"
 const APPLE_ENTITLEMENT := "com.apple.developer.applesignin"
 
 

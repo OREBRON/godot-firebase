@@ -5,7 +5,7 @@
 *.o
 
 # Built and downloaded binaries; produced by tools/, published as release assets.
-/addons/godot_firebase/bin/
+/addons/firebase/bin/
 /third_party/
 /build/
 

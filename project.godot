@@ -1,4 +1,4 @@
-; Test project for the addon. Games copy only addons/godot_firebase/.
+; Test project for the addon. Games copy only addons/firebase/.
 
 config_version=5
 
@@ -9,4 +9,4 @@ config/features=PackedStringArray("4.7")
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_firebase/plugin.cfg")
+enabled=PackedStringArray("res://addons/firebase/plugin.cfg")

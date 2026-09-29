@@ -7,7 +7,7 @@
 
 namespace godot_firebase {
 
-// Cloud Storage. Method names match addons/godot_firebase/storage/firebase_storage_mock.gd.
+// Cloud Storage. Method names match addons/firebase/storage/firebase_storage_mock.gd.
 // Metadata results are {path, name, size, content_type, updated}; `updated` is Unix milliseconds.
 class FirebaseStorageNative : public FirebaseModuleNative {
 	GDCLASS(FirebaseStorageNative, FirebaseModuleNative)
