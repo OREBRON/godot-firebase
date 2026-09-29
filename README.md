@@ -23,7 +23,7 @@ Cihazlarda henüz denenmedi (bkz. [Doğrulanmamış noktalar](#doğrulanmamış-
    ```bash
    tools/build.sh --modules auth
    tools/build.sh --modules auth,firestore,storage
-   tools/package.sh   # build/dist/godot_firebase-<modüller>.zip
+   tools/package.sh   # build/dist/godot-firebase-<modüller>.zip (tümü: godot-firebase.zip)
    ```
 2. Paketi oyunun kök dizinine aç; yalnızca derlenen modüllerin klasörleri
    gelir. Elle kopyalarsan kullanmadığın modül klasörlerini sil. Native
@@ -143,9 +143,11 @@ Firebase ile derlenir; gerçek davranış cihazda denenir.
 (Xcode, `godot` 4.7.2 ve `uv` gerekir). SDK indirmeleri runner'da
 `../godot-firebase-third-party` altında kalıcı tutulur; ilk çalışma ~2.2 GB
 indirir. Her çalışma mock testlerini koşar, sonra her varyantı (varsayılan:
-`auth`, `auth,firestore` ve beş modülün tümü) macOS stub + iOS için derler,
-testleri stub kütüphane yüklüyken tekrar koşar ve
-`godot_firebase-<modüller>.zip` paketlerini artifact olarak yükler. Elle
+beş modülün tümü, ardından her modül tek başına) macOS stub + iOS için
+derler, testleri stub kütüphane yüklüyken tekrar koşar ve paketler:
+`godot-firebase.zip` (tüm modüller) ve `godot-firebase-<modül>.zip`. `v*`
+tag push'unda paketler ve `SHA256SUMS.txt` o tag'in GitHub release'ine
+eklenir; branch ve PR çalışmaları paket yüklemez. Elle
 başlatılan çalışmada `variants` girdisi başka modül listeleri seçer
 (ör. `auth auth,storage`). Paket oyunun kök dizinine açılır.
 

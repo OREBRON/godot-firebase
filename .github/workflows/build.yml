@@ -36,8 +36,8 @@ jobs:
       THIRD_PARTY_CACHE: ${{ github.workspace }}/../godot-firebase-third-party
       # Downloads (~2.1 GB) plus iOS builds need this much free space.
       MIN_FREE_GB: 10
-      # One addon package per module list. The last one compiles every native module.
-      VARIANTS: ${{ github.event.inputs.variants || 'auth auth,firestore auth,firestore,storage,database,functions' }}
+      # One addon package per module list: every module first, then each module alone.
+      VARIANTS: ${{ github.event.inputs.variants || 'auth,firestore,storage,database,functions auth firestore storage database functions' }}
 
     steps:
       - name: Check self-hosted toolchain
