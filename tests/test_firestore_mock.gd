@@ -62,6 +62,39 @@ func _run() -> void:
 	result = await db.query("scores", [["score", "~", 1]]).wait()
 	check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "unknown operator is rejected")
 
+	for bad_query in [
+		[[["", "==", 1]], []],
+		[[["a..b", "==", 1]], []],
+		[[["a/b", "==", 1]], []],
+		[[[3, "==", 1]], []],
+		[[["score", "==", FirebaseValue.server_timestamp()]], []],
+		[[], [["", "asc"]]],
+		[[], [["score", "up"]]],
+	]:
+		result = await db.query("scores", bad_query[0], bad_query[1]).wait()
+		check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "invalid query is rejected: %s" % str(bad_query))
+	result = await db.query("scores", [], [], 2147483648).wait()
+	check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "limit above int32 is rejected")
+	result = await db.query("scores", [], [], 2147483647).wait()
+	check(result.ok, "int32 max limit is valid")
+	result = await db.query("scores", [], [], -1).wait()
+	check(result.ok and result.value.size() == 3, "negative limit means no limit")
+
+	for bad_op in [
+		{"op": "set", "path": 123, "data": {"a": 1}},
+		{"op": "set", "path": "scores/a", "data": {"a": 1}, "merge": "yes"},
+		{"op": "set", "path": "scores/a", "data": "nope"},
+		{"op": "update", "path": "scores/a", "data": {"a/b": 1}},
+		{"op": 7, "path": "scores/a"},
+		{"op": "set", "path": "scores/a", "data": {"t": {FirebaseValue.TAG: 5}}},
+		"not a dictionary",
+	]:
+		result = await db.batch([bad_op]).wait()
+		check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "invalid batch op is rejected: %s" % str(bad_op))
+	check((await db.get_doc("scores/a").wait()).value.data.score == 30, "rejected batch ops change nothing")
+	result = await db.update_doc("scores/a", {"a/b": 1}).wait()
+	check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "update key with '/' is rejected")
+
 	var id := db.listen_doc("scores/b", func(r: FirebaseResult): snapshots.append(r.value))
 	await process_frame
 	await db.update_doc("scores/b", {"score": 11}).wait()
