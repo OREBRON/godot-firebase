@@ -109,6 +109,11 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 - Firestore özel değerleri: `FirebaseValue.timestamp()`, `server_timestamp()`,
   `increment()`, `delete_field()`. Zaman damgaları okunurken
   `{__firebase__ = "timestamp", seconds, nanos}` sözlüğü olarak gelir.
+  Zaman damgası 0001-01-01 ile 9999-12-31 arasında olmalı. `server_timestamp()`,
+  `increment()` ve `delete_field()` dizi içinde ve sorgu değerinde kullanılamaz.
+- Firestore sorgu alanları ve `update_doc()` anahtarları noktalı alan yoludur
+  (`"profile.level"`): boş parça ve `~ * / [ ]` içeremez. `limit` en fazla
+  2147483647; `limit <= 0` limitsiz demek.
 - Firestore tipleri: null, bool, int, float, String, PackedByteArray, Array
   (iç içe dizi yok), Dictionary (String anahtarlı).
 - Database ve Functions tipleri: null, bool, int, float, String, Array
