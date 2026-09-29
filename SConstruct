@@ -129,5 +129,9 @@ if platform == "ios":
     env.Append(LIBS=["c++", "z", "sqlite3"])
 
 suffix = ".%s.%s%s" % (platform, env["target"], ".simulator" if platform == "ios" and env["ios_simulator"] else "")
-library = env.SharedLibrary("build/%s/libgodot_firebase%s%s" % (platform, suffix, env["SHLIBSUFFIX"]), source=sources)
+library_name = "libgodot_firebase%s%s" % (suffix, env["SHLIBSUFFIX"])
+# Without this the install name is the relative build path. Godot's iOS export
+# rewrites it only when install_name_tool is available on the export host.
+env.Append(LINKFLAGS=["-Wl,-install_name,@rpath/" + library_name])
+library = env.SharedLibrary("build/%s/%s" % (platform, library_name), source=sources)
 Default(library)
