@@ -111,8 +111,8 @@ Bu nedenle a2 − a1 farkı **küçük universal için geçerli tasarruf örneğ
 - Android full `.so` 5,480, auth `.so` 2,230 dinamik sembol export eder. `-fvisibility=hidden` yalnız eklenti ve
   godot-cpp kaynaklarına uygulanır; Firebase statik arşivleri default görünürlükle gelir.
 - iOS full dylib 27,218, auth dylib 4,216 global tanımlı sembol taşır (`nm -gU`).
-- Firebase C++ arşivlerinin `firebase_app`'ten çözdüğü benzersiz undefined sembol sayıları: auth 67,
-  firestore 60, storage 59, database 70, functions 51. `firebase_app` 1,694 global sembol tanımlar.
+- Firebase C++ arşivlerinin `firebase_app`'ten çözdüğü benzersiz undefined sembol sayıları: auth 66,
+  firestore 59, storage 58, database 69, functions 50. `firebase_app` 1,693 global sembol tanımlar.
   Split adaylarında Core bu sembolleri export etmek zorundadır (#83).
 
 ## Bakım bedeli ve öneri
