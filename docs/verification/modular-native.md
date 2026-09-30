@@ -164,12 +164,87 @@ Maven'in cihazda yüklendiğinin kanıtlanmasıdır (#56 a2, #59).
 
 ## iOS (#84)
 
-Bu bölüm #84 ile doldurulur.
+### B: ayrı `.gdextension` prototipi
+
+Kaynak: `build/probes/modular-native/ios/b/build.sh` (Android ile aynı `*_entry.cpp`). Device arm64,
+iPhoneOS27.0 SDK, `-miphoneos-version-min=15.0`, `-Wl,-S -Wl,-x -Wl,-dead_strip -ObjC`.
+
+**Ortak framework envanteri** (`third_party/Firebase/<ürün>/*.xcframework`, birden fazla ürün klasöründe):
+`FirebaseAppCheckInterop` (5), `FirebaseCoreExtension` (4), `GTMSessionFetcher` (3: Auth, Storage, Functions),
+`FirebaseSharedSwift` (3: Firestore, Database, Functions), `FirebaseAuthInterop` (3: Auth, Storage, Functions),
+`leveldb` (2: Firestore, Database). Spec'teki dört adaya ek olarak `GTMSessionFetcher` ve `leveldb` de ortaktır.
+Core bunları ve mevcut Core listesini (`FirebaseCore`, `FirebaseCoreInternal`, `FirebaseInstallations`,
+`GoogleUtilities`, `FBLPromises`, `nanopb`) sahiplenir. Modüle özgü olanlar: Auth `FirebaseAuth`,
+`RecaptchaInterop`; Firestore `FirebaseFirestore`, `FirebaseFirestoreInternal`, `absl`, `grpc`, `grpcpp`,
+`openssl_grpc`; Functions ayrıca `FirebaseMessagingInterop`.
+
+Link bulguları:
+
+- İlk denemede Core ortak framework'leri `-framework` ile bağladı. `-ObjC` yalnız ObjC objelerini tutar,
+  `-dead_strip` Core'un kullanmadığı C/C++ sembollerini attı; Firestore modülü `leveldb::DB::Open`,
+  `_pb_decode` gibi sembolleri bulamadı. Core'da ortak framework'ler ve `libfirebase_app.a` için
+  `-Wl,-force_load,<framework binary>` gerekir. Aynı framework'ü hem `-framework` hem `-force_load` ile vermek
+  1,030 duplicate symbol hatası verir; yalnız `-force_load` kullanılmalıdır.
+- `force_load` dar değildir: Auth-only kurulum `FirebaseSharedSwift` (176,066 B), `leveldb` (173,642 B) ve
+  `GTMSessionFetcher` (121,244 B) taşır. Daha dar seçenek, modül importlarının birleşimini
+  `-exported_symbols_list`/`-u` ile Core'da tutmaktır; ölçülmedi.
+
+| Binary | Boyut | Global export | ObjC sınıfı |
+| --- | ---: | ---: | ---: |
+| core | 3,388,840 | 3,973 | 70 |
+| auth | 1,897,064 | 1,585 | 38 |
+| firestore | 13,679,656 | 20,240 | 90 |
+
+- **Tek sahiplik:** Core/Auth/Firestore arasında ortak `_OBJC_CLASS_$_` tanımı 0. Ortak global export'lar
+  (auth/core 21, firestore/core 21, auth/firestore 26) Firebase C++ future şablonlarıdır ve hepsi weak'tir;
+  dyld bunları çalışma zamanında birleştirir. Hiçbir binary `godot::` sembolü export etmez.
+- Auth Core'dan 65, Firestore 117 sembol import eder.
+- **Registrar'lar strip sonrası duruyor:** Auth dylib'inde `FIRAuthComponent` (Swift, `@objc` adı),
+  Firestore'da `FSTFirestoreComponent` (`__objc_nlclslist`, `+load`) sınıf listesinde. Core'daki
+  `registerSwiftComponents` `FIRAuthComponent` adını içerir; sınıfı ada göre bulur. Bu yüzden modül dylib'i
+  `FirebaseApp.configure`'dan önce yüklenmiş olmalıdır; B'de Godot extension'ları autoload'dan önce yükler.
+
+### Godot iOS export ve install name
+
+Fixture: `build/probes/fixture/ios-b` (üç `.gdextension`, her biri tek slice xcframework). Godot 4.7.2
+`--export-release iOS` (export project only) ve `xcodebuild -sdk iphoneos CODE_SIGNING_ALLOWED=NO` geçti;
+`.app/Frameworks` üç framework'ü içerir.
+
+- **Bulgu:** Godot export'u her dylib'i `lib<ad>.framework/lib<ad>` yapar ve kendi install name'ini buna
+  çevirir, ama bağımlı modülün load command'ını değiştirmez. `@rpath/libgodot_firebase_core.dylib` ile link
+  edilen Auth, export sonrası hâlâ bu yolu ister; uygulamada böyle bir dosya yoktur ve dyld açılışta durur.
+- **Çözüm:** Core'u build sırasında `-install_name @rpath/libgodot_firebase_core.framework/libgodot_firebase_core`
+  ile link etmek. Export sonrası modüllerin bağımlılığı `.app/Frameworks` içindeki gerçek yolla eşleşti.
+- Modüller `-Wl,-rpath,@loader_path/..` taşır; dlopen ile yüklenen framework'ün Core'u bulması ana
+  uygulamanın rpath'ine bağlı kalmaz. Uygulamanın kendisi `@executable_path/Frameworks` rpath'ine sahiptir.
+- Resource bundle ve plist bu fixture'da eklenmedi (#54 export eklentisinin işi).
+
+### Doğrulanamayanlar
+
+- Simulator veya cihaz cold-start (duplicate ObjC class uyarısı, `dlopen` sırası, `registerSwiftComponents`).
+  iOS simulator runtime kurulu değil; kurulum için diskte yer yok. iPhone çevrimdışı.
+- İmza ve App Store doğrulaması.
+
+### iOS değerlendirmesi
+
+| Kurulum | A universal | B split | Fark |
+| --- | ---: | ---: | ---: |
+| Yalnız Auth | 20,084,144 | 5,285,904 (core + auth) | B −14,798,240 |
+| Auth + Firestore | 20,084,144 | 18,965,560 | B −1,118,584 |
+| Beş modül | 20,084,144 | tahmin > A (force_load'lı Core, modül başına ~141 KB godot-cpp) | B dezavantajlı |
+
+Monolitik Auth-only dylib 4,283,552 B'tır; B'nin Auth-only kurulumu bundan 1,002,352 B büyüktür.
+
+**Sonuç (#90 girdisi):** iOS'ta B link, ObjC/Swift sahipliği ve Godot export/Xcode build kontrollerinden
+geçti; Firestore'suz kurulumlarda tasarruf büyüktür (Auth-only ~14.8 MB native). Bedeli: build'de
+framework install name'i, Core'da `force_load` listesi, modül başına godot-cpp, cihazda sınanmamış yükleme
+sırası. Çalışma zamanı kanıtı olmadan üretime alınmamalıdır.
 
 ## Yeniden üretme
 
 ```sh
 bash build/probes/modular-native/android/b/build.sh
 bash build/probes/modular-native/host-b/build.sh
+bash build/probes/modular-native/ios/b/build.sh
 cd build/probes/modular-native/host-b/project && godot --headless --editor --quit && godot --headless --script res://probe.gd
 ```
