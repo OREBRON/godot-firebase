@@ -88,7 +88,14 @@ func _start_native_app() -> bool:
 		if bridge == null:
 			push_error("Firebase: Android bridge is unavailable")
 			return false
-		error = bridge.initialize(runtime.getActivity())
+		var activity: Object = runtime.getActivity()
+		var config := FirebaseAndroidConfig.packed_options(activity.getPackageName())
+		if config.error != OK:
+			push_error("Firebase: %s" % config.message)
+			return false
+		var options: Dictionary = config.options
+		error = bridge.initialize(activity, options.app_id, options.api_key, options.project_id,
+				options.storage_bucket, options.database_url, options.messaging_sender_id)
 	else:
 		error = ClassDB.class_call_static(&"FirebaseAppNative", &"initialize")
 	if error != OK and error != ERR_ALREADY_IN_USE:

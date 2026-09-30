@@ -11,10 +11,12 @@ class FirebaseAppNative : public godot::Object {
 	GDCLASS(FirebaseAppNative, godot::Object)
 
 public:
-	// Reads platform Firebase resources (iOS plist / Android XML).
+	// iOS: reads GoogleService-Info.plist. Android uses initialize_android().
 	static godot::Error initialize();
 #ifdef __ANDROID__
-	static godot::Error initialize_android(JNIEnv *jni_env, jobject activity);
+	// `p_options` come from the game's google-services.json through
+	// FirebaseAndroidConfig and FirebaseBridge.
+	static godot::Error initialize_android(JNIEnv *jni_env, jobject activity, const firebase::AppOptions &p_options);
 #endif
 	// nullptr until initialize() succeeded.
 	static firebase::App *get_app();

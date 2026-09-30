@@ -5,7 +5,10 @@ import android.app.Activity;
 public final class FirebaseBridge {
     private FirebaseBridge() {}
 
-    public static int initialize(Activity activity) {
+    // The options of this package, picked by FirebaseAndroidConfig from the
+    // game's google-services.json.
+    public static int initialize(Activity activity, String appId, String apiKey, String projectId,
+            String storageBucket, String databaseUrl, String messagingSenderId) {
         if (activity == null) {
             return 31;
         }
@@ -18,8 +21,9 @@ public final class FirebaseBridge {
                 return 2;
             }
         }
-        return nativeInitialize(activity);
+        return nativeInitialize(activity, appId, apiKey, projectId, storageBucket, databaseUrl, messagingSenderId);
     }
 
-    private static native int nativeInitialize(Activity activity);
+    private static native int nativeInitialize(Activity activity, String appId, String apiKey, String projectId,
+            String storageBucket, String databaseUrl, String messagingSenderId);
 }

@@ -44,20 +44,25 @@ Cihazlarda henüz denenmedi (bkz. [Doğrulanmamış noktalar](#doğrulanmamış-
 
 Android SDK (platform 35), NDK, JDK ve Godot Android Gradle build template'i
 gerekir. `ANDROID_HOME` SDK dizinine işaret etmeli. Kurulu NDK varsayılan
-28.1.13356709 değilse `NDK_VERSION` ortam değişkenini ayarla. Firebase
-konsolundan oyunun Android paket kimliğine ait `google-services.json` indir:
+28.1.13356709 değilse `NDK_VERSION` ortam değişkenini ayarla:
 
 ```bash
 ANDROID_HOME="$HOME/Library/Android/sdk" NDK_VERSION=28.2.13676358 \
-  tools/build.sh --platforms android,macos --modules auth,firestore \
-  --google-services /path/to/google-services.json --android-package com.example.game
+  tools/build.sh --platforms android,macos --modules auth,firestore
 tools/package.sh
 ```
 
-`--android-package`, Android export preset'inin paket kimliğiyle aynı olmalı;
-uyuşmazlık build'i durdurur. JSON oyunun dosyasıdır, eklentiye eklenmez.
-Build, Firebase'in JSON dönüştürücüsüyle kaynak XML'i ve seçili modüllerin
-ProGuard kurallarını AAR'a koyar. Android export preset'inde **Use Gradle
+Android build'i oyun bilgisi almaz; aynı `.so` ve AAR her oyunda kullanılır.
+Firebase konsolundan oyunun Android paket kimliğine ait `google-services.json`
+dosyasını indirip projeye koy (varsayılan `res://google-services.json`; export
+preset'indeki `firebase/google_services_json` seçeneğiyle değiştirilebilir).
+Export eklentisi dosyayı pakete ekler. Uygulama açılırken çalışan paket
+kimliğine ait client seçilir ve Firebase App bu değerlerle başlatılır.
+Dosya yoksa veya paket kimliğine ait client, `mobilesdk_app_id` ya da API key
+eksikse export penceresi uyarı gösterir. Godot 4.7 export eklentisi export'u
+durduramaz; uygulama bu durumda Firebase'i başlatmaz ve hatayı loglar. AAR
+yalnızca Java köprüsünü ve bütün modüllerin ProGuard kurallarını taşır;
+Firebase kaynak XML'i üretilmez. Android export preset'inde **Use Gradle
 Build** açılmalı, yalnızca **arm64-v8a** etkin olmalı; Gradle export eklentisi
 AAR'ı ve Firebase Maven bağımlılıklarını ekler. Android'da anonim giriş ve
 diğer çekirdek modüller derlenir; Apple / Game Center girişleri Android'da

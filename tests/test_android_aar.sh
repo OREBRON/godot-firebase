@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
+# The bridge AAR is the same for every game: no Firebase configuration inside.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
-ANDROID_AAR_OUTPUT="$stage/firebase.aar" bash tools/build_android_aar.sh \
-	tests/fixtures/google-services.json org.godotengine.firebase.test auth,firestore
-unzip -p "$stage/firebase.aar" res/values/googleservices.xml | grep -q 'name="google_app_id"'
-unzip -p "$stage/firebase.aar" proguard.txt | grep -q 'com.google.firebase.firestore.FirebaseFirestore'
-unzip -p "$stage/firebase.aar" proguard.txt | grep -q 'org.godotengine.godotfirebase.FirebaseBridge'
-unzip -p "$stage/firebase.aar" classes.jar > "$stage/classes.jar"
-jar tf "$stage/classes.jar" | grep -q 'org/godotengine/godotfirebase/FirebaseBridge.class'
-if ANDROID_AAR_OUTPUT="$stage/invalid.aar" bash tools/build_android_aar.sh \
-	tests/fixtures/google-services.json org.godotengine.wrong auth > /dev/null 2>&1; then
-	echo "Wrong Android package name must fail" >&2
+ANDROID_AAR_OUTPUT="$stage/firebase.aar" bash tools/build_android_aar.sh
+if unzip -l "$stage/firebase.aar" | grep -q -E 'res/|google-services|googleservices'; then
+	echo "AAR must not contain Firebase configuration or resources" >&2
 	exit 1
 fi
+for keep in org.godotengine.godotfirebase.FirebaseBridge com.google.firebase.firestore.FirebaseFirestore com.google.firebase.functions; do
+	unzip -p "$stage/firebase.aar" proguard.txt | grep -q "$keep"
+done
+unzip -p "$stage/firebase.aar" classes.jar > "$stage/classes.jar"
+jar tf "$stage/classes.jar" | grep -q 'org/godotengine/godotfirebase/FirebaseBridge.class'
+javap -cp "$stage/classes.jar" org.godotengine.godotfirebase.FirebaseBridge | grep -q 'initialize(android.app.Activity, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)'
+echo "test_android_aar.sh: ok"
