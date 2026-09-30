@@ -52,6 +52,27 @@ Bu depo MCP proje listesinde yok; coverage kontrolü `project not found or not i
 
 Ölçülmemiş bir “önemsiz boyut” eşiği veya otomatik MiB bütçesi icat edilmez. Ölçüm çıktısı mutlak farkı ve yüzde farkını verir; seçim raporunda gerekçe yazılır. Platform topolojisi üretim koduna geçmeden inceleme için sunulur. Bu plan ölçümleri şimdi çalıştırma veya uygulama koduna başlama talebi değildir.
 
+## Platform kararı durumu (2026-09-30)
+
+Karar verilmedi; kullanıcı kararı cihaz kanıtına kadar bekletti. Kanıt: [modular-size.md](../../verification/modular-size.md),
+[modular-native.md](../../verification/modular-native.md).
+
+| Platform | Öneri | Gerekçe | Karardan önce gereken kanıt |
+| --- | --- | --- | --- |
+| Android | A (universal) | Native fark 1,405,384 B (APK +%1.63). B'nin en iyi tasarrufu ~1.1 MB, beş modülde tersine döner. Maven farkı (7,989,069 B) topolojiden bağımsız. | Full native + yalnız Auth Maven cihazda yüklenir ve `App::Create` çalışır (#59). |
+| iOS | Açık: B veya A | B Auth-only kurulumda native'i 14,798,240 B küçültür; link, ObjC/Swift sahipliği, Godot export ve imzasız Xcode build geçti. | Simulator/cihaz cold-start, duplicate class yok, Auth → UID-korumalı Firestore (#84, #55). |
+
+Kanıt gelene kadar #85, #86, #87, #88 ve #54 native üretim işleri başlamaz. #67, #68 ve #91 paket
+düzenine bağlı olduğu için onlar da bekler. #89 (Android runtime config) tamamlandı ve topolojiden bağımsızdır.
+
+Prototiplerden üretime taşınacak kısıtlar (seçilen adaydan bağımsız kayıt):
+
+- B'de modül static initializer'ları godot-cpp binding'inden önce çalışır; Core'un bu aşamadaki API'si Godot tipi kullanamaz.
+- B'de build ID uyuşmayan modülün static initializer'ı init reddinden önce Core'a kaydolur; Core App'ten önce build ID'leri kendisi doğrulamalıdır.
+- iOS B'de Core `@rpath/libgodot_firebase_core.framework/libgodot_firebase_core` install name'i ile link edilmeli; Godot export bağımlı modüllerin load command'ını değiştirmez.
+- iOS B'de Core ortak framework'leri `-force_load` ile almalıdır; `GTMSessionFetcher` ve `leveldb` de ortaktır.
+- Godot 4.7.2 export eklentisi export'u durduramaz; eksik config uyarı ve çalışma zamanı hatasıdır.
+
 ## Native adaylar
 
 ### A: Ortak universal native backend

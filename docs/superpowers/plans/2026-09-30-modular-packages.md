@@ -113,6 +113,7 @@
 
 **Files:** Spec/plan ve `docs/verification/modular-native.md`, `modular-size.md`.
 **Output:** Android/iOS için birer `universal`, `separate-gdextension` veya `core-loader` kararı; gerekçe, beklenen kurulum/çıktı boyutu ve üretim görev sınırları.
+**Durum (2026-09-30):** Kullanıcı kararı cihaz kanıtına kadar bekletti. Öneri: Android A; iOS B veya A açık. Ayrıntı: spec "Platform kararı durumu". Task 2-7 bu gate'de bekler.
 
 - [ ] 0/A/1a/1b ve erken 1c sonuçlarını birleştir; size sonucu olmadan split gerekli veya universal yeterli deme.
 - [ ] B başarısızsa C; C başarısızsa universal. Android universal+iOS split veya tersi aynı altı ZIP formatıyla mümkün. Universal için seçili Maven ile initialize kanıtı yoksa dependency bedelini açıkça yaz.
