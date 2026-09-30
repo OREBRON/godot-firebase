@@ -184,7 +184,9 @@ static GodotFirebaseAppleSignIn *active_apple_sign_in = nil;
 
 namespace godot_firebase {
 
-void request_platform_credential(const std::string &provider, CredentialCallback done) {
+void request_platform_credential(const std::string &p_provider, CredentialCallback done) {
+	// Blocks capture C++ references by reference; copy before going async.
+	const std::string provider = p_provider;
 	dispatch_async(dispatch_get_main_queue(), ^{
 		if (provider == "game_center") {
 			sign_in_with_game_center(done);
