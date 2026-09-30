@@ -36,3 +36,25 @@ func _run() -> void:
 	check(FirebaseAndroidConfig.options_for(JSON.stringify(no_app_id), PACKAGE).error == ERR_INVALID_DATA, "missing app ID is rejected")
 
 	check(FirebaseAndroidConfig.packed_options(PACKAGE).error == ERR_FILE_NOT_FOUND, "missing packed config is reported")
+	_check_export_packages(fixture)
+
+
+func _check_export_packages(fixture: String) -> void:
+	for sample in [
+		["com.example.$genname", "Godot Firebase", "com.example.godotfirebase"],
+		["com.example.$genname", "123 My-Game_2!", "com.example.mygame_2"],
+		["com.example.$genname", "École Café", "com.example.colecaf"],
+		["com.example.$genname", "123 🎮!", "com.example.noname"],
+		["com.example.$genname", "", "com.example.noname"],
+		[PACKAGE, "Another Game", PACKAGE],
+	]:
+		check(FirebaseAndroidConfig.resolve_package_name(sample[0], sample[1]) == sample[2], "export package matches Godot for project %s" % sample[1])
+
+	var config: Dictionary = JSON.parse_string(fixture)
+	config.client[0].client_info.android_client_info.package_name = "com.example.godotfirebase"
+	var package_name := FirebaseAndroidConfig.resolve_package_name("com.example.$genname", "Godot Firebase")
+	check(FirebaseAndroidConfig.options_for(JSON.stringify(config), package_name).error == OK,
+			"a client matching the generated package passes export validation")
+	package_name = FirebaseAndroidConfig.resolve_package_name("com.example.$genname", "Another Game")
+	check(FirebaseAndroidConfig.options_for(JSON.stringify(config), package_name).error == ERR_DOES_NOT_EXIST,
+			"a client for a different generated package is still rejected")

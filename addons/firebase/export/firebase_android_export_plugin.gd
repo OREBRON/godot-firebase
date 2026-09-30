@@ -36,7 +36,9 @@ func _get_export_option_warning(_platform: EditorExportPlatform, option: String)
 	var path: String = get_option(CONFIG_OPTION)
 	if not FileAccess.file_exists(path):
 		return "Download google-services.json for this package from the Firebase console."
-	var config := FirebaseAndroidConfig.options_for(FileAccess.get_file_as_string(path), get_option("package/unique_name"))
+	var project_name: String = get_export_preset().get_project_setting("application/config/name")
+	var package_name := FirebaseAndroidConfig.resolve_package_name(get_option("package/unique_name"), project_name)
+	var config := FirebaseAndroidConfig.options_for(FileAccess.get_file_as_string(path), package_name)
 	return "" if config.error == OK else config.message
 
 

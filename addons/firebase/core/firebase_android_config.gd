@@ -8,6 +8,22 @@ extends RefCounted
 const PACKED_PATH := "res://addons/firebase/bin/android/google-services.json"
 
 
+## Matches Godot's Android get_package_name()/get_valid_basename() rules.
+## `project_name` is the export preset's application/config/name, including overrides.
+static func resolve_package_name(package_name: String, project_name: String) -> String:
+	if not package_name.contains("$genname"):
+		return package_name
+	var basename := ""
+	for character in project_name.to_lower():
+		if basename.is_empty() and character in "0123456789":
+			continue
+		if character in "abcdefghijklmnopqrstuvwxyz0123456789_":
+			basename += character
+	if basename.is_empty():
+		basename = "noname"
+	return package_name.replace("$genname", basename)
+
+
 ## options_for() on the file the export plugin packed.
 static func packed_options(package_name: String) -> Dictionary:
 	if not FileAccess.file_exists(PACKED_PATH):
