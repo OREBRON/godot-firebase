@@ -140,9 +140,24 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 
 ## Geliştirme
 
+Depo kökündeki Makefile mevcut `tools/` betiklerini çağırır. `make` kullanılabilir
+hedefleri gösterir:
+
 ```bash
-GODOT=/Applications/Godot.app/Contents/MacOS/Godot tools/run_tests.sh
+make bootstrap
+make build MODULES=auth,firestore PLATFORMS=ios,macos
+make test GODOT=/Applications/Godot.app/Contents/MacOS/Godot
+make package
+
+# Android SDK platform 35 ve JDK gerektirir.
+make android-aar ANDROID_HOME="$HOME/Library/Android/sdk"
+make test-android-aar ANDROID_HOME="$HOME/Library/Android/sdk"
 ```
+
+`MODULES` ve `PLATFORMS` verilmezse `tools/build.sh` varsayılanları kullanılır.
+`GODOT`, `SCONS`, `ANDROID_HOME` ve `NDK_VERSION` ortam değişkeni veya `make`
+argümanı olarak verilebilir. `make package`, mevcut build'i `bin/modules.txt`
+listesine göre paketler.
 
 Testler mock'larla çalışır. Native kod yalnızca iOS ve Android için
 Firebase ile derlenir; gerçek davranış cihazda denenir.

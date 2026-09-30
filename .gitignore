@@ -3,6 +3,7 @@
 .sconsign.dblite
 *.os
 *.o
+/compile_commands.json
 
 # Built and downloaded binaries; produced by tools/, published as release assets.
 /addons/firebase/bin/
