@@ -14,10 +14,17 @@ struct PlatformCredential {
 	std::string error_message;
 };
 
+struct PlatformCredentialOptions {
+	std::string google_web_client_id;
+	std::string google_ios_client_id;
+};
+
 using CredentialCallback = std::function<void(PlatformCredential)>;
 
-// Runs the platform's own sign-in UI for `provider` ("game_center", "apple")
+// Runs the platform's sign-in UI (game_center/apple/google/play_games_platform)
 // and returns a Firebase credential. `done` may run on any thread.
-void request_platform_credential(const std::string &provider, CredentialCallback done);
+void request_platform_credential(const std::string &provider, const PlatformCredentialOptions &options, CredentialCallback done);
+
+void clear_platform_credential_state();
 
 } // namespace godot_firebase

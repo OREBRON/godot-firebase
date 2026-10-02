@@ -1,0 +1,14 @@
+source 'https://cdn.cocoapods.org/'
+platform :ios, '15.0'
+use_frameworks! :linkage => :static
+install! 'cocoapods', :integrate_targets => false
+
+target 'GoogleSignInSDK' do
+  pod 'GoogleSignIn', '= 9.2.0'
+  pod 'AppAuth', '= 2.1.0'
+  pod 'GTMAppAuth', '= 5.0.0'
+  pod 'AppCheckCore', '= 11.0.0'
+  # Match the iOS slice already supplied by pinned Firebase.zip. This archive
+  # is used only to compile dependencies; it must not be linked/staged twice.
+  pod 'GTMSessionFetcher/Core', '= 3.5.0'
+end

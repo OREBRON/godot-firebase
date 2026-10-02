@@ -6,10 +6,12 @@
 #import <AuthenticationServices/AuthenticationServices.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <GameKit/GameKit.h>
+#import <GoogleSignIn/GoogleSignIn.h>
 #import <Security/Security.h>
 #import <UIKit/UIKit.h>
 
 #include <firebase/auth.h>
+#include <atomic>
 
 #include "../../core/outcome.h"
 
@@ -17,6 +19,7 @@ using godot_firebase::CredentialCallback;
 using godot_firebase::PlatformCredential;
 
 namespace {
+std::atomic<uint64_t> platform_generation{0};
 
 PlatformCredential failure(int code, const std::string &message) {
 	PlatformCredential result;
@@ -94,7 +97,7 @@ void game_center_credential(CredentialCallback done) {
 			});
 }
 
-void sign_in_with_game_center(CredentialCallback done) {
+void sign_in_with_game_center(CredentialCallback done, uint64_t generation) {
 	GKLocalPlayer *player = GKLocalPlayer.localPlayer;
 	if (player.isAuthenticated) {
 		game_center_credential(done);
@@ -103,7 +106,7 @@ void sign_in_with_game_center(CredentialCallback done) {
 	// GameKit may call the handler several times (UI shown, then result).
 	__block bool finished = false;
 	player.authenticateHandler = ^(UIViewController *view_controller, NSError *error) {
-		if (finished) {
+		if (finished || platform_generation.load() != generation) {
 			return;
 		}
 		if (view_controller) {
@@ -131,6 +134,67 @@ void sign_in_with_game_center(CredentialCallback done) {
 // Keeps the running request alive until ASAuthorizationController answers.
 static GodotFirebaseAppleSignIn *active_apple_sign_in = nil;
 
+// Godot 4.7 exposes addService: on its app delegate. Register at runtime after
+// engine startup, avoiding the +load ordering issue and an engine-header ABI dependency.
+@interface NSObject (GodotFirebaseServiceRegistration)
++ (void)addService:(NSObject<UIApplicationDelegate, UIWindowSceneDelegate> *)service;
+@end
+
+@interface GodotFirebaseGoogleURLService : NSObject <UIApplicationDelegate, UIWindowSceneDelegate>
+@end
+@implementation GodotFirebaseGoogleURLService
+- (BOOL)application:(UIApplication *)application openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options {
+	return [GIDSignIn.sharedInstance handleURL:url];
+}
+- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)contexts {
+	for (UIOpenURLContext *context in contexts) [GIDSignIn.sharedInstance handleURL:context.URL];
+}
+@end
+
+namespace {
+bool register_google_url_service() {
+	static bool registered = false;
+	if (registered) return true;
+	Class delegate_class = NSClassFromString(@"GDTApplicationDelegate");
+	if (!delegate_class || ![delegate_class respondsToSelector:@selector(addService:)]) return false;
+	[delegate_class addService:[GodotFirebaseGoogleURLService new]];
+	registered = true;
+	return true;
+}
+
+bool has_url_scheme(NSString *scheme) {
+	for (NSDictionary *url_type in NSBundle.mainBundle.infoDictionary[@"CFBundleURLTypes"]) {
+		if ([url_type[@"CFBundleURLSchemes"] containsObject:scheme]) return true;
+	}
+	return false;
+}
+
+void sign_in_with_google(const godot_firebase::PlatformCredentialOptions &options, CredentialCallback done) {
+	NSString *client = options.google_ios_client_id.empty() ? NSBundle.mainBundle.infoDictionary[@"GIDClientID"] : [NSString stringWithUTF8String:options.google_ios_client_id.c_str()];
+	if (!client.length) {
+		NSDictionary *firebase_config = [NSDictionary dictionaryWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"GoogleService-Info" ofType:@"plist"]];
+		client = firebase_config[@"CLIENT_ID"];
+	}
+	if (!client.length) { done(failure(godot_firebase::kInvalidArgument, "firebase/auth/google_ios_client_id is required")); return; }
+	NSString *scheme = [[[client componentsSeparatedByString:@"."] reverseObjectEnumerator].allObjects componentsJoinedByString:@"."];
+	if (!has_url_scheme(scheme)) { done(failure(godot_firebase::kInvalidArgument, "Google's reversed client ID URL scheme is missing from the export")); return; }
+	if (!register_google_url_service()) { done(failure(godot_firebase::kUnavailable, "Godot's iOS URL callback service is unavailable")); return; }
+	UIViewController *presenter = top_view_controller();
+	if (!presenter) { done(failure(godot_firebase::kUnavailable, "no active iOS presentation window")); return; }
+	NSString *server = options.google_web_client_id.empty() ? nil : [NSString stringWithUTF8String:options.google_web_client_id.c_str()];
+	GIDSignIn.sharedInstance.configuration = [[GIDConfiguration alloc] initWithClientID:client serverClientID:server];
+	[GIDSignIn.sharedInstance signInWithPresentingViewController:presenter completion:^(GIDSignInResult *result, NSError *error) {
+		if (error) {
+			done(failure(error.code == kGIDSignInErrorCodeCanceled ? godot_firebase::kCancelled : godot_firebase::kUnavailable, "Google sign-in failed or was cancelled"));
+			return;
+		}
+		NSString *token = result.user.idToken.tokenString;
+		if (!token.length) { done(failure(godot_firebase::kUnavailable, "Google did not return an identity token")); return; }
+		done(success(firebase::auth::GoogleAuthProvider::GetCredential(token.UTF8String, result.user.accessToken.tokenString.UTF8String)));
+	}];
+}
+} // namespace
+
 @implementation GodotFirebaseAppleSignIn
 
 - (void)startWithCallback:(CredentialCallback)done {
@@ -151,7 +215,7 @@ static GodotFirebaseAppleSignIn *active_apple_sign_in = nil;
 
 - (void)finish:(PlatformCredential)result {
 	CredentialCallback done = std::move(_done);
-	active_apple_sign_in = nil;
+	if (active_apple_sign_in == self) active_apple_sign_in = nil;
 	if (done) {
 		done(result);
 	}
@@ -184,15 +248,23 @@ static GodotFirebaseAppleSignIn *active_apple_sign_in = nil;
 
 namespace godot_firebase {
 
-void request_platform_credential(const std::string &p_provider, CredentialCallback done) {
+void request_platform_credential(const std::string &p_provider, const PlatformCredentialOptions &p_options, CredentialCallback callback) {
 	// Blocks capture C++ references by reference; copy before going async.
 	const std::string provider = p_provider;
+	const PlatformCredentialOptions options = p_options;
+	const uint64_t generation = platform_generation.load();
+	CredentialCallback done = [generation, callback](PlatformCredential result) {
+		if (platform_generation.load() == generation) callback(std::move(result));
+	};
 	dispatch_async(dispatch_get_main_queue(), ^{
-		if (provider == "game_center") {
-			sign_in_with_game_center(done);
+		if (platform_generation.load() != generation) return;
+		if (provider == "google") {
+			sign_in_with_google(options, done);
+		} else if (provider == "game_center") {
+			sign_in_with_game_center(done, generation);
 		} else if (provider == "apple") {
 			if (active_apple_sign_in) {
-				done(failure(kInvalidArgument, "Sign in with Apple is already running"));
+				done(failure(kBusy, "Sign in with Apple is already running"));
 				return;
 			}
 			active_apple_sign_in = [GodotFirebaseAppleSignIn new];
@@ -200,6 +272,14 @@ void request_platform_credential(const std::string &p_provider, CredentialCallba
 		} else {
 			done(failure(kUnsupported, provider + " sign-in is not supported on iOS"));
 		}
+	});
+}
+
+void clear_platform_credential_state() {
+	++platform_generation;
+	dispatch_async(dispatch_get_main_queue(), ^{
+		[GIDSignIn.sharedInstance signOut];
+		GKLocalPlayer.localPlayer.authenticateHandler = nil;
 	});
 }
 

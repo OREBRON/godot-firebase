@@ -11,6 +11,7 @@ const ERR_UNSUPPORTED := -2
 const ERR_UNAVAILABLE := -3
 const ERR_NO_USER := -4
 const ERR_CANCELLED := -5
+const ERR_BUSY := -6
 
 var ok := false
 var value: Variant = null

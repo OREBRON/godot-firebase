@@ -16,6 +16,7 @@ enum AddonError : int {
 	kUnavailable = -3,
 	kNoUser = -4,
 	kCancelled = -5,
+	kBusy = -6,
 };
 
 struct Outcome {

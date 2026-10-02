@@ -1,9 +1,11 @@
 extends FirebaseTest
 
 var states: Array[Dictionary] = []
+var pending_completions := 0
 
 
 func _run() -> void:
+	await _session_regressions()
 	var firebase := mock_firebase()
 	var auth: FirebaseAuth = firebase.auth
 	auth.state_changed.connect(func(user: Dictionary): states.append(user))
@@ -48,3 +50,55 @@ func _run() -> void:
 	result = await firebase.auth.sign_in_anonymously().wait()
 	check(not result.ok and result.error_code == FirebaseResult.ERR_UNAVAILABLE, "missing backend fails requests")
 	check(firebase.auth.current_user().is_empty(), "missing backend has no user")
+
+
+func _session_regressions() -> void:
+	var firebase := mock_firebase()
+	var auth: FirebaseAuth = firebase.auth
+	var backend = firebase.backends.auth
+	var result := await auth.get_id_token().wait()
+	check(not result.ok and result.error_code == FirebaseResult.ERR_NO_USER, "signed-out token fails")
+	result = await auth.delete_account().wait()
+	check(not result.ok and result.error_code == FirebaseResult.ERR_NO_USER, "signed-out delete fails")
+	result = await auth.sign_in_with_apple().wait()
+	var apple_uid: String = result.value.uid
+	auth.sign_out()
+	result = await auth.sign_in_with_apple().wait()
+	check(result.value.uid == apple_uid, "provider relogin restores account uid")
+	auth.sign_out()
+	result = await auth.sign_in_anonymously().wait()
+	var anonymous_uid: String = result.value.uid
+	result = await auth.link_with_apple().wait()
+	check(not result.ok and auth.current_user().uid == anonymous_uid, "credential collision preserves current account")
+	result = await auth.link_with_google().wait()
+	check(result.ok and result.value.uid == anonymous_uid, "Google link preserves anonymous uid")
+	auth.sign_out()
+	result = await auth.sign_in_with_google().wait()
+	check(result.ok and result.value.uid == anonymous_uid, "Google restores linked uid")
+	result = await auth.link_with_play_games_platform().wait()
+	check(result.ok and result.value.uid == anonymous_uid, "Play Games platform helper links")
+	auth.sign_out()
+	result = await auth.sign_in_with_play_games_platform().wait()
+	check(result.ok and result.value.uid == anonymous_uid, "Play Games platform helper restores linked uid")
+	backend.delay_next_sign_in()
+	var pending := auth.link_with_game_center()
+	pending.completed.connect(func(_result): pending_completions += 1)
+	result = await auth.sign_in_with_apple().wait()
+	check(not result.ok and result.error_code == -6, "second auth UI is busy")
+	auth.sign_out()
+	result = await pending.wait()
+	check(not result.ok and result.error_code == FirebaseResult.ERR_CANCELLED, "sign out cancels pending link")
+	result = await auth.sign_in_anonymously().wait()
+	var next_uid: String = result.value.uid
+	backend.complete_pending_sign_in()
+	await process_frame
+	check(auth.current_user().uid == next_uid and auth.current_user().is_anonymous, "late credential cannot link different uid")
+	check(pending_completions == 1, "cancelled operation completes exactly once")
+	backend.delay_next_sign_in()
+	pending = auth.link_with_game_center()
+	backend.shutdown_for_test()
+	result = await pending.wait()
+	check(not result.ok and result.error_code == FirebaseResult.ERR_CANCELLED, "shutdown cancels pending operation")
+	backend.complete_pending_sign_in()
+	await process_frame
+	check(auth.current_user().uid == next_uid and auth.current_user().is_anonymous, "late credential after shutdown is ignored")

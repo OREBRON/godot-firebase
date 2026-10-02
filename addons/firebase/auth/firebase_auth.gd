@@ -11,6 +11,8 @@ const ANONYMOUS := "anonymous"
 const GAME_CENTER := "game_center"
 const APPLE := "apple"
 const PLAY_GAMES := "play_games"
+const GOOGLE := "google"
+const PLAY_GAMES_PLATFORM := "play_games_platform"
 
 var _requests: FirebaseRequests
 
@@ -33,6 +35,24 @@ func sign_in_with_game_center() -> FirebaseTask:
 ## Needs the Sign in with Apple entitlement.
 func sign_in_with_apple() -> FirebaseTask:
 	return _sign_in(APPLE, false)
+
+
+## Opens the platform Google account picker. Requires configured OAuth client IDs.
+func sign_in_with_google() -> FirebaseTask:
+	return _sign_in(GOOGLE, false)
+
+
+func link_with_google() -> FirebaseTask:
+	return _sign_in(GOOGLE, true)
+
+
+## Android Play Games v2: obtains a fresh server code using the configured web client ID.
+func sign_in_with_play_games_platform() -> FirebaseTask:
+	return _sign_in(PLAY_GAMES_PLATFORM, false)
+
+
+func link_with_play_games_platform() -> FirebaseTask:
+	return _sign_in(PLAY_GAMES_PLATFORM, true)
 
 
 ## Pass a fresh single-use server auth code from Play Games Services v2.
