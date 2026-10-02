@@ -1,0 +1,21 @@
+#!/usr/bin/env python
+from SCons.Script import ARGUMENTS, SConscript, Exit, Default
+
+if ARGUMENTS.get("target", "template_debug") != "template_debug":
+    print("Crashlytics smoke fixture accepts only target=template_debug")
+    Exit(1)
+ARGUMENTS.setdefault("api_version", "4.7")
+ARGUMENTS.setdefault("ios_min_version", "15.0")
+env = SConscript("../../third_party/godot-cpp/SConstruct").Clone()
+if env["platform"] not in ("android", "ios"):
+    print("Crashlytics smoke fixture is for Android/iOS devices")
+    Exit(1)
+env.Append(CPPDEFINES=["DEBUG_ENABLED"])
+env.Append(CCFLAGS=["-g", "-O0"])
+if env["platform"] == "android":
+    env.Append(LINKFLAGS=["-Wl,--build-id=sha1"])
+filename = "libcrashlytics_smoke" + env["suffix"] + env["SHLIBSUFFIX"]
+if env["platform"] == "ios":
+    env.Append(LINKFLAGS=["-Wl,-install_name,@rpath/" + filename])
+library = "bin/" + filename
+Default(env.SharedLibrary(library, ["crashlytics_smoke.cpp"], SHLIBPREFIX=""))
