@@ -9,6 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source tools/versions.env
 mkdir -p third_party
+touch third_party/.gdignore
 
 verify() { # file expected_sha256
 	local actual
@@ -43,7 +44,7 @@ git -C third_party/godot-cpp fetch --quiet origin "$GODOT_CPP_COMMIT"
 git -C third_party/godot-cpp checkout --quiet "$GODOT_CPP_COMMIT"
 
 cpp_members=('firebase_cpp_sdk/include/*' firebase_cpp_sdk/Android/firebase_dependencies.gradle firebase_cpp_sdk/generate_xml_from_google_services_json.py)
-for lib in app auth firestore storage database functions; do
+for lib in app auth firestore storage database functions analytics remote_config; do
 	for dir in ios/device-arm64 ios/simulator-arm64 android/arm64-v8a; do
 		cpp_members+=("firebase_cpp_sdk/libs/$dir/libfirebase_$lib.a")
 	done
@@ -56,7 +57,8 @@ fetch_zip "https://dl.google.com/firebase/sdk/cpp/firebase_cpp_sdk_${FIREBASE_CP
 fetch_zip "https://github.com/firebase/firebase-ios-sdk/releases/download/${FIREBASE_IOS_VERSION}/Firebase.zip" \
 	"third_party/Firebase-${FIREBASE_IOS_VERSION}.zip" "$FIREBASE_IOS_SHA256" third_party/Firebase \
 	'Firebase/FirebaseAnalytics/*' 'Firebase/FirebaseAuth/*' 'Firebase/FirebaseFirestore/*' \
-	'Firebase/FirebaseStorage/*' 'Firebase/FirebaseDatabase/*' 'Firebase/FirebaseFunctions/*'
+	'Firebase/FirebaseStorage/*' 'Firebase/FirebaseDatabase/*' 'Firebase/FirebaseFunctions/*' \
+	'Firebase/FirebaseRemoteConfig/*' 'Firebase/FirebaseCrashlytics/*'
 
 du -sh third_party/* | sed 's/^/third_party size: /'
 df -h third_party | tail -1 | sed 's/^/disk: /'

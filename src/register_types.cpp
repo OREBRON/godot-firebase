@@ -27,6 +27,15 @@
 #ifdef GODOT_FIREBASE_FUNCTIONS
 #include "functions/firebase_functions_native.h"
 #endif
+#ifdef GODOT_FIREBASE_ANALYTICS
+#include "analytics/firebase_analytics_native.h"
+#endif
+#ifdef GODOT_FIREBASE_REMOTE_CONFIG
+#include "remote_config/firebase_remote_config_native.h"
+#endif
+#ifdef GODOT_FIREBASE_CRASHLYTICS
+#include "crashlytics/firebase_crashlytics_native.h"
+#endif
 
 using namespace godot;
 
@@ -54,12 +63,36 @@ void initialize_godot_firebase([[maybe_unused]] ModuleInitializationLevel p_leve
 #ifdef GODOT_FIREBASE_FUNCTIONS
 	GDREGISTER_CLASS(godot_firebase::FirebaseFunctionsNative);
 #endif
+#ifdef GODOT_FIREBASE_ANALYTICS
+	GDREGISTER_CLASS(godot_firebase::FirebaseAnalyticsNative);
+#endif
+#ifdef GODOT_FIREBASE_REMOTE_CONFIG
+	GDREGISTER_CLASS(godot_firebase::FirebaseRemoteConfigNative);
+#endif
+#ifdef GODOT_FIREBASE_CRASHLYTICS
+	GDREGISTER_CLASS(godot_firebase::FirebaseCrashlyticsNative);
+#endif
 #endif
 }
 
 void uninitialize_godot_firebase([[maybe_unused]] ModuleInitializationLevel p_level) {
 #ifndef GODOT_FIREBASE_EDITOR_STUB
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+#ifdef GODOT_FIREBASE_AUTH
+		godot_firebase::FirebaseAuthNative::shutdown_all();
+#endif
+#ifdef GODOT_FIREBASE_DATABASE
+		godot_firebase::FirebaseDatabaseNative::shutdown_all();
+#endif
+#ifdef GODOT_FIREBASE_ANALYTICS
+		godot_firebase::FirebaseAnalyticsNative::shutdown_all();
+#endif
+#ifdef GODOT_FIREBASE_REMOTE_CONFIG
+		godot_firebase::FirebaseRemoteConfigNative::shutdown_all();
+#endif
+#ifdef GODOT_FIREBASE_CRASHLYTICS
+		godot_firebase::FirebaseCrashlyticsNative::shutdown_all();
+#endif
 		godot_firebase::FirebaseAppNative::shutdown();
 	}
 #endif

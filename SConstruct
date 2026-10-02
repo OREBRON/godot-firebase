@@ -20,18 +20,24 @@ FIREBASE_IOS = "third_party/Firebase"
 # Firebase C++ libraries and Firebase iOS SDK folders (from Firebase.zip) per module.
 CORE = {"cpp": ["firebase_app"], "ios_frameworks": ["FirebaseCore", "FirebaseCoreInternal", "FirebaseInstallations", "GoogleUtilities", "FBLPromises", "nanopb"]}
 MODULES = {
-    "auth": {"cpp": ["firebase_auth"], "ios_folder": "FirebaseAuth", "system_frameworks": ["AuthenticationServices", "GameKit", "SafariServices"]},
+    "auth": {"cpp": ["firebase_auth"], "ios_folder": "FirebaseAuth", "system_frameworks": ["AuthenticationServices", "GameKit", "SafariServices", "LocalAuthentication", "CoreGraphics", "CoreText"]},
     "firestore": {"cpp": ["firebase_firestore"], "ios_folder": "FirebaseFirestore", "system_frameworks": ["Network"]},
     "storage": {"cpp": ["firebase_storage"], "ios_folder": "FirebaseStorage", "system_frameworks": []},
     "database": {"cpp": ["firebase_database"], "ios_folder": "FirebaseDatabase", "system_frameworks": []},
     "functions": {"cpp": ["firebase_functions"], "ios_folder": "FirebaseFunctions", "system_frameworks": []},
+    "analytics": {"cpp": ["firebase_analytics"], "ios_folder": "FirebaseAnalytics", "system_frameworks": ["StoreKit", "AdSupport"]},
+    "remote_config": {"cpp": ["firebase_remote_config"], "ios_folder": "FirebaseRemoteConfig", "system_frameworks": []},
+    "crashlytics": {"cpp": [], "ios_folder": "FirebaseCrashlytics", "system_frameworks": []},
 }
 # tools/build.sh copies the resource bundles listed here into the addon.
 RESOURCE_BUNDLES_LIST = "build/ios/resource_bundles.txt"
+ios_framework_dirs = []
 
 ARGUMENTS.setdefault("api_version", "4.7")
 ARGUMENTS.setdefault("ios_min_version", "15.0")
-env = SConscript("third_party/godot-cpp/SConstruct")
+# Keep product flags out of godot-cpp's build environment, so changing module
+# selections does not recompile the entire engine binding library.
+env = SConscript("third_party/godot-cpp/SConstruct").Clone()
 
 options = Variables([], ARGUMENTS)
 options.Add("modules", "Comma-separated modules: " + ",".join(MODULES), ",".join(MODULES))
@@ -40,7 +46,7 @@ Help(options.GenerateHelpText(env))
 
 modules = [name.strip() for name in env["modules"].split(",") if name.strip()]
 unknown = [name for name in modules if name not in MODULES]
-if unknown or not modules:
+if unknown or not modules or len(set(modules)) != len(modules):
     Exit("modules must be a non-empty subset of %s, got %s" % (",".join(MODULES), env["modules"]))
 
 platform = env["platform"]
@@ -58,6 +64,9 @@ else:
         sources += Glob("src/%s/*.cpp" % name)
     if "auth" in modules:
         sources += ["src/auth/platform/platform_credentials_ios.mm" if platform == "ios" else "src/auth/platform/platform_credentials_android.cpp"]
+
+    if "crashlytics" in modules:
+        sources += ["src/crashlytics/platform/crashlytics_ios.mm" if platform == "ios" else "src/crashlytics/platform/crashlytics_android.cpp"]
 
 cpp_libraries = [lib for name in modules for lib in MODULES[name]["cpp"]] + CORE["cpp"]
 
@@ -80,6 +89,7 @@ def link_static_framework(xcframework, slice_name):
     if not os.path.isdir(os.path.join(framework_dir, name + ".framework")):
         Exit("%s has no %s slice" % (xcframework, slice_name))
     env.Append(LINKFLAGS=["-F", framework_dir, "-framework", name])
+    ios_framework_dirs.append(framework_dir)
 
 
 def resource_bundles(xcframework):
@@ -98,7 +108,7 @@ if platform == "android":
     for lib in cpp_libraries:
         first_existing([lib_dir + "/lib%s.a" % lib], "lib%s.a" % lib)
     env.Append(LIBPATH=[lib_dir], LIBS=cpp_libraries + ["log"])
-    env.Append(LINKFLAGS=["-Wl,--no-undefined"])
+    env.Append(LINKFLAGS=["-Wl,--no-undefined", "-Wl,--build-id=sha1"])
 
 if platform == "ios":
     simulator = env["ios_simulator"]
@@ -111,6 +121,10 @@ if platform == "ios":
     linked = set()
     bundles = []
     folders = [(FIREBASE_IOS + "/FirebaseAnalytics", CORE["ios_frameworks"])] + [(FIREBASE_IOS + "/" + MODULES[name]["ios_folder"], None) for name in modules]
+    if "auth" in modules:
+        first_existing(["third_party/GoogleSignIn/GoogleSignIn.xcframework"], "Google Sign-In (run tools/build_google_signin_ios.sh)")
+        folders += [("third_party/GoogleSignIn", None)]
+        bundles += sorted(glob.glob("third_party/GoogleSignIn/resources/*.bundle"))
     for folder, only in folders:
         for xcframework in sorted(glob.glob(folder + "/*.xcframework")):
             name = os.path.basename(xcframework)[: -len(".xcframework")]
@@ -142,5 +156,12 @@ library_name = "libgodot_firebase%s%s" % (suffix, env["SHLIBSUFFIX"])
 # rewrites it only when install_name_tool is available on the export host.
 if platform == "ios":
     env.Append(LINKFLAGS=["-Wl,-install_name,@rpath/" + library_name])
+# godot-cpp compiles .mm through CXXCOM; framework/ARC flags must be on these
+# Objective-C++ objects, rather than OBJCXXFLAGS which that command omits.
+if platform == "ios":
+    objc_flags = list(env["CXXFLAGS"]) + ["-fobjc-arc"]
+    for framework_dir in ios_framework_dirs:
+        objc_flags += ["-F", framework_dir]
+    sources = [env.SharedObject(source, CXXFLAGS=objc_flags) if str(source).endswith(".mm") else source for source in sources]
 library = env.SharedLibrary("build/%s/%s" % (platform, library_name), source=sources)
 Default(library)

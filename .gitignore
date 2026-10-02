@@ -2,6 +2,7 @@
 .DS_Store
 .sconsign.dblite
 *.os
+*.os.tmp
 *.o
 /compile_commands.json
 
@@ -16,3 +17,7 @@ google-services*.json
 
 # Local agent tooling.
 .serena/
+
+# Android bridge dependency resolution
+/android/.gradle/
+/android/build/

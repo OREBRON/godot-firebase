@@ -11,7 +11,7 @@ extends Node
 ##   FirebaseResult.ERR_UNAVAILABLE instead of silently losing data.
 
 const ROOT := "res://addons/firebase/"
-const MODULES: Array[String] = ["auth", "firestore", "storage", "database", "functions"]
+const MODULES: Array[String] = ["auth", "firestore", "storage", "database", "functions", "analytics", "remote_config", "crashlytics"]
 
 ## Each is the module API (FirebaseAuth, FirebaseFirestore, ...) or null
 ## when the module folder is missing.
@@ -20,6 +20,9 @@ var firestore: RefCounted
 var storage: RefCounted
 var database: RefCounted
 var functions: RefCounted
+var analytics: RefCounted
+var remote_config: RefCounted
+var crashlytics: RefCounted
 ## Module name -> backend object (null when unavailable).
 var backends: Dictionary[String, Object] = {}
 
@@ -57,18 +60,32 @@ func _create_backends() -> Dictionary:
 	return created
 
 
+static func native_class_name(module: String) -> StringName:
+	return StringName("Firebase%sNative" % module.capitalize().replace(" ", ""))
+
+
 func _create_backend(module: String, native_app: bool) -> Object:
-	var native_class := StringName("Firebase%sNative" % module.capitalize())
+	var arguments: Array = []
+	if module == "database":
+		var persistence: Variant = ProjectSettings.get_setting("firebase/database/persistence_enabled", false)
+		if not persistence is bool:
+			push_error("Firebase: firebase/database/persistence_enabled must be a bool; Database unavailable")
+			return null
+		arguments.append(persistence)
+	var native_class := native_class_name(module)
 	if native_app and ClassDB.class_exists(native_class):
 		var native: Object = ClassDB.instantiate(native_class)
-		var error: int = native.initialize()
+		var error: int = native.callv("initialize", arguments)
 		if error == OK:
 			return native
 		push_warning("Firebase: %s initialize failed (%s)" % [module, error_string(error)])
 	if OS.has_feature("mobile"):
 		push_error("Firebase: %s unavailable; its requests will fail" % module)
 		return null
-	return load(_api_path(module).replace(".gd", "_mock.gd")).new()
+	var mock: Object = load(_api_path(module).replace(".gd", "_mock.gd")).new()
+	if module == "database":
+		mock.callv("initialize", arguments)
+	return mock
 
 
 func _start_native_app() -> bool:
