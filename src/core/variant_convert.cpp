@@ -8,6 +8,7 @@
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 
 #include "outcome.h"
 
@@ -20,13 +21,15 @@ namespace godot_firebase {
 
 namespace {
 
-String convert_array(const Array &p_items, firebase::Variant &r_out) {
+String convert_value(const Variant &p_value, firebase::Variant &r_out, std::vector<Variant> &p_ancestors);
+
+String convert_array(const Array &p_items, firebase::Variant &r_out, std::vector<Variant> &p_ancestors) {
 	r_out = firebase::Variant::EmptyVector();
 	std::vector<firebase::Variant> &items = r_out.vector();
 	items.reserve(static_cast<size_t>(p_items.size()));
 	for (int64_t i = 0; i < p_items.size(); i++) {
 		firebase::Variant item;
-		const String reason = to_firebase_variant(p_items[i], item);
+		const String reason = convert_value(p_items[i], item, p_ancestors);
 		if (!reason.is_empty()) {
 			return reason;
 		}
@@ -35,7 +38,7 @@ String convert_array(const Array &p_items, firebase::Variant &r_out) {
 	return String();
 }
 
-String convert_map(const Dictionary &p_map, firebase::Variant &r_out) {
+String convert_map(const Dictionary &p_map, firebase::Variant &r_out, std::vector<Variant> &p_ancestors) {
 	r_out = firebase::Variant::EmptyMap();
 	std::map<firebase::Variant, firebase::Variant> &entries = r_out.map();
 	const Array keys = p_map.keys();
@@ -45,7 +48,7 @@ String convert_map(const Dictionary &p_map, firebase::Variant &r_out) {
 			return "keys must be strings: " + String(key);
 		}
 		firebase::Variant value;
-		const String reason = to_firebase_variant(p_map[key], value);
+		const String reason = convert_value(p_map[key], value, p_ancestors);
 		if (!reason.is_empty()) {
 			return String(key) + ": " + reason;
 		}
@@ -61,9 +64,7 @@ String key_to_string(const firebase::Variant &p_key) {
 	return String(to_godot_variant(p_key));
 }
 
-} // namespace
-
-String to_firebase_variant(const Variant &p_value, firebase::Variant &r_out) {
+String convert_value(const Variant &p_value, firebase::Variant &r_out, std::vector<Variant> &p_ancestors) {
 	switch (p_value.get_type()) {
 		case Variant::NIL:
 			r_out = firebase::Variant::Null();
@@ -87,12 +88,34 @@ String to_firebase_variant(const Variant &p_value, firebase::Variant &r_out) {
 		case Variant::PACKED_FLOAT32_ARRAY:
 		case Variant::PACKED_FLOAT64_ARRAY:
 		case Variant::PACKED_STRING_ARRAY:
-			return convert_array(p_value, r_out);
 		case Variant::DICTIONARY:
-			return convert_map(p_value, r_out);
+			break;
 		default:
 			return "unsupported type " + Variant::get_type_name(p_value.get_type());
 	}
+	if (p_ancestors.size() >= 100) {
+		return "data exceeds 100 container levels";
+	}
+	for (const Variant &ancestor : p_ancestors) {
+		if (godot::UtilityFunctions::is_same(p_value, ancestor)) {
+			return "data contains a container cycle";
+		}
+	}
+	p_ancestors.push_back(p_value);
+	const String reason = p_value.get_type() == Variant::DICTIONARY ?
+			convert_map(p_value, r_out, p_ancestors) : convert_array(p_value, r_out, p_ancestors);
+	p_ancestors.pop_back();
+	return reason;
+}
+
+} // namespace
+
+String to_firebase_variant(const Variant &p_value, firebase::Variant &r_out) {
+	std::vector<Variant> ancestors;
+	firebase::Variant converted;
+	const String reason = convert_value(p_value, converted, ancestors);
+	r_out = reason.is_empty() ? std::move(converted) : firebase::Variant::Null();
+	return reason;
 }
 
 Variant to_godot_variant(const firebase::Variant &p_value) {

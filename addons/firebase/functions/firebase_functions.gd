@@ -26,22 +26,33 @@ func call_function(name: String, data: Variant = null) -> FirebaseTask:
 
 
 ## Returns an empty string when `data` can be sent, otherwise the reason.
+## Containers may nest at most 100 levels. Shared subtrees are allowed; cycles are not.
 static func validate_data(data: Variant) -> String:
+	return _validate_data(data, [])
+
+
+static func _validate_data(data: Variant, ancestors: Array) -> String:
 	match typeof(data):
 		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_STRING_NAME:
 			return ""
-		TYPE_ARRAY, TYPE_PACKED_INT32_ARRAY, TYPE_PACKED_INT64_ARRAY, TYPE_PACKED_FLOAT32_ARRAY, TYPE_PACKED_FLOAT64_ARRAY, TYPE_PACKED_STRING_ARRAY:
+		TYPE_ARRAY, TYPE_DICTIONARY, TYPE_PACKED_INT32_ARRAY, TYPE_PACKED_INT64_ARRAY, TYPE_PACKED_FLOAT32_ARRAY, TYPE_PACKED_FLOAT64_ARRAY, TYPE_PACKED_STRING_ARRAY:
+			if ancestors.size() >= 100:
+				return "data exceeds 100 container levels"
+			for ancestor in ancestors:
+				if is_same(data, ancestor):
+					return "data contains a container cycle"
+			ancestors.append(data)
+			var reason := ""
 			for item in data:
-				var reason := validate_data(item)
+				if data is Dictionary:
+					if not item is String:
+						reason = "keys must be strings: %s" % str(item)
+						break
+					reason = _validate_data(data[item], ancestors)
+				else:
+					reason = _validate_data(item, ancestors)
 				if not reason.is_empty():
-					return reason
-			return ""
-		TYPE_DICTIONARY:
-			for key in data:
-				if not key is String:
-					return "keys must be strings: %s" % str(key)
-				var reason := validate_data(data[key])
-				if not reason.is_empty():
-					return reason
-			return ""
+					break
+			ancestors.pop_back()
+			return reason
 	return "unsupported type %s" % type_string(typeof(data))

@@ -14,7 +14,8 @@ namespace godot_firebase {
 // The GDScript layer validates first and reports readable errors; these checks
 // repeat its rules so that invalid input never reaches the SDK.
 
-// Returns an empty string on success, otherwise the reason.
+// At most 100 nested containers; active-path cycles are rejected, shared subtrees allowed.
+// Returns an empty string on success, otherwise the reason and a null output.
 godot::String to_firebase_variant(const godot::Variant &p_value, firebase::Variant &r_out);
 
 // Maps become Dictionary with String keys, vectors become Array, blobs PackedByteArray.
