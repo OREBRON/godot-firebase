@@ -10,10 +10,12 @@ if unzip -l "$stage/firebase.aar" | grep -q -E 'res/|google-services|googleservi
 	echo "AAR must not contain Firebase configuration or resources" >&2
 	exit 1
 fi
-for keep in org.godotengine.godotfirebase.FirebaseBridge com.google.firebase.firestore.FirebaseFirestore com.google.firebase.functions; do
+for keep in org.godotengine.godotfirebase.FirebaseBridge org.godotengine.godotfirebase.FirebaseAuthBridge org.godotengine.godotfirebase.FirebaseCrashlyticsBridge com.google.firebase.firestore.FirebaseFirestore com.google.firebase.functions com.google.firebase.analytics com.google.firebase.remoteconfig; do
 	unzip -p "$stage/firebase.aar" proguard.txt | grep -q "$keep"
 done
 unzip -p "$stage/firebase.aar" classes.jar > "$stage/classes.jar"
-jar tf "$stage/classes.jar" | grep -q 'org/godotengine/godotfirebase/FirebaseBridge.class'
+for bridge in FirebaseBridge FirebaseAuthBridge FirebaseCrashlyticsBridge; do
+	jar tf "$stage/classes.jar" | grep -q "org/godotengine/godotfirebase/$bridge.class"
+done
 javap -cp "$stage/classes.jar" org.godotengine.godotfirebase.FirebaseBridge | grep -q 'initialize(android.app.Activity, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)'
 echo "test_android_aar.sh: ok"

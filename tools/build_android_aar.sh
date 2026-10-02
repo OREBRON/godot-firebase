@@ -15,12 +15,23 @@ stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 output="${ANDROID_AAR_OUTPUT:-$PWD/addons/firebase/bin/android/godot_firebase.aar}"
 mkdir -p "$stage/classes" "$stage/aar" "$(dirname "$output")"
-javac --release 8 -Xlint:-options -cp "$sdk/platforms/android-35/android.jar" -d "$stage/classes" android/src/org/godotengine/godotfirebase/FirebaseBridge.java
+# The SDK-facing Java bridges compile against pinned API jars. They remain
+# compile-only: Gradle dependencies are added by the game export plugin.
+"${GRADLE:-$PWD/android/gradlew}" --no-daemon -p android bridgeClasspath
+classpath="$sdk/platforms/android-35/android.jar"
+for dependency in android/build/bridge-classpath/*.jar; do
+	classpath="$classpath:$dependency"
+done
+javac --release 8 -Xlint:-options -cp "$classpath" -d "$stage/classes" android/src/org/godotengine/godotfirebase/*.java
 jar --create --file "$stage/aar/classes.jar" -C "$stage/classes" .
 cp android/AndroidManifest.xml "$stage/aar/AndroidManifest.xml"
 touch "$stage/aar/R.txt"
-printf '%s\n' '-keep class org.godotengine.godotfirebase.FirebaseBridge { *; }' > "$stage/aar/proguard.txt"
-for module in app auth firestore storage database functions; do
+printf '%s\n' '-keep class org.godotengine.godotfirebase.FirebaseBridge { *; }' '-keep class org.godotengine.godotfirebase.FirebaseAuthBridge { *; }' '-keep class org.godotengine.godotfirebase.FirebaseCrashlyticsBridge { *; }' > "$stage/aar/proguard.txt"
+# The shared AAR contains optional bridges. Product/provider selection adds their
+# runtime dependencies; omitted bridges are never invoked. Keep suppression scoped
+# to those optional APIs so unrelated missing dependencies still fail R8.
+printf '%s\n' '-dontwarn androidx.credentials.**' '-dontwarn com.google.android.libraries.identity.googleid.**' '-dontwarn com.google.android.gms.games.**' '-dontwarn com.google.firebase.crashlytics.**' >> "$stage/aar/proguard.txt"
+for module in app auth firestore storage database functions analytics remote_config; do
 	pro="third_party/firebase_cpp_sdk/libs/android/$module.pro"
 	[[ -f "$pro" ]] || { echo "Missing $pro" >&2; exit 1; }
 	printf '\n' >> "$stage/aar/proguard.txt"

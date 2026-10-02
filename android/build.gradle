@@ -1,0 +1,34 @@
+// Resolves compile-only Android APIs. Dependencies are supplied by the game export,
+// never embedded in the reusable AAR. Version locks include transitive dependencies.
+plugins { id 'base' }
+repositories { google(); mavenCentral() }
+configurations { bridgeCompile }
+dependencies {
+    bridgeCompile 'androidx.credentials:credentials:1.6.0'
+    bridgeCompile 'androidx.credentials:credentials-play-services-auth:1.6.0'
+    bridgeCompile 'com.google.android.libraries.identity.googleid:googleid:1.2.1'
+    bridgeCompile 'com.google.android.gms:play-services-games-v2:22.0.0'
+    bridgeCompile 'com.google.firebase:firebase-crashlytics:20.1.1'
+}
+dependencyLocking { lockAllConfigurations() }
+tasks.register('bridgeClasspath') {
+    def output = layout.buildDirectory.dir('bridge-classpath')
+    inputs.files(configurations.bridgeCompile)
+    outputs.dir(output)
+    doLast {
+        delete(output)
+        output.get().asFile.mkdirs()
+        configurations.bridgeCompile.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+            def destination = new File(output.get().asFile, artifact.moduleVersion.id.toString().replace(':', '-') + '.jar')
+            if (artifact.extension == 'aar') {
+                def zip = new java.util.zip.ZipFile(artifact.file)
+                try {
+                    def entry = zip.getEntry('classes.jar')
+                    if (entry != null) destination.withOutputStream { stream -> zip.getInputStream(entry).withCloseable { stream << it } }
+                } finally { zip.close() }
+            } else if (artifact.extension == 'jar') {
+                destination.bytes = artifact.file.bytes
+            }
+        }
+    }
+}
