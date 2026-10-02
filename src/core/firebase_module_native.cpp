@@ -31,13 +31,27 @@ void FirebaseModuleNative::emit_deferred(const StringName &p_signal, const Array
 }
 
 void FirebaseModuleNative::emit_deferred_to(uint64_t p_object_id, const StringName &p_signal, const Array &p_args) {
-	callable_mp_static(&FirebaseModuleNative::deliver).call_deferred(p_object_id, p_signal, p_args);
+	callable_mp_static(&FirebaseModuleNative::deliver).call_deferred(p_object_id, p_signal, p_args, false, 0);
 }
 
-void FirebaseModuleNative::deliver(uint64_t p_object_id, const StringName &p_signal, const Array &p_args) {
+void FirebaseModuleNative::emit_deferred_checked_to(uint64_t p_object_id, const StringName &p_signal, const Array &p_args, int64_t p_generation) {
+	callable_mp_static(&FirebaseModuleNative::deliver).call_deferred(p_object_id, p_signal, p_args, true, p_generation);
+}
+
+bool FirebaseModuleNative::accepts_deferred_event([[maybe_unused]] const StringName &p_signal, [[maybe_unused]] int64_t p_generation) const {
+	return true;
+}
+
+void FirebaseModuleNative::deliver(uint64_t p_object_id, const StringName &p_signal, const Array &p_args, bool p_checked, int64_t p_generation) {
 	godot::Object *object = godot::ObjectDB::get_instance(p_object_id);
 	if (object == nullptr) {
 		return;
+	}
+	if (p_checked) {
+		const FirebaseModuleNative *module = godot::Object::cast_to<FirebaseModuleNative>(object);
+		if (module == nullptr || !module->accepts_deferred_event(p_signal, p_generation)) {
+			return;
+		}
 	}
 	Array call_args = godot::Array::make(p_signal);
 	call_args.append_array(p_args);

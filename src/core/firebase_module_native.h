@@ -26,9 +26,13 @@ protected:
 	void emit_deferred(const godot::StringName &p_signal, const godot::Array &p_args) const;
 	// Same, for callbacks that may outlive the module: skipped once it is freed.
 	static void emit_deferred_to(uint64_t p_object_id, const godot::StringName &p_signal, const godot::Array &p_args);
+	// Listener generation is checked on delivery, so stop/restart cancels already queued events.
+	static void emit_deferred_checked_to(uint64_t p_object_id, const godot::StringName &p_signal, const godot::Array &p_args, int64_t p_generation);
+	virtual bool accepts_deferred_event(const godot::StringName &p_signal, int64_t p_generation) const;
+
 
 private:
-	static void deliver(uint64_t p_object_id, const godot::StringName &p_signal, const godot::Array &p_args);
+	static void deliver(uint64_t p_object_id, const godot::StringName &p_signal, const godot::Array &p_args, bool p_checked, int64_t p_generation);
 
 	int64_t next_request_id = 0;
 };
