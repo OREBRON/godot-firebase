@@ -24,8 +24,10 @@ godot::String to_query_value(const godot::Variant &p_value, firebase::firestore:
 
 godot::Variant to_variant(const firebase::firestore::FieldValue &p_value);
 
-// {id, path, exists, data}
+// {id, path, exists, data, metadata}
 godot::Dictionary to_snapshot(const firebase::firestore::DocumentSnapshot &p_snapshot);
+
+godot::Dictionary to_metadata(const firebase::firestore::SnapshotMetadata &p_metadata);
 
 bool is_document_path(const godot::String &p_path);
 bool is_collection_path(const godot::String &p_path);

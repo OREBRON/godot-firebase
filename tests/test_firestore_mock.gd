@@ -4,7 +4,8 @@ var snapshots: Array[Dictionary] = []
 
 
 func _run() -> void:
-	var only_firestore := mock_firebase({"firestore": FirebaseFirestoreMock.new()})
+	var backend := FirebaseFirestoreMock.new()
+	var only_firestore := mock_firebase({"firestore": backend})
 	check(only_firestore.auth == null and only_firestore.firestore != null, "firestore works without the auth module")
 	var db: FirebaseFirestore = only_firestore.firestore
 	var path := "users/u1/saves/main"
@@ -105,3 +106,54 @@ func _run() -> void:
 	check(snapshots.size() == 2, "listener gets initial snapshot and one change, then stops")
 	check(snapshots.size() == 2 and snapshots[1].data.score == 11, "listener sees the change")
 	check(db.listen_doc("scores", func(_r): pass) == 0, "listening to a collection path is rejected")
+
+	await _query_regressions(db, backend)
+
+
+func _query_regressions(db: FirebaseFirestore, backend: FirebaseFirestoreMock) -> void:
+	for filters in [
+		[["a", "!=", 1], ["b", "!=", 2]],
+		[["__name__", "==", 123]],
+		[["__name__", "==", ""]],
+		[["__name__", "==", "scores/a"]],
+		[["__name__", "array-contains", "a"]],
+		[["__name__", "in", ["a", 123]]],
+	]:
+		var calls_before := backend._next_id
+		var invalid := await db.query("scores", filters).wait()
+		check(not invalid.ok and invalid.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "unsafe query rejected: %s" % str(filters))
+		check(backend._next_id == calls_before, "invalid query never reaches backend")
+	var result := await db.query("scores", [["__name__", "in", ["a", "b"]]], [["__name__", "desc"]]).wait()
+	check(result.ok and result.value.map(func(s): return s.id) == ["b", "a"], "document-ID filtering and ordering")
+	result = await db.query("scores", [["score", ">", 5], ["name", ">", "a"]]).wait()
+	check(result.ok, "multiple inequality fields remain supported")
+	result = await db.query("scores", [["score", "in", [10, 20]], ["name", "in", ["b", "c"]]]).wait()
+	check(result.ok, "multiple in filters remain supported by pinned SDK")
+	await db.set_doc("nested/a", {"profile": {"rank": 2}, "team": "blue"}).wait()
+	await db.set_doc("nested/b", {"profile": {"rank": 1}, "team": "red"}).wait()
+	await db.set_doc("nested/c", {"profile": {"rank": 1}, "team": "blue"}).wait()
+	await db.set_doc("nested/missing", {"team": "blue"}).wait()
+	await db.set_doc("nested/null", {"profile": {"rank": null}}).wait()
+	result = await db.query("nested", [["profile.rank", "==", 1]], [["team", "asc"]]).wait()
+	check(result.value.map(func(s): return s.id) == ["c", "b"], "nested filters resolve field paths")
+	result = await db.query("nested", [], [["profile.rank", "asc"], ["team", "asc"]], 1).wait()
+	check(result.value.map(func(s): return s.id) == ["c"], "missing order fields excluded before limit; multiple order fields compared")
+	result = await db.query("nested", [["profile.rank", "==", null]]).wait()
+	check(result.value.map(func(s): return s.id) == ["null"], "null differs from missing nested field")
+	for stamp in [
+		{FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": -62135596800, "nanos": 0},
+		{FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": 253402300799, "nanos": 999999999},
+	]:
+		check((await db.set_doc("times/bound", {"at": stamp}).wait()).ok, "timestamp boundary accepted in data")
+		check((await db.query("times", [["at", "==", stamp]]).wait()).ok, "timestamp boundary accepted in filter")
+	for stamp in [
+		{FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": -62135596801},
+		{FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": 253402300800},
+		{FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": 0.0},
+		{FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": 0, "nanos": -1},
+		{FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": 0, "nanos": 1.0},
+	]:
+		var invalid := await db.set_doc("times/bad", {"at": stamp}).wait()
+		check(not invalid.ok and invalid.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "invalid timestamp rejected in data")
+		invalid = await db.query("times", [["at", "==", stamp]]).wait()
+		check(not invalid.ok and invalid.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "invalid timestamp rejected in filter")

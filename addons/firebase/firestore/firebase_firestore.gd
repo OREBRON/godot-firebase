@@ -2,7 +2,9 @@ class_name FirebaseFirestore
 extends RefCounted
 ## Cloud Firestore API.
 ##
-## Document results are snapshots: {id, path, exists, data}.
+## Document results are snapshots: {id, path, exists, data, metadata}.
+## Metadata contains is_from_cache and has_pending_writes.
+## Write success means server acknowledgement; local snapshots do not guarantee disk fsync.
 ## Filters are [field, op, value] arrays; op is one of FILTER_OPS.
 ## Order is [field, "asc" | "desc"] arrays.
 
@@ -19,8 +21,11 @@ func _init(requests: FirebaseRequests) -> void:
 		_requests.backend.document_changed.connect(_on_document_changed)
 
 
-func get_doc(path: String) -> FirebaseTask:
-	return _document_request(path, &"get_doc", [path])
+## Source is default (server with cache fallback), cache, or server.
+func get_doc(path: String, source: String = "default") -> FirebaseTask:
+	if not source in ["default", "cache", "server"]:
+		return _invalid("source must be default, cache, or server")
+	return _document_request(path, &"get_doc", [path, source])
 
 
 ## Replaces the document. With `merge`, only the given fields change.
@@ -38,7 +43,29 @@ func delete_doc(path: String) -> FirebaseTask:
 
 
 ## Result value is an Array of snapshots. `limit` <= 0 means no limit; at most MAX_LIMIT.
-func query(collection_path: String, filters: Array = [], order_by: Array = [], limit := 0) -> FirebaseTask:
+func query(collection_path: String, filters: Array = [], order_by: Array = [], limit: int = 0, source: String = "default") -> FirebaseTask:
+	return _query(&"run_query", collection_path, filters, order_by, limit, source)
+
+
+## Returns {documents: Array, metadata: Dictionary}, including for empty results.
+func query_snapshot(collection_path: String, filters: Array = [], order_by: Array = [], limit: int = 0, source: String = "default") -> FirebaseTask:
+	return _query(&"run_query_snapshot", collection_path, filters, order_by, limit, source)
+
+
+## Completion acknowledges the SDK network command, not internet connectivity.
+func set_network_enabled(enabled: bool) -> FirebaseTask:
+	return _requests.send(&"set_network_enabled", [enabled])
+
+
+## Waits for the current user's writes pending at this call. Later writes are
+## excluded; changing user fails this barrier. It never cancels a pending write.
+func wait_pending_writes() -> FirebaseTask:
+	return _requests.send(&"wait_pending_writes")
+
+
+func _query(method: StringName, collection_path: String, filters: Array, order_by: Array, limit: int, source: String) -> FirebaseTask:
+	if not source in ["default", "cache", "server"]:
+		return _invalid("source must be default, cache, or server")
 	if not FirebaseValue.is_collection_path(collection_path):
 		return _invalid("not a collection path: %s" % collection_path)
 	var reason := _validate_query(filters, order_by)
@@ -46,7 +73,7 @@ func query(collection_path: String, filters: Array = [], order_by: Array = [], l
 		return _invalid(reason)
 	if limit > MAX_LIMIT:
 		return _invalid("limit must be at most %d" % MAX_LIMIT)
-	return _requests.send(&"run_query", [collection_path, filters, order_by, limit])
+	return _requests.send(method, [collection_path, filters, order_by, limit, source])
 
 
 ## Commits all writes atomically. Each op is a dictionary:
@@ -61,11 +88,11 @@ func batch(ops: Array) -> FirebaseTask:
 
 ## Calls `callback(result: FirebaseResult)` with a snapshot now and after every change.
 ## Returns an id for remove_listener(), or 0 when the listener could not start.
-func listen_doc(path: String, callback: Callable) -> int:
+func listen_doc(path: String, callback: Callable, include_metadata_changes: bool = false) -> int:
 	if _requests.backend == null or not FirebaseValue.is_document_path(path):
 		push_error("Firebase: cannot listen to %s" % path)
 		return 0
-	var id: int = _requests.backend.listen_doc(path)
+	var id: int = _requests.backend.listen_doc(path, include_metadata_changes)
 	_listeners[id] = callback
 	return id
 
@@ -88,13 +115,25 @@ func _write(path: String, method: StringName, reason: String, args: Array) -> Fi
 	return _document_request(path, method, args)
 
 
-func _validate_query(filters: Array, order_by: Array) -> String:
+static func _validate_query(filters: Array, order_by: Array) -> String:
+	var not_equal_seen := false
 	for filter in filters:
 		if not filter is Array or filter.size() != 3 or not FirebaseValue.is_field_path(filter[0]) or not FILTER_OPS.has(filter[1]):
 			return "filter must be [field, op, value] with op in %s: %s" % [FILTER_OPS, str(filter)]
+		if filter[1] == "!=":
+			if not_equal_seen:
+				return "a query supports only one != filter"
+			not_equal_seen = true
 		var reason := FirebaseValue.validate_filter_value(filter[1], filter[2])
 		if not reason.is_empty():
 			return reason
+		if filter[0] == "__name__":
+			if filter[1] == "array-contains":
+				return "document IDs cannot use array-contains"
+			var ids: Array = filter[2] if filter[1] == "in" else [filter[2]]
+			for id in ids:
+				if not (id is String or id is StringName) or String(id).is_empty() or String(id).contains("/"):
+					return "document ID must be a non-empty string without '/'"
 	for order in order_by:
 		if not order is Array or order.size() != 2 or not FirebaseValue.is_field_path(order[0]) or not order[1] in ["asc", "desc"]:
 			return "order must be [field, \"asc\" | \"desc\"]: %s" % str(order)

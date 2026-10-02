@@ -11,6 +11,8 @@ const SERVER_TIMESTAMP := "server_timestamp"
 const INCREMENT := "increment"
 const DELETE := "delete"
 const MAX_IN_VALUES := 30
+# Firestore maps/arrays add at most 20 field levels (document root is level 0).
+const MAX_FIELD_DEPTH := 20
 # firebase::Timestamp only holds 0001-01-01 .. 9999-12-31.
 const MIN_TIMESTAMP_SECONDS := -62135596800
 const MAX_TIMESTAMP_SECONDS := 253402300799
@@ -72,6 +74,9 @@ static func is_field_path(path: Variant) -> bool:
 ## Returns an empty string when `data` can be written, otherwise the reason.
 ## `allow_delete` is true for update and merge writes.
 static func validate_data(data: Dictionary, allow_delete: bool) -> String:
+	var reason := _validate_structure(data, [], 0, true)
+	if not reason.is_empty():
+		return reason
 	return _validate_map(data, "" if allow_delete else "delete_field() needs update_doc() or set_doc(merge = true)", "")
 
 
@@ -101,11 +106,37 @@ static func validate_filter_value(op: String, value: Variant) -> String:
 		if not value is Array or value.is_empty() or value.size() > MAX_IN_VALUES:
 			return "'in' needs an array with 1-%d values" % MAX_IN_VALUES
 		for item in value:
-			var item_reason := _validate_value(item, true, IN_QUERY)
+			var item_reason := _validate_structure(item, [], 1)
+			if item_reason.is_empty():
+				item_reason = _validate_value(item, true, IN_QUERY)
 			if not item_reason.is_empty():
 				return item_reason
 		return ""
-	return _validate_value(value, false, IN_QUERY)
+	var reason := _validate_structure(value, [], 1)
+	return _validate_value(value, false, IN_QUERY) if reason.is_empty() else reason
+
+
+## An active-path guard also permits shared subtrees. Tagged values are scalars.
+static func _validate_structure(value: Variant, ancestors: Array, depth: int, document_root: bool = false) -> String:
+	if not value is Dictionary and not value is Array:
+		if typeof(value) >= TYPE_PACKED_INT32_ARRAY and typeof(value) <= TYPE_PACKED_STRING_ARRAY and depth > MAX_FIELD_DEPTH:
+			return "data exceeds 20 map/array field levels"
+		return ""
+	if value is Dictionary and value.has(TAG) and not document_root:
+		return ""
+	if depth > MAX_FIELD_DEPTH:
+		return "data exceeds 20 map/array field levels"
+	for ancestor in ancestors:
+		if is_same(value, ancestor):
+			return "data contains a container cycle"
+	ancestors.append(value)
+	var reason := ""
+	for key in value:
+		reason = _validate_structure(value[key] if value is Dictionary else key, ancestors, depth + 1)
+		if not reason.is_empty():
+			break
+	ancestors.pop_back()
+	return reason
 
 
 static func _validate_value(value: Variant, in_array: bool, sentinel_reason: String) -> String:

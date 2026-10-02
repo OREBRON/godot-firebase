@@ -56,3 +56,16 @@ func _run() -> void:
 	check(not FirebaseValue.validate_data({"t": {FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": 253402300800}}, false).is_empty(), "timestamp after year 9999 is rejected")
 	check(not FirebaseValue.validate_filter_value(">", {FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": 253402300800}).is_empty(), "out of range timestamp is rejected in a query")
 	check(not FirebaseValue.validate_data({"t": {FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": 0, "nanos": 1000000000}}, false).is_empty(), "nanos out of range is rejected")
+
+	var shared := {"level": 3}
+	check(FirebaseValue.validate_data({"a": shared, "b": shared}, false).is_empty(), "shared non-cyclic subtrees are valid")
+	var nested: Variant = 1
+	for i in range(20):
+		nested = {"child": nested}
+	check(FirebaseValue.validate_data({"root": nested}, false).is_empty(), "twenty field container levels are valid")
+	nested = {"child": nested}
+	check(not FirebaseValue.validate_data({"root": nested}, false).is_empty(), "twenty-one field container levels are rejected")
+	var cycle: Dictionary = {}
+	cycle["self"] = cycle
+	check(not FirebaseValue.validate_data(cycle, false).is_empty(), "map cycle is rejected")
+	cycle.clear()

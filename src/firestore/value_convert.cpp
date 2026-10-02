@@ -5,6 +5,7 @@
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 
 #include "../core/outcome.h"
 
@@ -38,6 +39,48 @@ constexpr int64_t kNanosPerSecond = 1000000000;
 
 bool is_string(const Variant &p_value) {
 	return p_value.get_type() == Variant::STRING || p_value.get_type() == Variant::STRING_NAME;
+}
+
+// Firestore's published map/array field depth limit. The document root is 0;
+// tagged timestamp/transform dictionaries represent scalar FieldValues.
+String validate_structure(const Variant &p_value, std::vector<Variant> &p_ancestors, int p_depth, bool p_document_root = false) {
+	const Variant::Type type = p_value.get_type();
+	if (type != Variant::DICTIONARY && type != Variant::ARRAY) {
+		return type >= Variant::PACKED_INT32_ARRAY && type <= Variant::PACKED_STRING_ARRAY && p_depth > 20 ? String("data exceeds 20 map/array field levels") : String();
+	}
+	if (type == Variant::DICTIONARY && Dictionary(p_value).has(kTag) && !p_document_root) {
+		return String();
+	}
+	if (p_depth > 20) {
+		return "data exceeds 20 map/array field levels";
+	}
+	for (const Variant &ancestor : p_ancestors) {
+		if (godot::UtilityFunctions::is_same(p_value, ancestor)) {
+			return "data contains a container cycle";
+		}
+	}
+	p_ancestors.push_back(p_value);
+	String reason;
+	if (type == Variant::DICTIONARY) {
+		const Dictionary map = p_value;
+		const Array keys = map.keys();
+		for (int64_t i = 0; i < keys.size(); ++i) {
+			reason = validate_structure(map[keys[i]], p_ancestors, p_depth + 1);
+			if (!reason.is_empty()) {
+				break;
+			}
+		}
+	} else {
+		const Array items = p_value;
+		for (int64_t i = 0; i < items.size(); ++i) {
+			reason = validate_structure(items[i], p_ancestors, p_depth + 1);
+			if (!reason.is_empty()) {
+				break;
+			}
+		}
+	}
+	p_ancestors.pop_back();
+	return reason;
 }
 
 // `p_sentinel_reason` is null when server_timestamp() and increment() are allowed.
@@ -194,7 +237,9 @@ int segment_count(const String &p_path) {
 } // namespace
 
 String to_map_field_value(const Dictionary &p_data, bool p_allow_delete, MapFieldValue &r_out) {
-	return convert_map(p_data, p_allow_delete, nullptr, r_out);
+	std::vector<Variant> ancestors;
+	const String reason = validate_structure(p_data, ancestors, 0, true);
+	return reason.is_empty() ? convert_map(p_data, p_allow_delete, nullptr, r_out) : reason;
 }
 
 String to_update_field_value(const Dictionary &p_data, MapFieldValue &r_out) {
@@ -204,11 +249,13 @@ String to_update_field_value(const Dictionary &p_data, MapFieldValue &r_out) {
 			return "update keys must be field paths without ~*/[]: " + String(keys[i]);
 		}
 	}
-	return convert_map(p_data, true, nullptr, r_out);
+	return to_map_field_value(p_data, true, r_out);
 }
 
 String to_query_value(const Variant &p_value, FieldValue &r_out) {
-	return convert(p_value, false, kInQuery, r_out);
+	std::vector<Variant> ancestors;
+	const String reason = validate_structure(p_value, ancestors, 1);
+	return reason.is_empty() ? convert(p_value, false, kInQuery, r_out) : reason;
 }
 
 Variant to_variant(const FieldValue &p_value) {
@@ -271,7 +318,15 @@ Dictionary to_snapshot(const DocumentSnapshot &p_snapshot) {
 		}
 	}
 	snapshot["data"] = data;
+	snapshot["metadata"] = to_metadata(p_snapshot.metadata());
 	return snapshot;
+}
+
+Dictionary to_metadata(const firebase::firestore::SnapshotMetadata &p_metadata) {
+	Dictionary metadata;
+	metadata["is_from_cache"] = p_metadata.is_from_cache();
+	metadata["has_pending_writes"] = p_metadata.has_pending_writes();
+	return metadata;
 }
 
 bool is_document_path(const String &p_path) {
