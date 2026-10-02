@@ -1,0 +1,127 @@
+name: SDK capabilities development builds
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      android_export_fixture:
+        description: 'Build four synthetic game selections with debug + R8 APKs (requires installed Android platform 36/build-tools 36.1.0)'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+# Share the runner/dependency lock with the existing six-package workflow.
+concurrency:
+  group: godot-firebase-build
+  cancel-in-progress: false
+
+jobs:
+  development:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - name: analytics
+            modules: analytics
+          - name: remote-config
+            modules: remote_config
+          - name: crashlytics
+            modules: crashlytics
+          - name: telemetry
+            modules: analytics,remote_config,crashlytics
+          - name: full-eight
+            modules: auth,firestore,storage,database,functions,analytics,remote_config,crashlytics
+          - name: auth-firestore
+            modules: auth,firestore
+          - name: auth-database
+            modules: auth,database
+    defaults:
+      run:
+        shell: bash
+    env:
+      GODOT: godot
+      NDK_VERSION: 28.1.13356709
+      THIRD_PARTY_CACHE: ${{ github.workspace }}/../godot-firebase-third-party
+      MODULE_SELECTION: ${{ matrix.modules }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Verify installed toolchain
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          command -v uvx
+          command -v python3
+          command -v pod
+          pod --version
+          test -n "${JAVA_HOME:-}"
+          case "$("$JAVA_HOME/bin/javac" -version 2>&1)" in "javac 17."*) ;; *) echo 'JAVA_HOME must select JDK 17'; exit 1;; esac
+          echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
+          java -version
+          javac -version
+          test -n "${ANDROID_HOME:-}"
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf"
+          source tools/versions.env
+          case "$(godot --version)" in "$GODOT_VERSION.stable"|"$GODOT_VERSION.stable".*) ;; *) exit 1;; esac
+      - name: Download verified dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p "$THIRD_PARTY_CACHE"
+          ln -sfn "$THIRD_PARTY_CACHE" third_party
+          tools/bootstrap.sh
+      - name: Test APIs and development package filtering
+        run: |
+          tools/run_tests.sh
+          python3 tests/test_auth_lifecycle.py
+          python3 tests/test_sdk_capability_packages.py
+      - name: Build selected monolith for all supported targets
+        run: |
+          set -euo pipefail
+          # Each selection replaces the complete binary set. No ZIP overlay is used.
+          rm -rf addons/firebase/bin build/dist build/symbols
+          tools/build.sh --platforms ios,android,macos --modules "$MODULE_SELECTION"
+          tools/run_tests.sh
+          package_path="$(tools/package.sh)"
+          python3 tests/test_sdk_capability_packages.py --smoke-package "$package_path"
+      - name: Optional full-eight Android game export fixture
+        if: github.event_name == 'workflow_dispatch' && inputs.android_export_fixture && matrix.name == 'full-eight'
+        run: |
+          set -euo pipefail
+          test -f "$ANDROID_HOME/platforms/android-36/android.jar"
+          test -x "$ANDROID_HOME/build-tools/36.1.0/aapt2"
+          mkdir -p build/toolchains
+          curl -fL --retry 3 -o build/toolchains/gradle-8.11.1-bin.zip https://services.gradle.org/distributions/gradle-8.11.1-bin.zip
+          printf '%s\n' 'f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6  build/toolchains/gradle-8.11.1-bin.zip' | shasum -a 256 -c -
+          unzip -q build/toolchains/gradle-8.11.1-bin.zip -d build/toolchains
+          python3 tools/test_android_export.py --gradle "$PWD/build/toolchains/gradle-8.11.1/bin/gradle" --output "$PWD/build/android-export-ci"
+      - name: Upload development outputs (no release publication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-capabilities-development-${{ matrix.name }}
+          path: |
+            build/dist/*.zip
+            build/symbols/
+            build/android-export-ci/evidence.json
+            build/android-export-ci/*-gradle.log
+            build/android-export-ci/*-prepare.log
+            build/android-export-ci/*/build/outputs/apk/**/*.apk
+            build/android-export-ci/*/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
+          retention-days: 7
+      - name: Clean generated workspace products
+        if: always()
+        run: |
+          git -C "$GITHUB_WORKSPACE" clean -ffdxq
+          if [ -d "$THIRD_PARTY_CACHE/godot-cpp/.git" ]; then
+            git -C "$THIRD_PARTY_CACHE/godot-cpp" clean -ffdxq
+          fi

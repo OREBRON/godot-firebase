@@ -1,35 +1,78 @@
 #!/usr/bin/env bash
-# Zips the built addon with only the modules it was built for.
-#   tools/package.sh   ->  build/dist/godot-firebase-<modules>.zip
-#   (build/dist/godot-firebase.zip when every module is built)
-# Unzip into a game's project root; it creates addons/firebase/.
+# Package the current selected monolithic build. These ZIPs are not composable.
+# modules.txt describes selection; it does not prove binary freshness/provenance.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ADDON=addons/firebase
-modules=$(cat "$ADDON/bin/modules.txt")
-all_modules=""
-stage=$(mktemp -d)
-trap 'rm -rf "$stage"' EXIT
+python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+import plistlib
+import re
+import sys
+import tempfile
+import zipfile
 
-mkdir -p "$stage/addons" build/dist
-cp -R "$ADDON" "$stage/addons/"
-# A module folder holds firebase_<module>.gd; core/, export/ and bin/ do not.
-for folder in "$stage/$ADDON"/*/; do
-	module=$(basename "$folder")
-	[ -f "$folder/firebase_$module.gd" ] || continue
-	all_modules+=",$module"
-	[[ ",$modules," == *",$module,"* ]] || rm -rf "$folder"
-done
-find "$stage" -name ".DS_Store" -delete
 
-# Module lists compare as sorted sets, so "auth,storage" and "storage,auth" match.
-sorted() { tr ',' '\n' <<<"$1" | sed '/^$/d' | sort | paste -sd, -; }
-if [ "$(sorted "$modules")" = "$(sorted "$all_modules")" ]; then
-	out="$PWD/build/dist/godot-firebase.zip"
-else
-	out="$PWD/build/dist/godot-firebase-${modules//,/-}.zip"
-fi
-rm -f "$out"
-(cd "$stage" && zip -qry "$out" addons)
-echo "$out"
+def game_config(path):
+    name = path.name.lower()
+    if (name.startswith("google-services") and name.endswith(".json")) or (name.startswith("googleservice-info") and name.endswith(".plist")):
+        return True
+    try:
+        if path.suffix.lower() == ".json":
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return isinstance(data, dict) and "project_info" in data and "client" in data
+        if path.suffix.lower() == ".plist":
+            with path.open("rb") as source:
+                data = plistlib.load(source)
+            return isinstance(data, dict) and "GOOGLE_APP_ID" in data
+    except (ValueError, UnicodeError, plistlib.InvalidFileException):
+        pass
+    return False
+
+
+def package():
+    addon = Path("addons/firebase")
+    modules = (addon / "bin/modules.txt").read_text(encoding="utf-8").strip().split(",")
+    available = {p.name for p in addon.iterdir() if p.is_dir() and (p / ("firebase_" + p.name + ".gd")).is_file()}
+    if not modules or len(set(modules)) != len(modules) or any(not re.fullmatch(r"[a-z][a-z0-9_]*", module) or module not in available for module in modules):
+        raise ValueError("modules.txt must select distinct installed product names separated by commas")
+    selected = set(modules)
+    # Preserve the existing six-package milestone's release asset names.
+    legacy = {"auth", "firestore", "storage", "database", "functions"}
+    if selected == legacy:
+        name = "godot-firebase.zip"
+    elif selected == available:
+        name = "godot-firebase-sdk-capabilities.zip"
+    else:
+        name = "godot-firebase-" + "-".join(module.replace("_", "-") for module in modules) + ".zip"
+    output_dir = Path("build/dist")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output = output_dir / name
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=output_dir, suffix=".zip", delete=False) as staged:
+            temporary = Path(staged.name)
+        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for path in sorted(addon.rglob("*")):
+                relative = path.relative_to(addon)
+                if relative.parts[0] in available - selected or path.name == ".DS_Store":
+                    continue
+                if path.is_symlink():
+                    raise ValueError(f"Package input must not contain symlinks: {path}")
+                if path.is_file() and not game_config(path):
+                    archive.write(path, path.as_posix())
+        os.replace(temporary, output)
+        print(output.resolve())
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+try:
+    package()
+except (OSError, ValueError) as error:
+    print(f"Package failed: {error}", file=sys.stderr)
+    sys.exit(1)
+PY
