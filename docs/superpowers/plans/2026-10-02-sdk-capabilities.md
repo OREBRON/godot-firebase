@@ -10,6 +10,21 @@
 
 **Spec:** [SDK capability design](../specs/2026-10-02-sdk-capabilities-design.md)
 
+## Uygulama durumu — 2026-10-02
+
+Kod `codex/sdk-capabilities` dalında modül bazında commit edildi. Beş yerel
+bug/mock kartı (#65/#66/#70/#213/#214) tamamlandı; native cihaz kabulü içeren
+kartlar kanıt gelene kadar açık kalır. Aşağıdaki işaretler yalnız belirtilen
+adımı gösterir; yeni modüllerin API/native uygulaması cihaz veya release kabulü
+anlamına gelmez. #214 native giriş smoke'u ayrıca bekleyen mobil doğrulamadır.
+
+Godot 4.7.2 API/mock/export testleri, C++ Auth yaşam döngüsü regresyonu,
+Android/iOS için yedi seçimin native derlemeleri ve iOS simulator full-eight
+build'i yürütüldü. Güncel sonuçlar, ek inceleme düzeltmeleri, export araç zinciri
+ve kalan cihaz/paket kapıları [doğrulama raporunda](../../verification/sdk-capabilities.md).
+#224'ün mevcut monolit üstündeki geliştirme paketleri/CI kısmı uygulandı;
+final dokuz composable ZIP kabulü #90/#85/#86/#67/#68'e bağlı kalır.
+
 ## Global Constraints
 
 - Godot 4.7.2; Firebase C++ SDK 13.13.0; Firebase iOS SDK 12.19.1.
@@ -68,7 +83,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_duplicate_not_equal_rejected ve test_invalid_document_id_rejected: task ERR_INVALID_ARGUMENT; backend çağrılmamış. Geçerli belge-ID ve filtre kombinasyonu karşı testleri başarılı.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Pinned SDK predicate kombinasyonlarını GDScript/native sınırlarına uygula; exception yakalamayı tek savunma yapma.
+- [x] **Step 3 — Uygulama:** Pinned SDK predicate kombinasyonlarını GDScript/native sınırlarına uygula; exception yakalamayı tek savunma yapma.
 - [ ] **Step 4 — Doğrulama:** İlgili mock suite + doğrudan native invalid-input mobil smoke; subprocess kapanmamalı. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -82,7 +97,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_link_cannot_target_changed_uid, test_auth_ui_busy, test_late_auth_callback_after_shutdown: yanlış UID'ye link yok; task tek kez tamamlanır.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Ortak auth kontrolünü provider ediniminden önce kur; callback sadece geçerli işlem neslini tamamlasın.
+- [x] **Step 3 — Uygulama:** Ortak auth kontrolünü provider ediniminden önce kur; callback sadece geçerli işlem neslini tamamlasın.
 - [ ] **Step 4 — Doğrulama:** Kontrollü gecikmeli testler; Apple/Game Center UI cihaz kanıtı #55. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -94,11 +109,11 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 **Interfaces:** Native ERR_NO_USER ve kalıcı provider→UID eşlemesi; yalnız test yardımcılarıyla çoklu hesap/gecikme.
 
-- [ ] **Step 1 — Regression/spec testi:** test_signed_out_token_and_delete_fail; test_provider_relogin_keeps_uid; test_link_keeps_anonymous_uid; test_credential_collision.
-- [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Mock hesap haritasını instance ömrüyle sınırla; gerçek disk oturumu simüle etme.
-- [ ] **Step 4 — Doğrulama:** Auth mock suite; #69 yalnız yardımcıları explicit parity istisnası yapar. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
-- [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
+- [x] **Step 1 — Regression/spec testi:** test_signed_out_token_and_delete_fail; test_provider_relogin_keeps_uid; test_link_keeps_anonymous_uid; test_credential_collision.
+- [x] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
+- [x] **Step 3 — Uygulama:** Mock hesap haritasını instance ömrüyle sınırla; gerçek disk oturumu simüle etme.
+- [x] **Step 4 — Doğrulama:** Auth mock suite; #69 yalnız yardımcıları explicit parity istisnası yapar. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
+- [x] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
 ### Task #214: Döngüsel veri sınırı
 
@@ -108,11 +123,11 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 **Interfaces:** ERR_INVALID_ARGUMENT; aktif recursion yolu ve en fazla 100 container, ürüne özgü daha dar limitler korunur.
 
-- [ ] **Step 1 — Regression/spec testi:** test_cyclic_array_rejected, test_indirect_cycle_rejected, test_shared_subtree_allowed, test_depth_100_and_101; başarısız dönüşüm SDK çağırmaz.
-- [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** GDScript/native cycle ve derinlik kontrolünü ekle; native dönüşüm hatasını çağıranlara taşı.
+- [x] **Step 1 — Regression/spec testi:** test_cyclic_array_rejected, test_indirect_cycle_rejected, test_shared_subtree_allowed, test_depth_100_and_101; başarısız dönüşüm SDK çağırmaz.
+- [x] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
+- [x] **Step 3 — Uygulama:** GDScript/native cycle ve derinlik kontrolünü ekle; native dönüşüm hatasını çağıranlara taşı.
 - [ ] **Step 4 — Doğrulama:** Functions/Database suite + native giriş smoke; script overflow/çökme olmamalı. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
-- [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
+- [x] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
 ### Task #58: Google iOS ve Android
 
@@ -124,7 +139,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_google_cancel_preserves_session, test_google_config_missing, test_google_link_keeps_uid; yeni ve önceden yetkilendirilmiş hesap seçimi.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Android Credential Manager ve iOS GoogleSignIn sadece credential edinir; mevcut C++ Auth giriş/link yoluna bağla. iOS URL callback/export'u tamamla.
+- [x] **Step 3 — Uygulama:** Android Credential Manager ve iOS GoogleSignIn sadece credential edinir; mevcut C++ Auth giriş/link yoluna bağla. iOS URL callback/export'u tamamla.
 - [ ] **Step 4 — Doğrulama:** Pinned dependency fixture build; #55/#59 ile iOS↔Android aynı Google hesabı UID kanıtı. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -138,7 +153,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_play_games_helper_disabled, test_play_games_cancel, test_play_games_external_code_unchanged, test_play_games_ios_unsupported.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** İsteğe bağlı PGS v2 helper app/server client ID ile taze auth code edinir; mevcut exchange yolunu kullanır.
+- [x] **Step 3 — Uygulama:** İsteğe bağlı PGS v2 helper app/server client ID ile taze auth code edinir; mevcut exchange yolunu kullanır.
 - [ ] **Step 4 — Doğrulama:** #59 Android release/minification; helper ve dış kod API ayrı ayrı. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -150,11 +165,11 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 **Interfaces:** Mevcut query; iç içe alan çözümü ve eksik/null ayrımı.
 
-- [ ] **Step 1 — Regression/spec testi:** test_nested_field_filter; test_order_excludes_missing_before_limit; test_multi_field_order.
-- [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Tek alan çözümleyicisini filtre/sıralamada kullan; eksik order alanlarını limit öncesi dışla.
-- [ ] **Step 4 — Doğrulama:** Firestore mock suite. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
-- [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
+- [x] **Step 1 — Regression/spec testi:** test_nested_field_filter; test_order_excludes_missing_before_limit; test_multi_field_order.
+- [x] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
+- [x] **Step 3 — Uygulama:** Tek alan çözümleyicisini filtre/sıralamada kullan; eksik order alanlarını limit öncesi dışla.
+- [x] **Step 4 — Doğrulama:** Firestore mock suite. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
+- [x] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
 ### Task #70: Timestamp sınır eşliği
 
@@ -164,11 +179,11 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 **Interfaces:** seconds -62135596800..253402300799, nanos 0..999999999; int türleri.
 
-- [ ] **Step 1 — Regression/spec testi:** test_timestamp_min_max_and_outside: belge ve filtrede sınır kabul, dışı ERR_INVALID_ARGUMENT.
-- [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** GDScript sınırlarını mevcut native doğrulamayla eşleştir.
-- [ ] **Step 4 — Doğrulama:** FirebaseValue/Firestore suite. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
-- [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
+- [x] **Step 1 — Regression/spec testi:** test_timestamp_min_max_and_outside: belge ve filtrede sınır kabul, dışı ERR_INVALID_ARGUMENT.
+- [x] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
+- [x] **Step 3 — Uygulama:** GDScript sınırlarını mevcut native doğrulamayla eşleştir.
+- [x] **Step 4 — Doğrulama:** FirebaseValue/Firestore suite. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
+- [x] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
 ### Task #216: Firestore görünür senkronizasyon
 
@@ -180,7 +195,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_cache_source_and_miss; test_empty_query_metadata; test_metadata_only_listener_opt_in; test_pending_barrier_excludes_later_write; test_user_change_fails_barrier.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Snapshot metadata/source ve SDK network/barrier bağlarını ekle; mock local/server state'ini kontrollü ayır.
+- [x] **Step 3 — Uygulama:** Snapshot metadata/source ve SDK network/barrier bağlarını ekle; mock local/server state'ini kontrollü ayır.
 - [ ] **Step 4 — Doğrulama:** Mock suite; #55/#59 offline→kill→restart→reconnect ve ACK tek-tamamlama kanıtı. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -192,11 +207,11 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 **Interfaces:** Kök scalar/array/dictionary/null; boş üst düğüm temizliği.
 
-- [ ] **Step 1 — Regression/spec testi:** test_root_scalar_and_array; test_last_child_delete_prunes_parent; test_listener_root_value.
-- [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Mevcut kök store/snapshot semantiğini düzelt.
-- [ ] **Step 4 — Doğrulama:** Database mock suite; gerçek persistence iddiası yok. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
-- [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
+- [x] **Step 1 — Regression/spec testi:** test_root_scalar_and_array; test_last_child_delete_prunes_parent; test_listener_root_value.
+- [x] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
+- [x] **Step 3 — Uygulama:** Mevcut kök store/snapshot semantiğini düzelt.
+- [x] **Step 4 — Doğrulama:** Database mock suite; gerçek persistence iddiası yok. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
+- [x] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
 ### Task #217: Database başlangıç persistence
 
@@ -208,7 +223,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_persistence_before_first_reference; test_absent_setting_is_false; test_invalid_setting_unavailable; test_network_toggle_repeat.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Ayarı autoload'da okuyup ilk reference öncesi uygula; runtime setter ekleme.
+- [x] **Step 3 — Uygulama:** Ayarı autoload'da okuyup ilk reference öncesi uygula; runtime setter ekleme.
 - [ ] **Step 4 — Doğrulama:** Mock/config suite; #55/#59 true/false persistence karşılaştırmalı process-kill kanıtı. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -222,7 +237,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_info_reads_allowed_writes_rejected; test_disconnect_registration_ack; test_cancel_prevents_action; test_reconnect_needs_registration; test_removed_listener_no_callback.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Okuma/yazma path doğrulamasını ayır; SDK DisconnectionHandler future'larını mevcut request sistemine bağla.
+- [x] **Step 3 — Uygulama:** Okuma/yazma path doğrulamasını ayır; SDK DisconnectionHandler future'larını mevcut request sistemine bağla.
 - [ ] **Step 4 — Doğrulama:** Mock suite + #55/#59 ani ağ kesilmesi. Örnek ACK sonra online ve bağlantı başına kayıt kullanır. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -236,7 +251,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_installed_module_contracts; test_missing_stub_is_skipped; test_remote_config_class_mapping.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Reflection karşılaştırmasını kur; kurulmamış modülleri preload ile zorunlu kılma.
+- [x] **Step 3 — Uygulama:** Reflection karşılaştırmasını kur; kurulmamış modülleri preload ile zorunlu kılma.
 - [ ] **Step 4 — Doğrulama:** Godot suite, mevcut stub ve subset fixture; gerçek Firebase davranışı kanıtı olarak sunma. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -250,7 +265,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_event_validation_and_scalar_parameters; test_collection_disabled_semantics; test_consent_partial_update; test_user_id_clear; startup metadata fixture.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Pinned firebase_analytics bağla, API/mock/native ve export startup ayarlarını uygula; mevcut Android dependency etkisini kaydet.
+- [x] **Step 3 — Uygulama:** Pinned firebase_analytics bağla, API/mock/native ve export startup ayarlarını uygula; mevcut Android dependency etkisini kaydet.
 - [ ] **Step 4 — Doğrulama:** Mock/parity/build; Android/iOS DebugView event/parametre kanıtı. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -264,7 +279,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_offline_defaults; test_fetch_does_not_activate; test_activate_changes_once; test_value_source_conversion; test_fetch_throttled; test_ms_conversion_bounds.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Pinned instance API ve defaults/fetched/active mock modeli; remote_config native-class mapping'i düzelt.
+- [x] **Step 3 — Uygulama:** Pinned instance API ve defaults/fetched/active mock modeli; remote_config native-class mapping'i düzelt.
 - [ ] **Step 4 — Doğrulama:** Mock/parity/build; mobil fetch→activate→restart/offline kanıtı. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -278,7 +293,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_duplicate_start_single_listener; test_update_does_not_activate; test_stop_and_teardown_suppress_callback; test_reconnect_update.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** SDK listener handle'ını tek sahiplikle tut; sinyalleri Core dispatch'ten geçir.
+- [x] **Step 3 — Uygulama:** SDK listener handle'ını tek sahiplikle tut; sinyalleri Core dispatch'ten geçir.
 - [ ] **Step 4 — Doğrulama:** Mock suite; mobil publish→updated_keys→explicit activate. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -292,7 +307,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_bad_stack_rejected; test_nonfatal_payload; test_collection_enabled_unsent_false; test_clear_user_id; clean-install startup-disabled fixture.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** Java/NDK SDK ve uyumlu pinned Gradle plugin'ini bağla; Firebase App'i çoğaltma. iOS'u bu ara adımda unavailable tut.
+- [x] **Step 3 — Uygulama:** Java/NDK SDK ve uyumlu pinned Gradle plugin'ini bağla; Firebase App'i çoğaltma. iOS'u bu ara adımda unavailable tut.
 - [ ] **Step 4 — Doğrulama:** Mock/parity; iki oyun generic prebuilt fixture, Android R8/minify ve nonfatal kanıtı. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 
@@ -306,7 +321,7 @@ Her görev sonunda dar diff review ve bağımsız commit yapılır; task yalnız
 
 - [ ] **Step 1 — Regression/spec testi:** test_symbol_artifact_matches_binary fixture; iOS collection/unsent davranış parity; debug-only native crash fixture.
 - [ ] **Step 2 — İlk kontrol:** İlgili Godot testini/yeni fixture'ı çalıştır; yeni davranışın mevcut kodda eksik/yanlış olduğunu doğrula. Zaten geçen davranış için yapay başarısızlık üretme.
-- [ ] **Step 3 — Uygulama:** iOS bridge/framework kaynaklarını ekle; Android unstripped/R8 ve iOS dSYM saklama/upload adımlarını tamamla.
+- [x] **Step 3 — Uygulama:** iOS bridge/framework kaynaklarını ekle; Android unstripped/R8 ve iOS dSYM saklama/upload adımlarını tamamla.
 - [ ] **Step 4 — Doğrulama:** Her mobil platformda native crash→restart→console'da bilinen fonksiyon adı; engine sembol kapsamını açık kaydet. İlgili ortak kontrolleri çalıştır ve gerçek çıktı/kanıt yolunu karta ekle.
 - [ ] **Step 5 — Review ve teslim:** Diff'i görev kapsamına göre incelet; yalnız bu değişikliğin dosyalarını commit et, kabul maddelerini gerçek kanıtla güncelle.
 

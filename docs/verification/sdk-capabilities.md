@@ -1,0 +1,82 @@
+# SDK capabilities: implementation and acceptance evidence
+
+Date: 2026-10-02. Target: Godot 4.7.2, Firebase C++ 13.13.0, Firebase iOS 12.19.1.
+This is a reusable client SDK. Game schemas, authoritative game rules, account/data merging and backend deployment remain game-owned.
+
+## Implemented scope
+
+- Auth: Google platform credentials, optional Android Play Games helper, operation cancellation/busy handling and stable mock provider identities. Existing Apple/Game Center and supplied Play Games server-code APIs remain.
+- Firestore: query validation, cache/server sources, metadata snapshots, network commands, pending-write observation, nested mock fields and timestamp limits. Offline writes remain pending until ACK; no automatic retry/timeout/conflict policy was added.
+- Database: scalar/array/null root fidelity, empty-parent pruning, startup persistence setting, explicit network commands, exact read-only `.info` paths and OnDisconnect registration/cancel APIs. The presence sample registers before writing online and uses a fresh key per connection. Two reviewed mock regressions (descendant registration under replacement; cancellation below a scalar) have regression coverage.
+- Analytics: local events, explicit user ID/properties, collection and consent, reset. No automatic Auth coupling or second event queue.
+- Remote Config: defaults/fetched/active separation, typed values and sources, initialization/settings/info, single realtime listener with stop/restart generation checks. Listener updates do not activate.
+- Crashlytics: explicit nonfatal/log/key/user APIs, native platform capture, collection and report controls. Android Java/NDK and iOS Objective-C++ use the existing default App. There is no invented Crashlytics C++ archive or production crash-trigger API. Report checks are once per SDK execution; collection-enabled checks return false without waiting for iOS callbacks. Pending bridge requests are cancelled on shutdown, late tokens ignored.
+
+## Local evidence and its limits
+
+| Check | Observed result | What it does not prove |
+|---|---|---|
+| Godot 4.7.2 API/mock suites | Parent final integration run: all 22 suites passed, including export/transaction tests; the final rerun after export fixes also passed (`build/godot-release-review.log`). Editor import passed. Focused Crashlytics and Database presence review regressions also passed. | Native SDK runtime or on-device parity. Native Auth/contract checks explicitly skip unavailable native classes. |
+| Existing native combination | Parent integration linked `auth,firestore,database,functions` for iOS and Android; local Android override uses installed NDK 28.2.13676358. | Signed game exports, provider login, network/persistence behavior. |
+| Bounded native selection matrix | All 14 debug arm64 builds linked: Android and iOS device, each with Analytics, Remote Config, Crashlytics, telemetry, Auth+Firestore, Auth+Database and full-eight. Structured selection/log evidence is in generated `build/native-selection-verification/evidence.json`. godot-cpp bindings remained cached between product selections. | iOS simulator/release builds, game export, 255 subsets, composable ZIP topology or device behavior. |
+| Full-eight simulator | iOS arm64 simulator debug link also passed (`build/ios-simulator-full8.log`), bringing observed native configuration links to 15. Matching dSYM UUID/DWARF was verified and retained. | Simulator runtime, release builds or device acceptance. |
+| New module C++/platform syntax and link | Analytics/Remote Config and Crashlytics syntax checks passed. Crashlytics passed Android arm64 NDK syntax, iOS arm64 ARC syntax against pinned 12.19.1 headers, and Java 17 compilation against Crashlytics 20.1.1. Final Auth lifecycle full-eight Android and iOS device debug relinks and symbol refreshes passed. | Signed export, Firebase runtime, or release/simulator configurations. |
+| Auth lifecycle state harness | Parent ran `python3 tests/test_auth_lifecycle.py`: one C++ state harness test passed. New CI runs it separately from Godot tests. | Real Firebase App, platform credential UI or device lifecycle. |
+| Android AAR | Parent AAR test passed with all three Java bridges and updated keep rules. | Game Gradle/R8 or provider/Crashlytics runtime. |
+| Android synthetic Gradle export | Five selections passed debug and minified release builds, producing 10 APKs: telemetry, Auth+telemetry+Play Games, Auth-only, Remote Config-only and Analytics-only. All used identical actual generic AAR SHA-256 `620a1df610196cbb0fa05be4a0785bdaf533fbc3e51b863dcd4560cf3ccb94a1`. Verified game-specific App ID resources, nonzero Crashlytics build IDs, Play Games string metadata, absent unselected resources and R8 9.1.29 in actual mapping outputs. Scheduled Crashlytics upload tasks were skipped. Evidence: generated `build/android-export-final/evidence.json` and per-selection Gradle logs. | These synthetic app builds contain the generic Java bridge AAR, not the Godot engine or native `.so`. They do not establish real Godot export, JNI/runtime, device startup, provider UI, signed release or Crashlytics console acceptance. |
+| Development package tests | Eight Python tests passed: real `tools/package.sh` in temporary eight-product fixtures; selection/config filtering, corrupt native-load regression, real Android ELF and host Mach-O/dSYM identity fixtures. | Monolithic outputs being composable, binary selection freshness or iOS device crash handling. |
+| Fresh package import | Seven API-only selections built from actual sources were extracted into new Godot 4.7.2 projects: Analytics, Remote Config, Crashlytics, telemetry, Auth+Firestore, Auth+Database and full-eight. Selected API/mock startup, absence of unselected products and representative requests passed. Default CI smoke now additionally requires its packaged GDExtension to load and rejects loader errors; `--api-only` is explicitly separate. The corrupted-native regression failed before that correction and passed afterward. A valid Analytics selection containing the actual macOS editor stub passed the strict native-loaded smoke locally. | API-only import omits native binaries. Desktop editor-stub loading still does not establish mobile runtime parity. |
+| Symbol validation | Matching GNU build ID/architecture and UUID/DWARF accepted; wrong IDs, stripped ELF, and matching UUID with empty DWARF rejected. | Console ingestion/symbolication or R8 mapping correspondence to an APK. Mapping hashes only record supplied provenance. |
+| Crash fixture | Debug native source syntax, Android SCons dry-run target and `nonfatal.gd` parse passed. Descriptor is opt-in `.gdextension.example`; release builds rejected by the fixture source/build. | Actual compilation/link/signing/embedding that separate fixture in an exported device game. |
+| Workflow/static tooling | New workflow YAML parsed; build/package/upload shell syntax passed. No upload command was executed. | A completed hosted CI run. |
+
+Reproducible local commands (set host paths appropriately):
+
+```sh
+GODOT=/Applications/Godot.app/Contents/MacOS/Godot tools/run_tests.sh
+GODOT=/Applications/Godot.app/Contents/MacOS/Godot ANDROID_HOME="$HOME/Library/Android/sdk" NDK_VERSION=28.2.13676358 python3 tests/test_sdk_capability_packages.py
+bash -n tools/build.sh tools/package.sh tools/upload_crashlytics_symbols.sh
+# Requires JDK 17, Android platform 36/build-tools 36.1.0 and the generic AAR.
+GODOT=/Applications/Godot.app/Contents/MacOS/Godot python3 tools/test_android_export.py --gradle /path/to/gradle-8.11.1/bin/gradle --output build/android-export-verification
+```
+
+The package fixture tests were first run against the previous packager: seven assertions failed, covering new names, invalid selections and game config leakage. They passed after the implementation. The native symbol fixtures invoke installed compilers/readers; Android tests explicitly skip unless the requested NDK is installed, Mach-O fixtures skip without Xcode, and the loader regression skips without Godot. The recorded eight-test run had no skip.
+
+## Development packaging and CI
+
+`tools/package.sh` validates `bin/modules.txt`, removes unselected API/mock directories and excludes known game JSON/plist names plus parsed Firebase game config content (including binary plist). Resource `Info.plist` files remain. Symlink inputs are rejected. The selected monolithic native binaries and common Core/export files still occupy shared paths.
+
+- Legacy five-product full remains `godot-firebase.zip`; existing single-product release names are preserved.
+- New singles: `godot-firebase-analytics.zip`, `godot-firebase-remote-config.zip`, `godot-firebase-crashlytics.zip`.
+- Eight-product full development selection: `godot-firebase-sdk-capabilities.zip`.
+- `sdk-capabilities.yml` builds three new singles, telemetry, full-eight, Auth+Firestore and Auth+Database for iOS/Android/macOS. It stores development ZIP/symbol artifacts only, never publishes a release.
+- The serialized matrix preserves external godot-cpp outputs and restores/saves root SCons signatures between selections. Local reuse within one workspace was observed; cross-job hosted cache reuse has not been run or measured.
+- Optional manual input `android_export_fixture=true` enables the five synthetic Android Gradle debug/R8 fixture selections only for full-eight. It verifies installed Android platform 36/build-tools 36.1.0 and downloads Gradle 8.11.1 to the workspace with pinned SHA-256 `f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6`. No global tools are installed and no Firebase upload is enabled. The local fixture passed as recorded above; the workflow itself has not run.
+- The legacy six-package workflow remains the owner of its existing milestone. Conditional iOS Auth source dependency preparation now lives in `tools/build.sh`, requires installed CocoaPods/Xcode and does not install global tools.
+- Android requires installed JDK 17 (`JAVA_HOME` and its `bin` on `PATH`), SDK platform 35 and the configured NDK. The reusable AAR uses the checked Gradle 9.3.1 wrapper. Game export requires the installed Godot 4.7.2 Android Gradle template; Google Services 4.5.0, Crashlytics Gradle 3.0.8 and Crashlytics/NDK 20.1.1 are game-build dependencies. Normal export keeps a real Crashlytics mapping/build ID while upload tasks remain disabled; only the explicit upload property enables transfer.
+
+The Android export helper manages reversible toolchain blocks whenever Firebase modules are selected: it upgrades older Kotlin versions in standard Godot `config.gradle` to 2.4.0 and adds R8 9.1.29 through `settings.gradle` plugin management. It leaves AGP unchanged, preserves an existing Kotlin 2.4.x selection, rejects a newer unverified Kotlin line or unsupported template shape, and removes its own blocks when the selection becomes empty. Edited managed blocks/state are reported rather than overwritten; the export file transaction restores originals after a failed write. The local fixture used AGP 8.6.1 and Gradle 8.11.1. Android's [Kotlin compatibility table](https://developer.android.com/build/kotlin-support) specifies R8 9.1.29 for Kotlin 2.4; the [official R8 instructions](https://r8.googlesource.com/r8/+/refs/heads/main/README.md#replacing-r8-in-android-gradle-plugin) document the settings override and raw release Maven repository.
+
+Analytics or Crashlytics selection generates game-specific resources through Google Services; Analytics-only does not apply the Crashlytics plugin. This follows Firebase's [resource-based configuration recommendation for early Analytics events](https://firebase.google.com/docs/projects/multiprojects#ensure_reliable_reporting_for_analytics). Generated resources and game config remain outside the reusable AAR. These upstream sources were checked on 2026-10-02; actual compilation/resource checks above remain the evidence for this pinned implementation.
+
+Do not overlay these development ZIPs. Clean the old binary set and build every shipped platform with the same selection. `modules.txt` is not immutable build provenance; stale/mixed native outputs are not rejected. #224's final nine-ZIP composable release remains gated on #90/#85/#86/#67/#68, including common path/SHA equality, product path separation, full=union, import order/repeat/removal and build-ID rejection. No test in this change substitutes fabricated manifests or hash equality for those gates.
+
+## Symbols and upload ownership
+
+Final Auth lifecycle full-eight Android debug link: GNU build ID `3a6c9007f5f6e05acf2e2559f2aef6a0605edff1`, SHA-256 `1c34365823f99e758b3f2db76f27d15de61426c133e777ca679350b72e0b5ce1`; DWARF/full symbol table verified. Retained binary and evidence are in generated `build/symbols/full-eight/android/template_debug/arm64-v8a/identity.json`. This is a debug build identity, not release/device acceptance.
+
+The final Auth lifecycle iOS device debug relink is UUID `EF6BF3E2-DC1E-3FBD-8D6C-F25F45743823`, binary SHA-256 `e6a0b48ed9d061a43c1616ce81e268def0a49b2500270e598405dc470e7e3ac6`, with a verified dSYM in `build/symbols/full-eight/ios/template_debug/` (DWARF SHA-256 `3bb9c2478d3a0720bcb7ae383325b6bbee8f75d5f2e77917f0037c0c7a7e80e3`). `dsymutil` completed successfully but warned that the upstream Firebase C++ archive references vendor Swift PCM/private interface paths absent from the distribution; warnings are retained in `dsymutil.log`. Addon DWARF is present; complete vendor Swift debug information is not claimed.
+
+These identities refer to retained copies in `build/symbols/full-eight/`. Later selection-matrix relinks can replace `build/android` or `build/ios` output and produce different IDs; do not pair those new binaries with these retained symbol files. Verify every exported binary again.
+
+The full-eight iOS arm64 simulator debug copy is UUID `D5DF5784-7097-3B6B-9C7B-4C7480A01936`, binary SHA-256 `7f690527c1c37d7a1cf587f3926b46eb733f0a5525aa0d1e91fbd28e4beef8fe`; matching symbols and identity manifest are in `build/symbols/full-eight/ios/template_debug.simulator/`. This is build/symbol evidence only; no simulator runtime was exercised.
+
+Crashlytics-selected `tools/build.sh` builds with debug symbols and stages matching native binaries, Android unstripped ELF or iOS dSYM, and SHA/identity manifests under `build/symbols/<selection>/`. The verifier runs before symbol staging is considered successful. Symbols are outside addon ZIPs. For iOS dynamic SDK builds the dSYM matches that dylib; the game's executable/engine and other libraries need their own exact symbols.
+
+R8 mapping, Crashlytics game build IDs, Firebase app ID/resources and upload configuration belong to game export. `tools/upload_crashlytics_symbols.sh` verifies native identity first, requires explicit game config/tool paths, and only then invokes the game Gradle upload task or iOS `upload-symbols`. Android also checks config and optional mapping against that game build. Ordinary SDK builds and CI never implicitly upload to Firebase. See [the smoke fixture and upload instructions](../../examples/crashlytics_smoke/README.md).
+
+## Pending device/release acceptance
+
+No Android device was attached and the iPhone was unavailable. No Firebase console report/event, symbol upload, signed game export, provider UI or offline process-restart result is claimed.
+
+Still required: Google same-UID cross-platform linking; cancellation and process restart; Firestore/RTDB disk persistence after kill/restart; actual disconnect/reconnect registration and cancel ACK; Analytics collection/consent behavior; Remote Config cache/conversion/realtime network behavior; Crashlytics fresh-install startup-disabled collection, crash/restart and symbolicated known function. Consume the same generic native/AAR outputs in two differently configured real Godot games and validate Android R8/device runtime and signed iOS export. The synthetic five-app AAR fixture does not close that requirement. Godot engine stack frames require the matching engine symbols. These remain on #55/#59/#219–#224 and the existing release gates, separate from implementation completion.

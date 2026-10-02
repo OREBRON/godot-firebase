@@ -7,15 +7,20 @@ ayrılmıştır; mevcut native build seçilen modülleri tek kütüphaneye bağl
 | Modül | Klasör | Native sınıf | İçerik |
 |---|---|---|---|
 | core (zorunlu) | `core/` | `FirebaseAppNative` | App başlatma, görev ve sonuç tipleri |
-| auth | `auth/` | `FirebaseAuthNative` | Anonim, Game Center, Sign in with Apple, hesap bağlama, silme |
-| firestore | `firestore/` | `FirebaseFirestoreNative` | Doküman okuma/yazma, sorgu, batch, dinleyici |
+| auth | `auth/` | `FirebaseAuthNative` | Anonim, Google, Play Games, Game Center, Apple, hesap bağlama, silme |
+| firestore | `firestore/` | `FirebaseFirestoreNative` | Doküman, sorgu, batch, dinleyici, cache/pending-write gözlemi |
 | storage | `storage/` | `FirebaseStorageNative` | Dosya yükleme/indirme (bayt), indirme URL'si, metadata, silme |
-| database | `database/` | `FirebaseDatabaseNative` | Realtime Database okuma/yazma, push, dinleyici |
+| database | `database/` | `FirebaseDatabaseNative` | Realtime Database, başlangıç persistence seçimi, bağlantı/presence |
 | functions | `functions/` | `FirebaseFunctionsNative` | Callable HTTPS fonksiyon çağrısı |
+| analytics | `analytics/` | `FirebaseAnalyticsNative` | Event, kullanıcı özelliği, collection ve consent |
+| remote_config | `remote_config/` | `FirebaseRemoteConfigNative` | Defaults/fetch/activate, tipli değer, realtime güncelleme |
+| crashlytics | `crashlytics/` | `FirebaseCrashlyticsNative` | Açık nonfatal rapor, platform native crash, collection ve rapor kontrolü |
 
-Durum: GDScript API ve mock testleri geçiyor. Beş modülün native kodu iOS
-(device + simulator) ve Android (arm64-v8a) için derlenip link ediliyor.
-Cihazlarda henüz denenmedi (bkz. [Doğrulanmamış noktalar](#doğrulanmamış-noktalar)).
+Sekiz ürünün API/mock katmanı mevcuttur. Analytics ve Remote Config pinned
+C++ SDK'yı; Crashlytics Android Java/NDK ve iOS Objective-C++ köprülerini kullanır.
+Native derleme ile cihaz/console kabulü ayrı izlenir; güncel kapsam ve testler
+[SDK yetenekleri raporundadır](docs/verification/sdk-capabilities.md).
+Cihazlarda henüz doğrulanmadı (bkz. [Doğrulanmamış noktalar](#doğrulanmamış-noktalar)).
 Birbirine eklenebilen ZIP düzeni geliştirme hedefidir; mevcut tek modül
 ZIP'leri birlikte kurmak native dosyaların üzerine yazar. Geçişin durumu
 [modüler release raporunda](docs/verification/modular-release.md) kayıtlıdır.
@@ -54,7 +59,7 @@ ZIP'leri birlikte kurmak native dosyaların üzerine yazar. Geçişin durumu
 
 ### Android
 
-Android SDK (platform 35), NDK, JDK ve Godot Android Gradle build template'i
+Android SDK (platform 35), NDK, JDK 17 ve Godot Android Gradle build template'i
 gerekir. `ANDROID_HOME` SDK dizinine işaret etmeli. Kurulu NDK varsayılan
 28.1.13356709 değilse `NDK_VERSION` ortam değişkenini ayarla:
 
@@ -63,6 +68,24 @@ ANDROID_HOME="$HOME/Library/Android/sdk" NDK_VERSION=28.2.13676358 \
   tools/build.sh --platforms android,macos --modules auth,firestore
 tools/package.sh
 ```
+
+`JAVA_HOME` kurulu JDK 17 kökünü, `PATH` onun `bin` dizinini göstermelidir
+(örneğin Homebrew'da `/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`).
+Reusable AAR derlemesi depodaki SHA-256 doğrulamalı Gradle 9.3.1 wrapper'ını
+kullanır. Oyun export'u Godot 4.7.2'nin kurulu Android Gradle template'ini kullanır.
+En az bir Firebase modülü seçiliyken export helper'ı standart `config.gradle`
+içindeki eski Kotlin sürümünü yönetilen bir blokla 2.4.0'a yükseltir ve
+`settings.gradle` içine R8 9.1.29 override'ı ekler; AGP sürümünü değiştirmez.
+Firebase modüllerinin tamamı seçimden çıkarıldığında kendi bloklarını kaldırır.
+Değiştirilmiş yönetilen bloklar veya desteklenmeyen özel template biçimleri hata
+üretir; bu dosyaları elle aynı ayarlarla yamamak gerekmez. Kotlin 2.4.x zaten
+seçiliyse korunur; daha yeni Kotlin hattı ayrıca uyumluluk doğrulaması gerektirir.
+Bu eşleşme [Android Kotlin/R8 tablosuna](https://developer.android.com/build/kotlin-support)
+ve [R8'in resmi Gradle override yöntemine](https://r8.googlesource.com/r8/+/refs/heads/main/README.md#replacing-r8-in-android-gradle-plugin)
+dayanır. Yerel sentetik uygulama fixture'ı AGP 8.6.1, Gradle 8.11.1, Kotlin 2.4.0
+ve gerçekten kullanılan R8 9.1.29 ile geçti; gerçek Godot export/cihaz kabulü
+ayrı kalır. Crashlytics entegrasyonu Google Services 4.5.0 / Crashlytics Gradle
+3.0.8 ve Crashlytics/NDK 20.1.1 sürümlerini seçer.
 
 Android build'i oyun bilgisi almaz; aynı `.so` ve AAR her oyunda kullanılır.
 Firebase konsolundan oyunun Android paket kimliğine ait `google-services.json`
@@ -74,17 +97,45 @@ Dosya yoksa veya paket kimliğine ait client, `mobilesdk_app_id` ya da API key
 eksikse export penceresi uyarı gösterir. Godot 4.7 export eklentisi export'u
 durduramaz; uygulama bu durumda Firebase'i başlatmaz ve hatayı loglar. AAR
 yalnızca Java köprüsünü ve bütün modüllerin ProGuard kurallarını taşır;
-Firebase kaynak XML'i üretilmez. Android export preset'inde **Use Gradle
+Analytics/Crashlytics seçildiğinde export, oyunun JSON'undan gereken Firebase
+kaynaklarını üretir; Crashlytics ayrıca oyun Gradle projesine sabit sürümlü
+plugin yapılandırmasını ekler. Analytics'in uygulama başlangıcındaki erken
+event'leri doğru App ID ile ilişkilendirmesi için Firebase'in
+[önerdiği kaynak tabanlı yapılandırma](https://firebase.google.com/docs/projects/multiprojects#ensure_reliable_reporting_for_analytics)
+kullanılır. Bu config reusable AAR'a girmez. Android export preset'inde **Use Gradle
 Build** açılmalı, yalnızca **arm64-v8a** etkin olmalı; Gradle export eklentisi
 AAR'ı ve Firebase Maven bağımlılıklarını ekler. Android'da anonim giriş ve
 diğer çekirdek modüller derlenir; Apple / Game Center girişleri Android'da
-desteklenmez. Play Games v2 SDK ile oyunda alınan tek kullanımlık server auth
-code, `Firebase.auth.sign_in_with_play_games(code)` veya anonim hesabı korumak
-için `Firebase.auth.link_with_play_games(code)` ile Firebase'e verilebilir.
-Play Console'da oyun sunucusu için tanımlanan Web OAuth client ID kullanılmalı;
-Play Games SDK'nın başlatılması, proje kimliği ve `requestServerSideAccess`
-çağrısı oyunun Android entegrasyonuna aittir. Eklenti oyun kimliklerini veya
-auth code'u saklamaz.
+desteklenmez. `sign_in_with_google()` / `link_with_google()` platform credential
+arayüzünü kullanır. Proje ayarı `firebase/auth/google_web_client_id`, iOS için
+ayrıca `firebase/auth/google_ios_client_id` oyunun OAuth kayıtlarıyla eşleşmelidir.
+Play Games helper için `firebase/auth/play_games_enabled=true` ve
+`firebase/auth/play_games_app_id` ayarlanır; `sign_in_with_play_games_platform()` /
+`link_with_play_games_platform()` taze server auth code edinir. Oyunun kendisinin
+edindiği code için mevcut `sign_in_with_play_games(code)` / `link_with_play_games(code)`
+API'leri korunur. İkinci eşzamanlı credential UI isteği `ERR_BUSY`, iptal
+`ERR_CANCELLED` döner. Hesaplar veya oyun verisi otomatik birleştirilmez.
+
+## Yeni ürünlerin geliştirme paketleri
+
+```bash
+tools/build.sh --modules analytics,remote_config,crashlytics --platforms ios,android,macos
+tools/package.sh
+```
+
+Gereken ürün birleşimini tek build'de seç; mevcut ZIP'leri üst üste kurma.
+Tekil yeni ürün adları `godot-firebase-analytics.zip`,
+`godot-firebase-remote-config.zip` ve `godot-firebase-crashlytics.zip` olur.
+Sekiz ürün birlikte seçilirse geliştirme çıktısı `godot-firebase-sdk-capabilities.zip`;
+eski beş ürünün full seçimi `godot-firebase.zip` adını korur. Paketleyici
+geçersiz/tekrarlı modül adlarını reddeder, seçilmeyen API/mock klasörlerini ve
+oyun JSON/plist dosyalarını dışlar. Native platform çıktılarının aynı seçimden
+geldiğini build sahibi sağlamalıdır; stale/mixed build doğrulaması halen yoktur.
+
+#224 takip release hedefi sekiz tekil ürün + full, toplam dokuz ZIP'tir.
+Birleşebilir native topoloji, ortak path/hash, full=union ve build-ID kabulü
+#90/#85/#86/#67/#68 sonuçlarını bekler. Aşağıdaki altı-paket bölümü önceki
+beş ürün milestone'unun hedefidir; yeni geliştirme ZIP'leri bu kabulü tamamlamaz.
 
 ## Birlikte kurulabilen paketler (hedef; henüz yayın kabulü yok)
 
@@ -254,6 +305,58 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 
 ## Geliştirme
 
+Firestore `get_doc`/`query` için `source="default"|"cache"|"server"` seçilebilir.
+`query_snapshot()` sonuç metadata'sını boş sorguda da taşır; dinleyicilerde
+`include_metadata_changes=true` cache ve pending-write değişimini gözler.
+Yazma task'ı sunucu ACK'ini bekler; offline durumda pending kalabilir.
+`wait_pending_writes()` çağrı anındaki yazmaları kapsar, sonraki yazmaları kapsamaz.
+Yerel snapshot disk fsync veya sunucu ACK'i değildir.
+
+Realtime Database persistence başlangıç proje ayarı
+`firebase/database/persistence_enabled=false` ile belirlenir; ilk referanstan
+önce uygulanır, runtime setter yoktur. `set_network_enabled()` komut başarısı
+internet bağlantısı değildir. Yalnız `.info/connected` ve `.info/serverTimeOffset`
+özel read/listen yollarıdır. `on_disconnect_set_value`, `on_disconnect_update_children`,
+`on_disconnect_remove_value` ve `on_disconnect_cancel` task'ları kayıt/cancel ACK'i
+döndürür. Oyun her bağlantıda yeniden kayıt yapar; ACK'ten sonra online yazan
+[presence örneğine](examples/database_presence.gd) bak. Kayıt yürütülmüş sayılmaz.
+
+```gdscript
+# Yerel Analytics çağrısıdır; upload onayı değildir. Auth UID otomatik atanmaz.
+await Firebase.analytics.log_event("level_end", {"level": 7}).wait()
+await Firebase.analytics.set_consent({"analytics_storage": FirebaseAnalytics.GRANTED}).wait()
+
+# Fetch aktif değerleri değiştirmez. Uygulama anını oyun seçer.
+await Firebase.remote_config.set_defaults({"welcome": "Merhaba"}).wait()
+await Firebase.remote_config.fetch().wait()
+await Firebase.remote_config.activate().wait()
+var welcome: FirebaseResult = await Firebase.remote_config.get_value("welcome").wait()
+print(welcome.value.value, welcome.value.source)
+
+# Explicit GDScript nonfatal; bütün Godot hataları otomatik raporlanmaz.
+await Firebase.crashlytics.record_error("SaveError", "Save file unavailable").wait()
+```
+
+Analytics/Crashlytics export seçenekleri `firebase/analytics_collection` ve
+`firebase/crashlytics_collection` SDK default / enabled / disabled seçer. Seçim
+startup öncesi Android Manifest/iOS plist'e yazılır; verilmezse SDK varsayılanı
+korunur. Runtime SDK override'ları uygulama çalışmaları arasında kalabilir;
+özellikle Crashlytics disable çağrısı restart gerektirebilir. Taze kurulumda
+başlangıçtan kapalı olma kabulünü runtime setter ile değiştirme.
+Crashlytics log/nonfatal/send/delete başarıları yerel çağrıdır; rapor upload ACK'i
+değildir. `check_unsent_reports()` collection açıkken false; kapalıyken SDK'nın
+çalışma başına tek kontrolünü kullanır. Analytics breadcrumbs opsiyoneldir,
+Auth veya Analytics API modülleri Crashlytics için zorunlu değildir. Android'de
+pinned C++ App'in başlangıcı Analytics Java sınıflarını kullandığı için taban
+Maven bağımlılığı korunur; API klasörünü kaldırmak collection'ı kapatmaz.
+
+Crashlytics seçili build `debug_symbols=yes` kullanır, Android unstripped ELF ve
+iOS dSYM dosyalarını `build/symbols/<selection>/` altında kimlikleriyle saklar.
+Semboller addon ZIP'ine katılmaz. Oyun export'u kendi R8 mapping'ini saklar;
+Godot engine frame'leri yalnız aynı export template'in sembolleriyle çözülebilir.
+[Debug smoke ve açık symbol upload adımları](examples/crashlytics_smoke/README.md)
+SDK build'inden ayrıdır; otomatik upload yapılmaz.
+
 Depo kökündeki Makefile mevcut `tools/` betiklerini çağırır. `make` kullanılabilir
 hedefleri gösterir:
 
@@ -266,6 +369,7 @@ make package
 # Android SDK platform 35 ve JDK gerektirir.
 make android-aar ANDROID_HOME="$HOME/Library/Android/sdk"
 make test-android-aar ANDROID_HOME="$HOME/Library/Android/sdk"
+python3 tests/test_sdk_capability_packages.py
 ```
 
 `MODULES` ve `PLATFORMS` verilmezse `tools/build.sh` varsayılanları kullanılır.
@@ -273,8 +377,10 @@ make test-android-aar ANDROID_HOME="$HOME/Library/Android/sdk"
 argümanı olarak verilebilir. `make package`, mevcut build'i `bin/modules.txt`
 listesine göre paketler.
 
-Testler mock'larla çalışır. Native kod yalnızca iOS ve Android için
-Firebase ile derlenir; gerçek davranış cihazda denenir.
+Auth içeren iOS build, `tools/build_google_signin_ios.sh` ile pinned kaynaklardan
+GoogleSignIn bağımlılıklarını hazırlar; kurulu CocoaPods/Xcode gerekir, global araç
+kurulmaz. Testler mock'larla çalışır. Native ClassDB signature gate'i editor
+stub'da açıkça skipped raporlar; native parity sonucu sayılmaz.
 
 ### CI (self-hosted runner)
 
@@ -289,11 +395,29 @@ tag push'unda paketler ve `SHA256SUMS.txt` o tag'in GitHub release'ine
 eklenir; branch ve PR çalışmaları paket yüklemez. Bu mevcut varyantlar
 birbirine eklenebilen paketler değildir; #68'de tek release build'inden
 bileşenleri paketleyen CI düzenine geçiş planlıdır. Android CI build/test
-akışı henüz eklenmedi. Elle
+akışı bu eski workflow'a eklenmedi. Elle
 başlatılan çalışmada `variants` girdisi başka modül listeleri seçer
 (ör. `auth auth,storage`). Paket oyunun kök dizinine açılır.
 
-Bağımlılık sürümleri `tools/versions.env` içindedir. godot-cpp'nin 4.7 tag'i
+`.github/workflows/sdk-capabilities.yml` yalnız PR/manual geliştirme doğrulamasıdır.
+Üç yeni tekil, telemetry birleşimi, full-eight, Auth+Firestore ve Auth+Database
+seçimlerini iOS/Android/macOS için derler; mock/paket testleri ve sembol doğrulaması
+koşar. Kurulu platform 35, NDK 28.1.13356709, JDK, CocoaPods, Xcode ve Godot gerekir.
+ZIP/semboller kısa ömürlü workflow artifact'larıdır; dokuz-paket release yayımlamaz.
+Bu workflow yerelde çalıştırılmış GitHub CI sonucu veya cihaz kabulü değildir.
+Manual çalışmada `android_export_fixture=true`, yalnız full-eight job'ında
+beş sentetik uygulama seçiminin debug/R8 APK fixture'ını çalıştırır: telemetry,
+Auth+telemetry+Play Games, Auth-only, Remote Config-only ve Analytics-only.
+Fixture aynı generic AAR ile toplam 10 APK üretir; Godot engine/native `.so`
+içermez ve cihazda çalıştırmaz. Kurulu Android platform 36
+ve build-tools 36.1.0 ister; Gradle 8.11.1 SHA-256 kontrolüyle çalışma dizinine
+indirilir. Global SDK/JDK kurulmaz, Firebase'e rapor/sembol yüklenmez.
+
+Firebase C++/iOS ve godot-cpp sürümleri `tools/versions.env` içindedir.
+GoogleSignIn kaynak sürümleri `tools/google_signin_ios/Podfile` ve lock dosyasında,
+Android bridge bağımlılıkları `android/build.gradle` ve lock dosyasında,
+oyun Maven/Kotlin/R8 seçimleri `addons/firebase/export/firebase_android_gradle.gd`
+içinde sabitlenir. godot-cpp'nin 4.7 tag'i
 olmadığı için `master` bir commit'e sabitlenir ve `api_version=4.7` ile derlenir.
 
 ## Doğrulanmamış noktalar

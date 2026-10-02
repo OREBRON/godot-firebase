@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       android_export_fixture:
-        description: 'Build four synthetic game selections with debug + R8 APKs (requires installed Android platform 36/build-tools 36.1.0)'
+        description: 'Build five synthetic AAR selections, debug + R8 APKs (requires Android platform 36/build-tools 36.1.0)'
         type: boolean
         required: false
         default: false
@@ -58,6 +58,13 @@ jobs:
           set -euo pipefail
           test "$(uname -s)" = Darwin
           test "$(uname -m)" = arm64
+          DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
+          if ! test -x "$DEVELOPER_DIR/usr/bin/xcodebuild"; then
+            DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+          fi
+          test -x "$DEVELOPER_DIR/usr/bin/xcodebuild" || { echo 'Full Xcode is required'; exit 1; }
+          export DEVELOPER_DIR
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
           xcodebuild -version
           command -v uvx
           command -v python3
@@ -79,6 +86,9 @@ jobs:
           mkdir -p "$THIRD_PARTY_CACHE"
           ln -sfn "$THIRD_PARTY_CACHE" third_party
           tools/bootstrap.sh
+          if [ -f "$THIRD_PARTY_CACHE/.sdk-capabilities.sconsign.dblite" ]; then
+            cp "$THIRD_PARTY_CACHE/.sdk-capabilities.sconsign.dblite" .sconsign.dblite
+          fi
       - name: Test APIs and development package filtering
         run: |
           tools/run_tests.sh
@@ -93,7 +103,7 @@ jobs:
           tools/run_tests.sh
           package_path="$(tools/package.sh)"
           python3 tests/test_sdk_capability_packages.py --smoke-package "$package_path"
-      - name: Optional full-eight Android game export fixture
+      - name: Optional full-eight Android Gradle fixture
         if: github.event_name == 'workflow_dispatch' && inputs.android_export_fixture && matrix.name == 'full-eight'
         run: |
           set -euo pipefail
@@ -121,7 +131,10 @@ jobs:
       - name: Clean generated workspace products
         if: always()
         run: |
-          git -C "$GITHUB_WORKSPACE" clean -ffdxq
-          if [ -d "$THIRD_PARTY_CACHE/godot-cpp/.git" ]; then
-            git -C "$THIRD_PARTY_CACHE/godot-cpp" clean -ffdxq
+          if [ -f "$GITHUB_WORKSPACE/.sconsign.dblite" ]; then
+            mkdir -p "$THIRD_PARTY_CACHE"
+            cp "$GITHUB_WORKSPACE/.sconsign.dblite" "$THIRD_PARTY_CACHE/.sdk-capabilities.sconsign.dblite"
           fi
+          git -C "$GITHUB_WORKSPACE" clean -ffdxq
+          # Keep pinned godot-cpp products and SCons signatures across selections.
+          # The shared workflow concurrency group prevents simultaneous cache use.
