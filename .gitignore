@@ -6,8 +6,18 @@
 *.o
 /compile_commands.json
 
-# Built and downloaded binaries; produced by tools/, published as release assets.
-/addons/firebase/bin/
+# Mobile builds and downloads are release assets; desktop stubs ship through LFS.
+/addons/firebase/bin/*
+!/addons/firebase/bin/windows/
+!/addons/firebase/bin/linux/
+!/addons/firebase/bin/macos/
+/addons/firebase/bin/windows/*
+/addons/firebase/bin/linux/*
+/addons/firebase/bin/macos/*
+!/addons/firebase/bin/windows/libgodot_firebase.windows.x86_64.dll
+!/addons/firebase/bin/linux/libgodot_firebase.linux.x86_64.so
+!/addons/firebase/bin/macos/libgodot_firebase.macos.arm64.dylib
+!/addons/firebase/bin/macos/libgodot_firebase.macos.x86_64.dylib
 /third_party/
 /build/
 

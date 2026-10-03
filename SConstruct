@@ -3,12 +3,13 @@
 #
 #   scons platform=ios arch=arm64 ios_simulator=no target=template_release modules=auth
 #   scons platform=android arch=arm64 target=template_release modules=auth
-#   scons platform=macos target=template_debug
+#   scons platform=macos arch=arm64 target=template_debug
 #
 # macOS builds an editor stub without Firebase: it only keeps the editor from
 # reporting a missing library, and the addon uses its mocks there.
 #
 # Dependencies come from tools/bootstrap.sh; tools/build.sh runs every variant.
+# tools/build_desktop_stub.py is the lightweight desktop build (no SDK/bindings).
 
 import glob
 import os
@@ -151,6 +152,8 @@ if platform == "ios":
     env.Append(LIBS=["c++", "z", "sqlite3"])
 
 suffix = ".%s.%s%s" % (platform, env["target"], ".simulator" if platform == "ios" and env["ios_simulator"] else "")
+if platform == "macos":
+    suffix = ".macos.%s" % env["arch"]
 library_name = "libgodot_firebase%s%s" % (suffix, env["SHLIBSUFFIX"])
 # Without this the install name is the relative build path. Godot's iOS export
 # rewrites it only when install_name_tool is available on the export host.

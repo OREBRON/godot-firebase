@@ -2,12 +2,13 @@
 
 # Recipes share build/ and addon binaries; build.sh handles native parallelism.
 .NOTPARALLEL:
-.PHONY: help bootstrap build test android-aar test-android-aar package
+.PHONY: help bootstrap build desktop-stub test android-aar test-android-aar package
 
 help:
 	@printf '%s\n' \
 		'make bootstrap         Download pinned native dependencies' \
 		'make build             Build the selected modules and platforms' \
+		'make desktop-stub      Rebuild the current host desktop stub (C compiler)' \
 		'make test              Run the GDScript tests' \
 		'make android-aar       Build the generic Android bridge AAR' \
 		'make test-android-aar  Test the Android bridge AAR' \
@@ -23,6 +24,9 @@ bootstrap:
 # Keep default module/platform selection in tools/build.sh.
 build:
 	bash tools/build.sh $(if $(strip $(MODULES)),--modules "$(MODULES)") $(if $(strip $(PLATFORMS)),--platforms "$(PLATFORMS)")
+
+desktop-stub:
+	python3 tools/build_desktop_stub.py $(if $(strip $(PLATFORM)),--platform "$(PLATFORM)") $(if $(strip $(ARCH)),--arch "$(ARCH)")
 
 test:
 	bash tools/run_tests.sh

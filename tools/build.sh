@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds addons/firebase/bin/ for the selected modules.
-#   tools/build.sh [--modules auth,firestore] [--platforms ios,android,macos]
-# Needs tools/bootstrap.sh first. SCons runs through uv unless SCONS is set.
+#   tools/build.sh [--modules auth,firestore] [--platforms ios,android,macos,linux,windows]
+# Mobile builds need tools/bootstrap.sh. Desktop stubs need only a C compiler.
+# SCons runs through uv unless SCONS is set.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -19,7 +20,7 @@ SCONS="${SCONS:-uvx scons}"
 mkdir -p build
 touch build/.gdignore
 BIN=addons/firebase/bin
-JOBS=$(sysctl -n hw.ncpu)
+JOBS=$(python3 -c 'import os; print(os.cpu_count() or 1)')
 symbols_root="build/symbols/${modules//,/-}"
 crashlytics_symbols=false
 [[ ",$modules," != *",crashlytics,"* ]] || crashlytics_symbols=true
@@ -63,12 +64,16 @@ collect_android_symbols() { # target
 }
 
 if [[ ",$platforms," == *",macos,"* ]]; then
-	mkdir -p "$BIN/macos"
-	for target in template_debug template_release; do
-		build macos "$target" arch=arm64
-		cp "build/macos/libgodot_firebase.macos.$target.dylib" "$BIN/macos/"
+	for arch in arm64 x86_64; do
+		python3 tools/build_desktop_stub.py --platform macos --arch "$arch"
 	done
 fi
+
+for platform in linux windows; do
+	if [[ ",$platforms," == *",$platform,"* ]]; then
+		python3 tools/build_desktop_stub.py --platform "$platform" --arch x86_64
+	fi
+done
 
 if [[ ",$platforms," == *",ios,"* ]]; then
 	mkdir -p "$BIN/ios"

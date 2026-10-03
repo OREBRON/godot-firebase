@@ -6,7 +6,7 @@ extends Node
 ##
 ## Backend of each module:
 ## - its native class on iOS and Android, when built with that module;
-## - its mock in the editor and on desktop (the macOS library is a stub);
+## - its mock in the editor and on desktop (desktop libraries are empty stubs);
 ## - none on mobile when native fails. Requests then fail with
 ##   FirebaseResult.ERR_UNAVAILABLE instead of silently losing data.
 

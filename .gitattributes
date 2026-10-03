@@ -1,1 +1,5 @@
 * text=auto eol=lf
+/addons/firebase/bin/windows/*.dll filter=lfs diff=lfs merge=lfs -text
+/addons/firebase/bin/linux/*.so filter=lfs diff=lfs merge=lfs -text
+/addons/firebase/bin/macos/libgodot_firebase.macos.arm64.dylib filter=lfs diff=lfs merge=lfs -text
+/addons/firebase/bin/macos/libgodot_firebase.macos.x86_64.dylib filter=lfs diff=lfs merge=lfs -text

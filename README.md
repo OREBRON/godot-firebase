@@ -27,6 +27,63 @@ ZIP'leri birlikte kurmak native dosyaların üzerine yazar. Geçişin durumu
 
 ## Mevcut sürümü oyuna ekleme
 
+### Desktop editöründe geliştirme
+
+Linux x86_64, Windows x86_64 ve macOS arm64/x86_64 editörleri için hazır
+boş GDExtension kütüphaneleri depoda **Git LFS** ile tutulur. Projeyi açmak
+için C/C++ derleyicisi veya Firebase SDK kurulumu gerekmez:
+
+```bash
+git lfs install
+git lfs pull
+```
+
+Godot 4.7.2 ile projeyi aç. `.gdextension` dosyası `windows.x86_64`,
+`linux.x86_64`, `macos.arm64`, `macos.x86_64` etiketleriyle uygun kütüphaneyi
+seçer; debug/release aynı boş uzantıyı kullanır. Bu seçim Godot'un
+[resmi feature-tag sözleşmesini](https://docs.godotengine.org/en/4.5/tutorials/scripting/gdextension/gdextension_file.html#libraries-section)
+izler. Uzantı native Firebase sınıfı kaydetmez; kurulu ürün API'leri mevcut
+GDScript mock backend'leriyle çalışır. Desktop istekleri yerel mock verisi
+kullanır; gerçek Firebase bağlantısı iOS/Android native build'ine aittir.
+
+Kaynak `src/desktop/godot_firebase_stub.c`, derleme aracı
+`tools/build_desktop_stub.py` içindedir. Yalnız kütüphaneleri değiştiren
+geliştiricinin Python 3 ve C derleyicisine ihtiyacı vardır: macOS'ta Xcode
+Command Line Tools, Linux'ta GCC/Clang, Windows'ta LLVM Clang + lld-link.
+Firebase SDK veya godot-cpp indirmek gerekmez:
+
+```bash
+# Her komut ilgili işletim sisteminde çalışır; macOS iki mimariyi de üretir.
+python3 tools/build_desktop_stub.py --platform macos --arch arm64
+python3 tools/build_desktop_stub.py --platform macos --arch x86_64
+python3 tools/build_desktop_stub.py --platform linux --arch x86_64
+# Windows / PowerShell:
+python tools/build_desktop_stub.py --platform windows --arch x86_64
+
+# Windows/Linux için macOS'tan cross-build alternatifi (Zig 0.15.2):
+python3 tools/build_desktop_stub.py --platform windows --arch x86_64 --cc "/path/to/zig cc"
+python3 tools/build_desktop_stub.py --platform linux --arch x86_64 --cc "/path/to/zig cc"
+```
+
+Çıktılar doğrudan `addons/firebase/bin/<platform>/` altındaki dört LFS
+dosyasına yazılır. `make desktop-stub` mevcut host için yeniden derler;
+`PLATFORM` ve `ARCH` ile hedef seçilebilir. `tools/build.sh --platforms macos`
+iki Mac stub'ını aynı kaynakla üretir; `linux` ve `windows` da `--platforms`
+listesinde seçilebilir (`CC` ile cross compiler verilebilir).
+
+```bash
+GODOT=/Applications/Godot.app/Contents/MacOS/Godot tools/run_tests.sh
+# Windows'ta GODOT ortam değişkenini Godot konsol EXE yoluna ayarla:
+python tools/run_tests.py
+```
+
+Testler editör importunu, uzantının gerçekten yüklenmesini, dört kütüphanenin
+varlığını, otomatik mock başlangıcını ve stok GDScript testlerini doğrular.
+Eksik LFS binary, import/script hatası ve timeout başarısız sayılır.
+[Kabul koşulları ve doğrulama kanıtı](docs/verification/desktop-libraries.md).
+
+### Mobil native paketi
+
 1. `tools/bootstrap.sh`, ardından modül seçerek derle:
    ```bash
    # Gereken seçime ait satırı çalıştır; örneklerin her biri ayrı build'dir.
@@ -41,8 +98,9 @@ ZIP'leri birlikte kurmak native dosyaların üzerine yazar. Geçişin durumu
    export bağımlılıklarının seçilen listesi `bin/modules.txt` içinde;
    platform çıktıları bu listeyle eşleşmeli. Varsayılan platformlar iOS ve macOS'tur;
    Android için aşağıdaki `--platforms` örneğini kullan. Modül seçimini
-   değiştirirken eski `addons/firebase/bin/` çıktısını build öncesinde
-   temizle ve dağıtılacak tüm platformları aynı modül listesiyle derle.
+   değiştirirken eski mobil `addons/firebase/bin/android/` ve `bin/ios/`
+   çıktısını build öncesinde temizle; LFS desktop stub'larını koru ve
+   dağıtılacak tüm mobil platformları aynı modül listesiyle derle.
    Mevcut paketleyici eski platform çıktısını veya mixed build'i reddetmez.
 3. Proje ayarlarında eklentiyi aç. `Firebase` autoload'u eklenir.
 4. Firebase konsolundan `GoogleService-Info.plist` indir, `res://` köküne koy
@@ -298,7 +356,7 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   sonuçları tipli değişkene ata (`var r: FirebaseResult = await ...`) ya da
   `var auth: FirebaseAuth = Firebase.auth`.
 - Editörde ve masaüstünde bellek içi mock çalışır (`Firebase.is_mock("auth")`);
-  macOS kütüphanesi Firebase içermeyen bir editör stub'ıdır. Mobilde native
+  Windows/Linux/macOS kütüphaneleri Firebase içermeyen boş uzantılardır. Mobilde native
   başlatılamazsa mock'a düşülmez; istekler `ERR_UNAVAILABLE` döner.
 - Hesap açtıran oyunlar App Store kuralı gereği hesap silme sunmalıdır:
   `Firebase.auth.delete_account()`.
@@ -382,7 +440,18 @@ GoogleSignIn bağımlılıklarını hazırlar; kurulu CocoaPods/Xcode gerekir, g
 kurulmaz. Testler mock'larla çalışır. Native ClassDB signature gate'i editor
 stub'da açıkça skipped raporlar; native parity sonucu sayılmaz.
 
-### CI (self-hosted runner)
+### CI
+
+`.github/workflows/desktop.yml`, GitHub-hosted Linux x86_64, Windows x86_64,
+macOS arm64 ve Intel macOS runner'larında çalışır. Her job `tools/versions.env`
+içindeki aynı Godot 4.7.2 editörünü resmi release'den indirir ve yayımlanan
+SHA-512 ile doğrular. İlk kontroller doğrudan checkout'ta LFS ile gelen
+kütüphanelere uygulanır: editör importu, Firebase mock başlangıcı ve stok
+testleri. Sonra kaynak yeniden derlenir ve aynı kontroller yeni kütüphaneyle
+tekrarlanır. Build öncesi test, bozuk hazır binary'nin CI'da gizlenmesini
+önler. Push/main, PR ve manual tetiklenir; mobil SDK indirmez.
+
+#### Mobil build (self-hosted runner)
 
 `.github/workflows/build.yml` `[self-hosted, macOS, ARM64]` runner'da çalışır
 (Xcode, `godot` 4.7.2 ve `uv` gerekir). SDK indirmeleri runner'da

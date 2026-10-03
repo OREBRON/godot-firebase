@@ -1,4 +1,5 @@
 """Development selection ZIP checks; these do not claim composable native artifacts."""
+import configparser
 import json
 import os
 from pathlib import Path
@@ -202,11 +203,14 @@ class NativePackageImportTests(unittest.TestCase):
             (root / "tools").mkdir()
             shutil.copy2(ROOT / "tools/package.sh", root / "tools/package.sh")
             shutil.copytree(ROOT / "addons/firebase", root / "addons/firebase", ignore=shutil.ignore_patterns("bin"))
-            native = root / "addons/firebase/bin/macos"
-            native.mkdir(parents=True)
-            for target in ["template_debug", "template_release"]:
-                (native / f"libgodot_firebase.macos.{target}.dylib").write_bytes(b"not a Mach-O binary")
-            (native.parent / "modules.txt").write_text("analytics\n")
+            descriptor = configparser.ConfigParser()
+            descriptor.read(root / "addons/firebase/godot_firebase.gdextension")
+            for features, library in descriptor["libraries"].items():
+                if features.split(".")[0] in {"macos", "linux", "windows"}:
+                    native = root / library.strip('"').removeprefix("res://")
+                    native.parent.mkdir(parents=True, exist_ok=True)
+                    native.write_bytes(b"invalid desktop native library")
+            (root / "addons/firebase/bin/modules.txt").write_text("analytics\n")
             package = subprocess.check_output(["bash", str(root / "tools/package.sh")], text=True).strip()
             with self.assertRaises(RuntimeError):
                 smoke_package(package)

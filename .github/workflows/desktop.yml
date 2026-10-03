@@ -1,0 +1,101 @@
+name: Desktop editor and mocks
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux
+            arch: x86_64
+          - runner: windows-2025
+            platform: windows
+            arch: x86_64
+          - runner: macos-15
+            platform: macos
+            arch: arm64
+          - runner: macos-15-intel
+            platform: macos
+            arch: x86_64
+    defaults:
+      run:
+        shell: bash
+    env:
+      DESKTOP_PLATFORM: ${{ matrix.platform }}
+      DESKTOP_ARCH: ${{ matrix.arch }}
+      PYTHONUTF8: '1'
+    steps:
+      - name: Checkout ready-to-load desktop libraries
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          lfs: true
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Install the pinned Godot editor
+        run: |
+          set -euo pipefail
+          source tools/versions.env
+          export GODOT_VERSION
+          python - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          import platform
+          import subprocess
+          import urllib.request
+          import zipfile
+
+          target = os.environ['DESKTOP_PLATFORM']
+          expected_arch = os.environ['DESKTOP_ARCH']
+          actual_arch = platform.machine().lower()
+          assert actual_arch in ({'arm64', 'aarch64'} if expected_arch == 'arm64' else {'x86_64', 'amd64'}), actual_arch
+          version = os.environ['GODOT_VERSION']
+          suffix = {'linux': 'linux.x86_64', 'windows': 'win64.exe', 'macos': 'macos.universal'}[target]
+          asset = f'Godot_v{version}-stable_{suffix}.zip'
+          base = f'https://github.com/godotengine/godot-builds/releases/download/{version}-stable/'
+          directory = Path(os.environ['RUNNER_TEMP']) / 'godot'
+          directory.mkdir(parents=True, exist_ok=True)
+          archive = directory / asset
+          urllib.request.urlretrieve(base + asset, archive)
+          with urllib.request.urlopen(base + 'SHA512-SUMS.txt', timeout=60) as response:
+              sums = dict((line.split()[1].lstrip('*'), line.split()[0]) for line in response.read().decode().splitlines() if line.strip())
+          assert hashlib.sha512(archive.read_bytes()).hexdigest() == sums[asset], 'Godot SHA-512 mismatch'
+          with zipfile.ZipFile(archive) as source:
+              source.extractall(directory)
+          if target == 'macos':
+              executable = directory / 'Godot.app/Contents/MacOS/Godot'
+          elif target == 'windows':
+              executable = next(directory.glob('*_console.exe'))
+          else:
+              executable = directory / asset.removesuffix('.zip')
+          executable.chmod(0o755)
+          actual = subprocess.check_output([str(executable), '--version'], text=True).strip()
+          assert actual.startswith(version + '.stable.'), actual
+          print(actual)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as environment:
+              environment.write(f'GODOT={executable}\n')
+          PY
+      # Test the committed LFS binaries before any compiler can replace them.
+      - name: Editor import, Firebase mock startup and stock tests
+        run: python tools/run_tests.py
+      - name: Test import failure detection
+        run: python tests/test_test_runner.py
+      - name: Verify desktop source can be rebuilt
+        run: python tools/build_desktop_stub.py --platform "$DESKTOP_PLATFORM" --arch "$DESKTOP_ARCH"
+      - name: Test rebuilt library with editor import and stock tests
+        run: python tools/run_tests.py
