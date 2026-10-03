@@ -94,6 +94,9 @@ if [[ ",$platforms," == *",ios,"* ]]; then
 	# frameworks belong in the app bundle. SConstruct lists them.
 	rm -rf "$BIN/ios/resources"
 	mkdir -p "$BIN/ios/resources"
+	# Apple-optimized PNGs in bundles are not Godot importable; the export plugin
+	# reads these bundles directly from disk when creating the iOS app.
+	touch "$BIN/ios/resources/.gdignore"
 	while IFS= read -r bundle; do
 		cp -R "$bundle" "$BIN/ios/resources/"
 	done < build/ios/resource_bundles.txt
