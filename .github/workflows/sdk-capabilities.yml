@@ -54,6 +54,8 @@ jobs:
         with:
           lfs: true
           persist-credentials: false
+      - name: Select SDKMAN Java 17
+        run: zsh tools/setup_sdkman_java_ci.zsh
       - name: Install locked CocoaPods
         run: bash tools/setup_cocoapods_ci.sh
       - name: Verify installed toolchain
@@ -74,8 +76,6 @@ jobs:
           command -v pod
           pod --version
           test -n "${JAVA_HOME:-}"
-          case "$("$JAVA_HOME/bin/javac" -version 2>&1)" in "javac 17."*) ;; *) echo 'JAVA_HOME must select JDK 17'; exit 1;; esac
-          echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
           java -version
           javac -version
           test -n "${ANDROID_HOME:-}"

@@ -127,8 +127,9 @@ ANDROID_HOME="$HOME/Library/Android/sdk" NDK_VERSION=28.2.13676358 \
 tools/package.sh
 ```
 
-`JAVA_HOME` kurulu JDK 17 kökünü, `PATH` onun `bin` dizinini göstermelidir
-(örneğin Homebrew'da `/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`).
+Depodaki `.sdkmanrc` Temurin JDK 17'yi sabitler. SDKMAN kurulu bir kabukta
+`sdk env install` komutu sürümü kurup seçer; `JAVA_HOME` ve `PATH` buna göre
+ayarlanır. CI da aynı sürümü SDKMAN üzerinden seçer.
 Reusable AAR derlemesi depodaki SHA-256 doğrulamalı Gradle 9.3.1 wrapper'ını
 kullanır. Oyun export'u Godot 4.7.2'nin kurulu Android Gradle template'ini kullanır.
 En az bir Firebase modülü seçiliyken export helper'ı standart `config.gradle`
