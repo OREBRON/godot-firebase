@@ -55,14 +55,20 @@ jobs:
             echo '::error::uv is required on this runner (SCons runs through uvx).'
             exit 1
           }
-          test -n "${JAVA_HOME:-}" && test -x "$JAVA_HOME/bin/javac" || {
-            echo '::error::JDK 17 is required on this runner.'
+          command -v brew >/dev/null || {
+            echo '::error::Homebrew is required to locate JDK 17 on this runner.'
             exit 1
           }
+          java_prefix="$(brew --prefix openjdk@17)"
+          if ! test -x "$java_prefix/libexec/openjdk.jdk/Contents/Home/bin/javac"; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install openjdk@17
+          fi
+          JAVA_HOME="$java_prefix/libexec/openjdk.jdk/Contents/Home"
           case "$("$JAVA_HOME/bin/javac" -version 2>&1)" in
             "javac 17."*) ;;
             *) echo '::error::JAVA_HOME must select JDK 17.'; exit 1 ;;
           esac
+          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
           echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
           test -n "${ANDROID_HOME:-}" &&
             test -f "$ANDROID_HOME/platforms/android-35/android.jar" &&
