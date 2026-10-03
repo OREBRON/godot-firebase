@@ -188,15 +188,17 @@ func _commit(ops: Array) -> int:
 	if ops.is_empty():
 		_finish(id)
 		return id
-	for op in ops:
-		if op.op == "update" and not documents.has(op.path):
-			_finish_error(id, NOT_FOUND, "No document to update: %s" % op.path)
-			return id
+	var staged_documents := documents.duplicate(true)
 	var values: Dictionary = {}
 	for op in ops:
-		_apply(op)
-		_cache_known[op.path] = true
-		values[op.path] = documents[op.path].duplicate(true) if documents.has(op.path) else null
+		if op.op == "update" and not staged_documents.has(op.path):
+			_finish_error(id, NOT_FOUND, "No document to update: %s" % op.path)
+			return id
+		_apply(op, staged_documents)
+		values[op.path] = staged_documents[op.path].duplicate(true) if staged_documents.has(op.path) else null
+	documents.assign(staged_documents)
+	for path in values:
+		_cache_known[path] = true
 	_pending_writes.append({"id": id, "user_id": _user_id, "values": values})
 	for listener_id in _listeners:
 		if values.has(_listeners[listener_id].path):
@@ -206,17 +208,17 @@ func _commit(ops: Array) -> int:
 	return id
 
 
-func _apply(op: Dictionary) -> void:
+func _apply(op: Dictionary, target_documents: Dictionary[String, Dictionary]) -> void:
 	match op.op:
 		"delete":
-			documents.erase(op.path)
+			target_documents.erase(op.path)
 		"update":
-			_write_fields(documents[op.path], op.data, true, false)
+			_write_fields(target_documents[op.path], op.data, true, false)
 		"set":
 			var merge: bool = op.get("merge", false)
-			var target: Dictionary = documents.get(op.path, {}) if merge else {}
+			var target: Dictionary = target_documents.get(op.path, {}) if merge else {}
 			_write_fields(target, op.data, false, merge)
-			documents[op.path] = target
+			target_documents[op.path] = target
 
 
 ## Update uses dotted field paths and replaces nested maps; merge-set merges them.
