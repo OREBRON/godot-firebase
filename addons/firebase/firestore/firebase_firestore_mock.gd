@@ -325,6 +325,12 @@ func _compare(a: Variant, b: Variant) -> int:
 	var b_rank := _type_rank(b_key)
 	if a_rank != b_rank:
 		return signi(a_rank - b_rank)
+	if a_key is Array and b_key is Array:
+		for index in mini(a_key.size(), b_key.size()):
+			var result := _compare(a_key[index], b_key[index])
+			if result != 0:
+				return result
+		return signi(a_key.size() - b_key.size())
 	if a_rank >= 4:
 		return 0 if a_key == b_key else 1
 	return 0 if a_key == b_key else (-1 if a_key < b_key else 1)
