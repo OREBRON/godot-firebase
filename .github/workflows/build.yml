@@ -18,7 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: [self-hosted, macOS, ARM64]
-    timeout-minutes: 90
+    timeout-minutes: 120
     permissions:
       # Tag builds attach their addon zips to the GitHub release.
       contents: write
@@ -70,12 +70,6 @@ jobs:
           esac
           echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
           echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
-          test -n "${ANDROID_HOME:-}" &&
-            test -f "$ANDROID_HOME/platforms/android-35/android.jar" &&
-            test -x "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf" || {
-            echo '::error::Android SDK platform 35 and the pinned NDK are required on this runner.'
-            exit 1
-          }
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             command -v gh >/dev/null || {
               echo '::error::GitHub CLI is required on this runner to publish releases.'
@@ -98,6 +92,18 @@ jobs:
         with:
           lfs: true
           persist-credentials: false
+
+      - name: Install Android SDK and pinned NDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;28.1.13356709'
+
+      - name: Check Android toolchain
+        run: |
+          set -euo pipefail
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf"
+          "$JAVA_HOME/bin/javac" -version
 
       - name: Install locked CocoaPods
         run: bash tools/setup_cocoapods_ci.sh
