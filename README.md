@@ -190,6 +190,13 @@ geçersiz/tekrarlı modül adlarını reddeder, seçilmeyen API/mock klasörleri
 oyun JSON/plist dosyalarını dışlar. Native platform çıktılarının aynı seçimden
 geldiğini build sahibi sağlamalıdır; stale/mixed build doğrulaması halen yoktur.
 
+`v4.7.2` release workflow'u `auth,firestore,functions,analytics,crashlytics,remote_config`
+seçimini tek monolit olarak iOS, Android ve macOS için derler. Windows ve Linux
+editör kütüphaneleri LFS'den gelir. Bu release'in `godot-firebase.zip` dosyası
+yalnız bu altı ürünün API/mock klasörlerini içerir; Storage ve Database dahil
+değildir. ZIP'leri üst üste kurma; seçilen ürünleri birlikte kullanmak için bu
+tek ZIP'i aç. Bu sürüm dokuz adet birleşebilir paket hedefinin kabulü değildir.
+
 #224 takip release hedefi sekiz tekil ürün + full, toplam dokuz ZIP'tir.
 Birleşebilir native topoloji, ortak path/hash, full=union ve build-ID kabulü
 #90/#85/#86/#67/#68 sonuçlarını bekler. Aşağıdaki altı-paket bölümü önceki
@@ -454,19 +461,14 @@ tekrarlanır. Build öncesi test, bozuk hazır binary'nin CI'da gizlenmesini
 #### Mobil build (self-hosted runner)
 
 `.github/workflows/build.yml` `[self-hosted, macOS, ARM64]` runner'da çalışır
-(Xcode, `godot` 4.7.2 ve `uv` gerekir). SDK indirmeleri runner'da
+(Xcode, `godot` 4.7.2, `uv`, Android SDK/NDK ve JDK 17 gerekir). SDK indirmeleri runner'da
 `../godot-firebase-third-party` altında kalıcı tutulur; ilk çalışma ~2.2 GB
-indirir. Her çalışma mock testlerini koşar, sonra her varyantı (varsayılan:
-beş modülün tümü, ardından her modül tek başına) macOS stub + iOS için
-derler, testleri stub kütüphane yüklüyken tekrar koşar ve paketler:
-`godot-firebase.zip` (tüm modüller) ve `godot-firebase-<modül>.zip`. `v*`
-tag push'unda paketler ve `SHA256SUMS.txt` o tag'in GitHub release'ine
-eklenir; branch ve PR çalışmaları paket yüklemez. Bu mevcut varyantlar
-birbirine eklenebilen paketler değildir; #68'de tek release build'inden
-bileşenleri paketleyen CI düzenine geçiş planlıdır. Android CI build/test
-akışı bu eski workflow'a eklenmedi. Elle
-başlatılan çalışmada `variants` girdisi başka modül listeleri seçer
-(ör. `auth auth,storage`). Paket oyunun kök dizinine açılır.
+indirir. Her çalışma yukarıdaki altı ürünü tek seçimle iOS, Android ve macOS
+için derler, mock testlerini ve paket smoke testini koşar. `v*` tag push'unda
+`godot-firebase.zip` ve `SHA256SUMS.txt` o tag'in GitHub release'ine eklenir;
+branch, PR ve elle başlatılan çalışmalar release'e yükleme yapmaz. Paket oyunun
+kök dizinine açılır. Cihazda Firebase runtime ve Crashlytics symbolication
+kanıtı ayrı kabul işlerinde bekliyor.
 
 `.github/workflows/sdk-capabilities.yml` yalnız PR/manual geliştirme doğrulamasıdır.
 Üç yeni tekil, telemetry birleşimi, full-eight, Auth+Firestore ve Auth+Database
