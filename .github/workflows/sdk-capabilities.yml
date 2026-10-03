@@ -54,6 +54,11 @@ jobs:
         with:
           lfs: true
           persist-credentials: false
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1
+        with:
+          ruby-version: '3.3'
+      - name: Install locked CocoaPods
+        run: bash tools/setup_cocoapods_ci.sh
       - name: Verify installed toolchain
         run: |
           set -euo pipefail
@@ -99,7 +104,7 @@ jobs:
         run: |
           set -euo pipefail
           # Each selection replaces the complete binary set. No ZIP overlay is used.
-          rm -rf addons/firebase/bin build/dist build/symbols
+          rm -rf addons/firebase/bin/ios addons/firebase/bin/android addons/firebase/bin/modules.txt build/dist build/symbols
           tools/build.sh --platforms ios,android,macos --modules "$MODULE_SELECTION"
           tools/run_tests.sh
           package_path="$(tools/package.sh)"

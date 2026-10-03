@@ -82,6 +82,13 @@ jobs:
           lfs: true
           persist-credentials: false
 
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Install locked CocoaPods
+        run: bash tools/setup_cocoapods_ci.sh
+
       - name: Check Godot version
         run: |
           set -euo pipefail
