@@ -3,6 +3,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# The self-hosted runner cannot use ruby/setup-ruby's fixed /Users/runner
+# toolcache path. Use a recent Homebrew Ruby when macOS provides only Ruby 2.6.
+if ! ruby -rrubygems -e 'exit(Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("3.3") ? 0 : 1)'; then
+    command -v brew >/dev/null || { echo 'Homebrew is required to install Ruby 3.3 on this runner' >&2; exit 1; }
+    ruby_prefix=$(brew --prefix ruby@3.3)
+    if [[ ! -x "$ruby_prefix/bin/ruby" ]]; then
+        HOMEBREW_NO_AUTO_UPDATE=1 brew install ruby@3.3
+    fi
+    export PATH="$ruby_prefix/bin:$PATH"
+    echo "$ruby_prefix/bin" >> "$GITHUB_PATH"
+fi
+ruby --version
+
 version=$(awk '/^COCOAPODS:/{print $2}' tools/google_signin_ios/Podfile.lock)
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Podfile.lock has no CocoaPods version' >&2; exit 1; }
 gem_dir="$RUNNER_TEMP/godot-firebase-cocoapods"
