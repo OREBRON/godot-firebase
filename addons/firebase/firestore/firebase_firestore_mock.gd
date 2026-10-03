@@ -213,39 +213,44 @@ func _apply(op: Dictionary, target_documents: Dictionary[String, Dictionary]) ->
 		"delete":
 			target_documents.erase(op.path)
 		"update":
-			_write_fields(target_documents[op.path], op.data, true, false)
+			_write_fields(target_documents[op.path], op.data, true, false, target_documents[op.path])
 		"set":
 			var merge: bool = op.get("merge", false)
-			var target: Dictionary = target_documents.get(op.path, {}) if merge else {}
-			_write_fields(target, op.data, false, merge)
+			var previous: Dictionary = target_documents.get(op.path, {})
+			var target: Dictionary = previous if merge else {}
+			_write_fields(target, op.data, false, merge, previous)
 			target_documents[op.path] = target
 
 
 ## Update uses dotted field paths and replaces nested maps; merge-set merges them.
-func _write_fields(target: Dictionary, data: Dictionary, dotted_keys: bool, merge_maps: bool) -> void:
+## Transforms read previous values even when the target replaces a document or map.
+func _write_fields(target: Dictionary, data: Dictionary, dotted_keys: bool, merge_maps: bool, previous: Dictionary) -> void:
 	for key in data:
 		var parent := target
+		var previous_parent := previous
 		var segments: PackedStringArray = key.split(".") if dotted_keys else PackedStringArray([key])
 		for segment in segments.slice(0, -1):
+			var previous_child: Variant = previous_parent.get(segment)
+			previous_parent = previous_child if previous_child is Dictionary else {}
 			if not parent.get(segment) is Dictionary:
 				parent[segment] = {}
 			parent = parent[segment]
-		_write_field(parent, segments[-1], data[key], merge_maps)
+		_write_field(parent, segments[-1], data[key], merge_maps, previous_parent.get(segments[-1]))
 
 
-func _write_field(parent: Dictionary, field: String, value: Variant, merge_maps: bool) -> void:
+func _write_field(parent: Dictionary, field: String, value: Variant, merge_maps: bool, previous: Variant) -> void:
 	match FirebaseValue.tag_of(value):
 		FirebaseValue.DELETE:
 			parent.erase(field)
 		FirebaseValue.SERVER_TIMESTAMP:
 			parent[field] = FirebaseValue.timestamp(Time.get_unix_time_from_system())
 		FirebaseValue.INCREMENT:
-			var current: Variant = parent.get(field)
-			parent[field] = (current if current is int or current is float else 0) + value.by
+			parent[field] = (previous if previous is int or previous is float else 0) + value.by
 		"":
 			if value is Dictionary:
 				var nested: Dictionary = parent[field] if merge_maps and parent.get(field) is Dictionary else {}
-				_write_fields(nested, value, false, merge_maps)
+				var previous_map: Dictionary = previous if previous is Dictionary else {}
+				_write_fields(nested, value, false, merge_maps, previous_map)
 				parent[field] = nested
 			else:
 				parent[field] = _copy(value)
