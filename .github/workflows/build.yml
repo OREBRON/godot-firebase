@@ -131,19 +131,23 @@ jobs:
           mv "$package_path" build/dist/godot-firebase.zip
           python3 tests/test_sdk_capability_packages.py --smoke-package build/dist/godot-firebase.zip
 
+      - name: Preserve verified package and matching symbols on the build runner
+        run: |
+          set -euo pipefail
+          saved="$THIRD_PARTY_CACHE/mobile-release-4.7.2/$GITHUB_SHA"
+          mkdir -p "$saved"
+          cp build/dist/godot-firebase.zip "$saved/godot-firebase.zip"
+          tar -czf "$saved/native-symbols.tar.gz" -C build symbols
+          (cd "$saved" && shasum -a 256 godot-firebase.zip native-symbols.tar.gz > SHA256SUMS.txt)
+          echo "Verified build preserved at $saved"
+          cat "$saved/SHA256SUMS.txt"
+
       - name: Package and verify mobile release ZIPs
         run: |
           set -euo pipefail
           python3 tools/package_mobile_release.py build/dist/godot-firebase.zip
           python3 tests/test_sdk_capability_packages.py --smoke-package build/dist/godot-firebase-ios.zip
           python3 tests/test_sdk_capability_packages.py --smoke-package build/dist/godot-firebase-android.zip
-
-      - name: Preserve matching Crashlytics symbols on the build runner
-        run: |
-          set -euo pipefail
-          mkdir -p "$THIRD_PARTY_CACHE/release-symbols"
-          tar -czf "$THIRD_PARTY_CACHE/release-symbols/godot-firebase-4.7.2-$GITHUB_SHA.tar.gz" -C build symbols
-          shasum -a 256 "$THIRD_PARTY_CACHE/release-symbols/godot-firebase-4.7.2-$GITHUB_SHA.tar.gz"
 
       - name: Publish verified platform release ZIPs
         if: github.event_name == 'workflow_dispatch'

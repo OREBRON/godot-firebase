@@ -18,7 +18,11 @@ BIN = ROOT + "bin/"
 
 
 def digest(path):
-    return hashlib.file_digest(path.open("rb"), "sha256").hexdigest()
+    hasher = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def validate_mobile(archive, platform):
