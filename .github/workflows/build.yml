@@ -55,7 +55,7 @@ jobs:
             echo '::error::uv is required on this runner (SCons runs through uvx).'
             exit 1
           }
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
+          if [ "$GITHUB_REF_TYPE" = tag ] || [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             command -v gh >/dev/null || {
               echo '::error::GitHub CLI is required on this runner to publish releases.'
               exit 1
