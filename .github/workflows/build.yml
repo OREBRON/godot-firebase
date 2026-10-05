@@ -131,22 +131,30 @@ jobs:
           mv "$package_path" build/dist/godot-firebase.zip
           python3 tests/test_sdk_capability_packages.py --smoke-package build/dist/godot-firebase.zip
 
-      - name: Retain verified package for platform release packaging
-        uses: actions/upload-artifact@v4
-        with:
-          name: mobile-release-4-7-2-package
-          path: build/dist/godot-firebase.zip
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
+      - name: Package and verify mobile release ZIPs
+        run: |
+          set -euo pipefail
+          python3 tools/package_mobile_release.py build/dist/godot-firebase.zip
+          python3 tests/test_sdk_capability_packages.py --smoke-package build/dist/godot-firebase-ios.zip
+          python3 tests/test_sdk_capability_packages.py --smoke-package build/dist/godot-firebase-android.zip
 
-      - name: Retain matching Crashlytics symbols
-        uses: actions/upload-artifact@v4
-        with:
-          name: mobile-release-4-7-2-symbols
-          path: build/symbols/
-          if-no-files-found: error
-          retention-days: 30
+      - name: Preserve matching Crashlytics symbols on the build runner
+        run: |
+          set -euo pipefail
+          mkdir -p "$THIRD_PARTY_CACHE/release-symbols"
+          tar -czf "$THIRD_PARTY_CACHE/release-symbols/godot-firebase-4.7.2-$GITHUB_SHA.tar.gz" -C build symbols
+          shasum -a 256 "$THIRD_PARTY_CACHE/release-symbols/godot-firebase-4.7.2-$GITHUB_SHA.tar.gz"
+
+      - name: Publish verified platform release ZIPs
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release view v4.7.2 >/dev/null
+          gh release upload v4.7.2 build/dist/godot-firebase-ios.zip build/dist/godot-firebase-android.zip build/dist/SHA256SUMS-mobile.txt --clobber
+          cat build/dist/verification.json
 
       # Tag builds publish the verified monolith and its checksum.
       - name: Publish release
