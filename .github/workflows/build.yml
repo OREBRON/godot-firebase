@@ -131,6 +131,23 @@ jobs:
           mv "$package_path" build/dist/godot-firebase.zip
           python3 tests/test_sdk_capability_packages.py --smoke-package build/dist/godot-firebase.zip
 
+      - name: Retain verified package for platform release packaging
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-release-4-7-2-package
+          path: build/dist/godot-firebase.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Retain matching Crashlytics symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-release-4-7-2-symbols
+          path: build/symbols/
+          if-no-files-found: error
+          retention-days: 30
+
       # Tag builds publish the verified monolith and its checksum.
       - name: Publish release
         if: github.ref_type == 'tag'
