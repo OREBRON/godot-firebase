@@ -94,11 +94,22 @@ static func _validate_map(data: Dictionary, delete_reason: String, sentinel_reas
 	for key in data:
 		if not key is String or key.is_empty() or key.split(".").has(""):
 			return "field names must be non-empty strings: %s" % str(key)
+		if sentinel_reason != IN_QUERY and is_reserved_field_name(key):
+			return "field names cannot begin and end with __: %s" % key
 		var value: Variant = data[key]
 		var reason := delete_reason if tag_of(value) == DELETE else _validate_value(value, false, sentinel_reason)
 		if not reason.is_empty():
 			return "%s: %s" % [key, reason]
 	return ""
+
+
+## True when `name`, or one of its dotted segments, begins and ends with "__".
+## The SDK aborts on such names in written data; queries may use them.
+static func is_reserved_field_name(name: String) -> bool:
+	for segment in [name] + Array(name.split(".")):
+		if segment.begins_with("__") and segment.ends_with("__"):
+			return true
+	return false
 
 
 static func validate_filter_value(op: String, value: Variant) -> String:

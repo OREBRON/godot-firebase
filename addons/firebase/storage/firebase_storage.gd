@@ -6,6 +6,8 @@ extends RefCounted
 ## where `updated` is Unix time in milliseconds.
 
 const DEFAULT_MAX_DOWNLOAD := 10 * 1024 * 1024
+## download_bytes() reserves `max_size` bytes up front, so it is capped.
+const MAX_DOWNLOAD := 100 * 1024 * 1024
 
 var _requests: FirebaseRequests
 
@@ -20,9 +22,10 @@ func upload_bytes(path: String, data: PackedByteArray, content_type := "") -> Fi
 
 
 ## Result value is a PackedByteArray. Files larger than `max_size` fail.
+## `max_size` must be in 1..MAX_DOWNLOAD (100 MB); the whole buffer is reserved before downloading.
 func download_bytes(path: String, max_size := DEFAULT_MAX_DOWNLOAD) -> FirebaseTask:
-	if max_size <= 0:
-		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, "max_size must be positive")
+	if max_size <= 0 or max_size > MAX_DOWNLOAD:
+		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, "max_size must be in 1..%d" % MAX_DOWNLOAD)
 	return _file_request(path, &"download_bytes", [path, max_size])
 
 

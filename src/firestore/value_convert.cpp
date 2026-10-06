@@ -41,6 +41,25 @@ bool is_string(const Variant &p_value) {
 	return p_value.get_type() == Variant::STRING || p_value.get_type() == Variant::STRING_NAME;
 }
 
+bool is_reserved_segment(const String &p_segment) {
+	return p_segment.begins_with("__") && p_segment.ends_with("__");
+}
+
+// Same rule as FirebaseValue.is_reserved_field_name(): the SDK aborts when written
+// field names (or update path segments) begin and end with "__".
+bool is_reserved_field_name(const String &p_name) {
+	if (is_reserved_segment(p_name)) {
+		return true;
+	}
+	const godot::PackedStringArray segments = p_name.split(".");
+	for (int64_t i = 0; i < segments.size(); i++) {
+		if (is_reserved_segment(segments[i])) {
+			return true;
+		}
+	}
+	return false;
+}
+
 // Firestore's published map/array field depth limit. The document root is 0;
 // tagged timestamp/transform dictionaries represent scalar FieldValues.
 String validate_structure(const Variant &p_value, std::vector<Variant> &p_ancestors, int p_depth, bool p_document_root = false) {
@@ -160,6 +179,10 @@ String convert_map(const Dictionary &p_data, bool p_allow_delete, const char *p_
 		const String name = key;
 		if (name.is_empty() || name.split(".").has("")) {
 			return "field names must be non-empty: " + name;
+		}
+		// Query values may use reserved names; written data may not.
+		if (p_sentinel_reason != kInQuery && is_reserved_field_name(name)) {
+			return "field names cannot begin and end with __: " + name;
 		}
 		const Variant value = p_data[key];
 		FieldValue field;

@@ -22,6 +22,9 @@ namespace godot_firebase {
 
 namespace {
 
+// FirebaseStorage.MAX_DOWNLOAD: download_bytes() allocates max_size bytes up front.
+constexpr int64_t kMaxDownload = 100 * 1024 * 1024;
+
 // Same rule as FirebaseStorage.is_file_path().
 bool is_file_path(const String &p_path) {
 	return !p_path.is_empty() && !p_path.begins_with("/") && !p_path.ends_with("/") && !p_path.contains("//");
@@ -90,8 +93,8 @@ int64_t FirebaseStorageNative::upload_bytes(const String &p_path, const PackedBy
 
 int64_t FirebaseStorageNative::download_bytes(const String &p_path, int64_t p_max_size) {
 	return start_with_file(p_path, [p_max_size](StorageReference file, Completion done) {
-		if (p_max_size <= 0) {
-			done(Outcome::failure(kInvalidArgument, "max_size must be positive"));
+		if (p_max_size <= 0 || p_max_size > kMaxDownload) {
+			done(Outcome::failure(kInvalidArgument, "max_size must be in 1.." + String::num_int64(kMaxDownload)));
 			return;
 		}
 		// GetBytes writes into the buffer until its future completes.

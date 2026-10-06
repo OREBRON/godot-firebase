@@ -348,16 +348,18 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   Zaman damgası 0001-01-01 ile 9999-12-31 arasında olmalı. `server_timestamp()`,
   `increment()` ve `delete_field()` dizi içinde ve sorgu değerinde kullanılamaz.
 - Firestore sorgu alanları ve `update_doc()` anahtarları noktalı alan yoludur
-  (`"profile.level"`): boş parça ve `~ * / [ ]` içeremez. `limit` en fazla
+  (`"profile.level"`): boş parça ve `~ * / [ ]` içeremez. Yazılan alan adları
+  (ve `update_doc()` yol parçaları) `__` ile hem başlayıp hem bitemez (`__x__`). `limit` en fazla
   2147483647; `limit <= 0` limitsiz demek.
 - Firestore tipleri: null, bool, int, float, String, PackedByteArray, Array
   (iç içe dizi yok), Dictionary (String anahtarlı).
-- Database ve Functions tipleri: null, bool, int, float, String, Array
+- Database ve Functions tipleri: null, bool, int, sonlu float (NaN/Inf yok), String, Array
   (packed diziler dahil), Dictionary (String anahtarlı). Database anahtarları
   `. # $ [ ] /` içeremez; `FirebaseDatabase.SERVER_TIMESTAMP` sunucu zamanını
   Unix milisaniye olarak yazar.
 - Storage metadata sonucu `{path, name, size, content_type, updated}`;
-  `updated` Unix milisaniye. `download_bytes` varsayılan olarak en fazla 10 MB okur.
+  `updated` Unix milisaniye. `download_bytes` varsayılan olarak en fazla 10 MB okur;
+  `max_size` tamponu baştan ayrıldığı için en fazla 100 MB (`FirebaseStorage.MAX_DOWNLOAD`) olabilir.
 - Geçersiz veri native katmana ulaşmadan `ERR_INVALID_ARGUMENT` ile döner.
 - Silinen modülün özelliği `null` olur (`Firebase.firestore == null`). Bu yüzden
   modül özellikleri (`Firebase.auth`, `Firebase.storage`, ...) tipsizdir;

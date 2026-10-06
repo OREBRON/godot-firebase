@@ -30,3 +30,8 @@ func _run() -> void:
 		check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "invalid path rejected: '%s'" % bad)
 	result = await storage.download_bytes("a", 0).wait()
 	check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "max_size must be positive")
+	result = await storage.download_bytes("a", FirebaseStorage.MAX_DOWNLOAD + 1).wait()
+	check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "max_size above MAX_DOWNLOAD rejected")
+	await storage.upload_bytes("users/u1/limit.bin", bytes).wait()
+	result = await storage.download_bytes("users/u1/limit.bin", FirebaseStorage.MAX_DOWNLOAD).wait()
+	check(result.ok and result.value == bytes, "max_size equal to MAX_DOWNLOAD accepted")

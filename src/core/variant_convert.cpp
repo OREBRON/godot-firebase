@@ -1,5 +1,6 @@
 #include "variant_convert.h"
 
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <utility>
@@ -76,6 +77,10 @@ String convert_value(const Variant &p_value, firebase::Variant &r_out, std::vect
 			r_out = firebase::Variant(static_cast<int64_t>(p_value));
 			return String();
 		case Variant::FLOAT:
+			// iOS JSON serialization raises an uncatchable exception for NaN/Inf.
+			if (!std::isfinite(static_cast<double>(p_value))) {
+				return "numbers must be finite";
+			}
 			r_out = firebase::Variant(static_cast<double>(p_value));
 			return String();
 		case Variant::STRING:

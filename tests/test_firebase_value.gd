@@ -46,6 +46,15 @@ func _run() -> void:
 	check(FirebaseValue.validate_update_data({"profile.level": 2}).is_empty(), "dotted update key is valid")
 	check(not FirebaseValue.validate_update_data({"a/b": 2}).is_empty(), "update key with '/' is rejected")
 
+	for reserved in ["__x__", "__", "___"]:
+		check(not FirebaseValue.validate_data({reserved: 1}, false).is_empty(), "reserved field name is rejected: %s" % reserved)
+		check(not FirebaseValue.validate_data({"m": {reserved: 1}}, false).is_empty(), "nested reserved field name is rejected: %s" % reserved)
+		check(not FirebaseValue.validate_data({"items": [{reserved: 1}]}, false).is_empty(), "reserved field name in an array map is rejected: %s" % reserved)
+		check(not FirebaseValue.validate_update_data({"profile.%s" % reserved: 1}).is_empty(), "reserved update path segment is rejected: %s" % reserved)
+	check(FirebaseValue.validate_data({"__x": 1, "x__": 2, "_x_": 3}, false).is_empty(), "names with one reserved edge are valid")
+	check(FirebaseValue.validate_filter_value("==", {"__x__": 1}).is_empty(), "reserved names are allowed in query values")
+	check(FirebaseValue.is_field_path("__name__"), "reserved names are allowed in query field paths")
+
 	check(not FirebaseValue.validate_data({"t": {FirebaseValue.TAG: 5}}, false).is_empty(), "numeric tag is rejected")
 	check(not FirebaseValue.validate_data({"t": {FirebaseValue.TAG: ""}}, false).is_empty(), "empty tag is rejected")
 

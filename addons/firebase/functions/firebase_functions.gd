@@ -2,7 +2,7 @@ class_name FirebaseFunctions
 extends RefCounted
 ## Cloud Functions (callable HTTPS functions) API.
 ##
-## Data and results are null, bool, int, float, String, Array and Dictionary
+## Data and results are null, bool, int, finite float, String, Array and Dictionary
 ## with String keys. The region comes from the project setting REGION_SETTING.
 
 const REGION_SETTING := "firebase/functions/region"
@@ -33,8 +33,10 @@ static func validate_data(data: Variant) -> String:
 
 static func _validate_data(data: Variant, ancestors: Array) -> String:
 	match typeof(data):
-		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_STRING_NAME:
+		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_STRING, TYPE_STRING_NAME:
 			return ""
+		TYPE_FLOAT:
+			return "" if is_finite(data) else "numbers must be finite"
 		TYPE_ARRAY, TYPE_DICTIONARY, TYPE_PACKED_INT32_ARRAY, TYPE_PACKED_INT64_ARRAY, TYPE_PACKED_FLOAT32_ARRAY, TYPE_PACKED_FLOAT64_ARRAY, TYPE_PACKED_STRING_ARRAY:
 			if ancestors.size() >= 100:
 				return "data exceeds 100 container levels"

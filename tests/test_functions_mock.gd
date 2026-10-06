@@ -45,3 +45,12 @@ func _run() -> void:
 	check(result.ok, "100 containers accepted")
 	result = await functions.call_function("inspect", [deep]).wait()
 	check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "101 containers rejected")
+
+	calls[0] = 0
+	for bad in [NAN, INF, -INF]:
+		for data in [bad, {"v": bad}, [bad], PackedFloat64Array([bad]), PackedFloat32Array([bad])]:
+			result = await functions.call_function("inspect", data).wait()
+			check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "non-finite number rejected: %s" % str(data))
+	check(calls[0] == 0, "non-finite input never calls handler")
+	result = await functions.call_function("inspect", {"v": 1.5}).wait()
+	check(result.ok, "finite float accepted")

@@ -20,6 +20,9 @@ func upload_bytes(path: String, data: PackedByteArray, content_type: String) -> 
 
 func download_bytes(path: String, max_size: int) -> int:
 	var id := _take_id()
+	if max_size <= 0 or max_size > FirebaseStorage.MAX_DOWNLOAD:
+		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "max_size must be in 1..%d" % FirebaseStorage.MAX_DOWNLOAD)
+		return id
 	if _fail_if_requested(id) or _fail_if_missing(id, path):
 		return id
 	var bytes: PackedByteArray = files[path].bytes
