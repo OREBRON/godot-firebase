@@ -17,7 +17,10 @@ class FirebaseFirestoreNative : public FirebaseModuleNative {
 	GDCLASS(FirebaseFirestoreNative, FirebaseModuleNative)
 
 public:
+	FirebaseFirestoreNative();
 	~FirebaseFirestoreNative() override;
+	// Registry calls this before deleting the shared Firebase App.
+	static void shutdown_all();
 
 	godot::Error initialize();
 	int64_t get_doc(const godot::String &p_path, const godot::String &p_source = "default");
@@ -38,6 +41,8 @@ protected:
 	static void _bind_methods();
 
 private:
+	void remove_all_listeners();
+
 	// Runs `p_request` with the document at `p_path`, or fails for an invalid path.
 	int64_t start_with_document(const godot::String &p_path, const std::function<void(firebase::firestore::DocumentReference, Completion)> &p_request);
 

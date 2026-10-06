@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <memory>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -46,6 +47,25 @@ Variant metadata_of(const Future<Metadata> &p_future) {
 }
 
 } // namespace
+
+namespace {
+std::unordered_set<FirebaseStorageNative *> active_modules;
+}
+
+FirebaseStorageNative::FirebaseStorageNative() {
+	active_modules.insert(this);
+}
+
+FirebaseStorageNative::~FirebaseStorageNative() {
+	active_modules.erase(this);
+}
+
+void FirebaseStorageNative::shutdown_all() {
+	// The Storage instance belongs to the App; later requests fail as unavailable.
+	for (FirebaseStorageNative *module : active_modules) {
+		module->storage = nullptr;
+	}
+}
 
 godot::Error FirebaseStorageNative::initialize() {
 	if (storage) {

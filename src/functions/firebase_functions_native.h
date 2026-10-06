@@ -12,6 +12,11 @@ class FirebaseFunctionsNative : public FirebaseModuleNative {
 	GDCLASS(FirebaseFunctionsNative, FirebaseModuleNative)
 
 public:
+	FirebaseFunctionsNative();
+	~FirebaseFunctionsNative() override;
+	// Registry calls this before deleting the shared Firebase App.
+	static void shutdown_all();
+
 	// Uses the region of project setting FirebaseFunctions.REGION_SETTING.
 	godot::Error initialize();
 	// Not named `call`: that would hide Object.call().

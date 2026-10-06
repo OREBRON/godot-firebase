@@ -81,8 +81,17 @@ void uninitialize_godot_firebase([[maybe_unused]] ModuleInitializationLevel p_le
 #ifdef GODOT_FIREBASE_AUTH
 		godot_firebase::FirebaseAuthNative::shutdown_all();
 #endif
+#ifdef GODOT_FIREBASE_FIRESTORE
+		godot_firebase::FirebaseFirestoreNative::shutdown_all();
+#endif
+#ifdef GODOT_FIREBASE_STORAGE
+		godot_firebase::FirebaseStorageNative::shutdown_all();
+#endif
 #ifdef GODOT_FIREBASE_DATABASE
 		godot_firebase::FirebaseDatabaseNative::shutdown_all();
+#endif
+#ifdef GODOT_FIREBASE_FUNCTIONS
+		godot_firebase::FirebaseFunctionsNative::shutdown_all();
 #endif
 #ifdef GODOT_FIREBASE_ANALYTICS
 		godot_firebase::FirebaseAnalyticsNative::shutdown_all();

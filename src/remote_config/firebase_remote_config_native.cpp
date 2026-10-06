@@ -292,6 +292,10 @@ int64_t FirebaseRemoteConfigNative::start_listening() {
 
 void FirebaseRemoteConfigNative::stop_listening() {
 	++listener_generation;
+	if (!listening) {
+		// Never registered, or already removed (possibly by shutdown_all before App deletion).
+		return;
+	}
 	listening = false;
 	listener.Remove();
 }

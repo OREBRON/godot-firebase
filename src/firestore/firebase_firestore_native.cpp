@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -230,10 +231,32 @@ String add_batch_op(firebase::firestore::Firestore *p_db, const Variant &p_op, W
 
 } // namespace
 
+namespace {
+std::unordered_set<FirebaseFirestoreNative *> active_modules;
+}
+
+FirebaseFirestoreNative::FirebaseFirestoreNative() {
+	active_modules.insert(this);
+}
+
 FirebaseFirestoreNative::~FirebaseFirestoreNative() {
+	remove_all_listeners();
+	active_modules.erase(this);
+}
+
+void FirebaseFirestoreNative::shutdown_all() {
+	// Listener registrations and the Firestore instance belong to the App.
+	for (FirebaseFirestoreNative *module : active_modules) {
+		module->remove_all_listeners();
+		module->db = nullptr;
+	}
+}
+
+void FirebaseFirestoreNative::remove_all_listeners() {
 	for (auto &listener : listeners) {
 		listener.second.Remove();
 	}
+	listeners.clear();
 }
 
 godot::Error FirebaseFirestoreNative::initialize() {

@@ -95,6 +95,8 @@ jobs:
         run: python tools/run_tests.py
       - name: Test import failure detection
         run: python tests/test_test_runner.py
+      - name: Test native shutdown order
+        run: python tests/test_native_shutdown.py
       - name: Verify desktop source can be rebuilt
         run: python tools/build_desktop_stub.py --platform "$DESKTOP_PLATFORM" --arch "$DESKTOP_ARCH"
       - name: Test rebuilt library with editor import and stock tests

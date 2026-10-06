@@ -20,6 +20,9 @@ concurrency:
 
 jobs:
   development:
+    # Fork pull requests never run on the persistent self-hosted runner: it keeps
+    # third_party/ and SCons state between runs and has a writable $HOME.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 120
     strategy:

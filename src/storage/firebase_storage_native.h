@@ -13,6 +13,11 @@ class FirebaseStorageNative : public FirebaseModuleNative {
 	GDCLASS(FirebaseStorageNative, FirebaseModuleNative)
 
 public:
+	FirebaseStorageNative();
+	~FirebaseStorageNative() override;
+	// Registry calls this before deleting the shared Firebase App.
+	static void shutdown_all();
+
 	godot::Error initialize();
 	int64_t upload_bytes(const godot::String &p_path, const godot::PackedByteArray &p_data, const godot::String &p_content_type);
 	int64_t download_bytes(const godot::String &p_path, int64_t p_max_size);

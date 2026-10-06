@@ -1,5 +1,6 @@
 #include "firebase_functions_native.h"
 
+#include <unordered_set>
 #include <utility>
 
 #include <godot_cpp/classes/project_settings.hpp>
@@ -22,7 +23,24 @@ namespace {
 const char *const kRegionSetting = "firebase/functions/region";
 const char *const kDefaultRegion = "us-central1";
 
+std::unordered_set<FirebaseFunctionsNative *> active_modules;
+
 } // namespace
+
+FirebaseFunctionsNative::FirebaseFunctionsNative() {
+	active_modules.insert(this);
+}
+
+FirebaseFunctionsNative::~FirebaseFunctionsNative() {
+	active_modules.erase(this);
+}
+
+void FirebaseFunctionsNative::shutdown_all() {
+	// The Functions instance belongs to the App; later calls fail as unavailable.
+	for (FirebaseFunctionsNative *module : active_modules) {
+		module->functions = nullptr;
+	}
+}
 
 godot::Error FirebaseFunctionsNative::initialize() {
 	if (functions) {
