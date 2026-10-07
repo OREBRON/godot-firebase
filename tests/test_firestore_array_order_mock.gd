@@ -21,17 +21,18 @@ func _run() -> void:
 		var result := await db.set_doc("arrays/" + fixture[0], {"v": fixture[1]}).wait()
 		check(result.ok, "array fixture is accepted: " + fixture[0])
 
+	# Inequality filters order results by the filtered field, then by document ID.
 	for fixture in [
-		["<", [2], ["empty", "false", "long", "null", "one", "one_float", "packed", "prefix", "tail", "true"]],
-		[">", [1], ["long", "packed", "prefix", "tail", "text", "two"]],
+		["<", [2], ["empty", "null", "false", "true", "one", "one_float", "packed", "prefix", "long", "tail"]],
+		[">", [1], ["packed", "prefix", "long", "tail", "two", "text"]],
 		["==", [1], ["one", "one_float"]],
-		["!=", [1], ["empty", "false", "long", "null", "packed", "prefix", "tail", "text", "true", "two"]],
-		["<", [1, 2, 3], ["empty", "false", "null", "one", "one_float", "packed", "true"]],
-		["<=", [1, 2, 3], ["empty", "false", "null", "one", "one_float", "packed", "prefix", "true"]],
-		[">", [1, 2, 3], ["long", "tail", "text", "two"]],
-		[">=", [1, 2, 3], ["long", "prefix", "tail", "text", "two"]],
+		["!=", [1], ["empty", "null", "false", "true", "packed", "prefix", "long", "tail", "two", "text"]],
+		["<", [1, 2, 3], ["empty", "null", "false", "true", "one", "one_float", "packed"]],
+		["<=", [1, 2, 3], ["empty", "null", "false", "true", "one", "one_float", "packed", "prefix"]],
+		[">", [1, 2, 3], ["long", "tail", "two", "text"]],
+		[">=", [1, 2, 3], ["prefix", "long", "tail", "two", "text"]],
 		["<", [], []],
-		[">", [], ["false", "long", "null", "one", "one_float", "packed", "prefix", "tail", "text", "true", "two"]],
+		[">", [], ["null", "false", "true", "one", "one_float", "packed", "prefix", "long", "tail", "two", "text"]],
 		["==", [], ["empty"]],
 	]:
 		var result := await db.query("arrays", [["v", fixture[0], fixture[1]]]).wait()

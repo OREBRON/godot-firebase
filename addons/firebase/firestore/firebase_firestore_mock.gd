@@ -1,11 +1,19 @@
 class_name FirebaseFirestoreMock
 extends FirebaseMockModule
 ## In-memory FirebaseFirestoreNative. Nothing is persisted.
+## Queries follow the SDK's local matching and ordering (firebase-android-sdk
+## core/Query.java, core/FieldFilter.java and model/Values.kt).
 
 signal document_changed(listener_id: int, ok: bool, snapshot: Dictionary, error_code: int, error_message: String)
 
 ## Firestore error code for a missing document on update.
 const NOT_FOUND := 5
+## Values.typeOrder() ranks of the value types this addon reads and writes.
+enum TypeOrder { NULL_VALUE = 0, BOOLEAN = 2, NAN_VALUE = 3, NUMBER = 4, TIMESTAMP = 5, STRING = 8, BYTES = 9, ARRAY = 14, MAP = 16 }
+const KEY_FIELD := "__name__"
+const INEQUALITY_OPS: Array[String] = ["<", "<=", ">", ">=", "!="]
+# 2^63: the smallest double above every int64 value.
+const INT64_BOUND := 9223372036854775808.0
 
 var documents: Dictionary[String, Dictionary] = {}
 var _listeners: Dictionary[int, Dictionary] = {}
@@ -67,11 +75,12 @@ func _query(collection_path: String, filters: Array, order_by: Array, limit: int
 		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, reason)
 		return id
 	var from_cache := source == "cache" or not _network_enabled
+	var ordering := _normalized_order_by(filters, order_by)
 	var matches: Array = []
 	for path in documents:
-		if path.get_base_dir() == collection_path and _matches(path, documents[path], filters) and order_by.all(func(order): return _field(path, documents[path], order[0]).found):
+		if path.get_base_dir() == collection_path and _matches(path, documents[path], filters, ordering):
 			matches.append(_snapshot(path, from_cache))
-	matches.sort_custom(func(a, b): return _ordered_before(a, b, order_by))
+	matches.sort_custom(func(a, b): return _compare_documents(a, b, ordering) < 0)
 	if limit > 0:
 		matches = matches.slice(0, limit)
 	var metadata := {"is_from_cache": from_cache, "has_pending_writes": matches.any(func(doc): return doc.metadata.has_pending_writes)}
@@ -276,7 +285,7 @@ func _snapshot(path: String, from_cache: bool = false) -> Dictionary:
 
 ## Resolves dotted paths without confusing a missing field with a stored null.
 func _field(path: String, data: Dictionary, field: String) -> Dictionary:
-	if field == "__name__":
+	if field == KEY_FIELD:
 		return {"found": true, "value": path.get_file()}
 	var value: Variant = data
 	for segment in field.split("."):
@@ -286,69 +295,157 @@ func _field(path: String, data: Dictionary, field: String) -> Dictionary:
 	return {"found": true, "value": value}
 
 
-func _matches(path: String, data: Dictionary, filters: Array) -> bool:
+## Query.getNormalizedOrderBy(): explicit orders, then the remaining inequality
+## fields in field-path order, then the document ID; implicit orders take the
+## last explicit direction.
+func _normalized_order_by(filters: Array, order_by: Array) -> Array:
+	var ordering: Array = order_by.map(func(order): return [String(order[0]), String(order[1])])
+	var ordered: Array = ordering.map(func(order): return order[0])
+	var direction: String = ordering[-1][1] if not ordering.is_empty() else "asc"
+	var implicit_fields: Array = []
 	for filter in filters:
-		var field := _field(path, data, filter[0])
-		if not field.found:
+		var field := String(filter[0])
+		if INEQUALITY_OPS.has(String(filter[1])) and field != KEY_FIELD and not ordered.has(field) and not implicit_fields.has(field):
+			implicit_fields.append(field)
+	# FieldPath order compares dotted segments, not the joined string.
+	implicit_fields.sort_custom(func(a, b): return _compare(Array(a.split(".")), Array(b.split("."))) < 0)
+	for field in implicit_fields:
+		ordering.append([field, direction])
+	if not ordered.has(KEY_FIELD):
+		ordering.append([KEY_FIELD, direction])
+	return ordering
+
+
+## Query.matches(): every ordered field exists (null counts) and every filter matches.
+func _matches(path: String, data: Dictionary, filters: Array, ordering: Array) -> bool:
+	for order in ordering:
+		if not _field(path, data, order[0]).found:
 			return false
-		var value: Variant = field.value
-		var expected: Variant = filter[2]
-		var passed: bool
-		match filter[1]:
-			"==": passed = _compare(value, expected) == 0
-			"!=": passed = _compare(value, expected) != 0
-			"<": passed = _compare(value, expected) < 0
-			"<=": passed = _compare(value, expected) <= 0
-			">": passed = _compare(value, expected) > 0
-			">=": passed = _compare(value, expected) >= 0
-			"array-contains": passed = value is Array and value.any(func(item): return _compare(item, expected) == 0)
-			"in": passed = expected.any(func(item): return _compare(value, item) == 0)
-		if not passed:
+	for filter in filters:
+		if not _matches_filter(_field(path, data, filter[0]), String(filter[1]), filter[2]):
 			return false
 	return true
 
 
-func _ordered_before(a: Dictionary, b: Dictionary, order_by: Array) -> bool:
-	for order in order_by:
+## FieldFilter.matches() with the ArrayContainsFilter and InFilter overrides.
+func _matches_filter(field: Dictionary, op: String, expected: Variant) -> bool:
+	if not field.found:
+		return false
+	var value: Variant = field.value
+	match op:
+		"array-contains":
+			return _type_order(value) == TypeOrder.ARRAY and Array(value).any(func(item): return _compare(item, expected) == 0)
+		"in":
+			return expected.any(func(item): return _compare(value, item) == 0)
+		"!=":
+			# Types need not match, but a stored null never matches.
+			return value != null and _compare(value, expected) != 0
+	# Equality and ranges only match values of the filter value's type order.
+	if _type_order(value) != _type_order(expected):
+		return false
+	var comparison := _compare(value, expected)
+	match op:
+		"==": return comparison == 0
+		"<": return comparison < 0
+		"<=": return comparison <= 0
+		">": return comparison > 0
+		">=": return comparison >= 0
+	return false
+
+
+## Query.comparator(): the normalized orders, which always end in a document-ID order.
+func _compare_documents(a: Dictionary, b: Dictionary, ordering: Array) -> int:
+	for order in ordering:
 		var result := _compare(_field(a.path, a.data, order[0]).value, _field(b.path, b.data, order[0]).value)
 		if result != 0:
-			return result < 0 if order[1] == "asc" else result > 0
-	# Firestore uses the document key as a stable final ordering.
-	return a.path < b.path if order_by.is_empty() or order_by[-1][1] == "asc" else a.path > b.path
+			return result if order[1] == "asc" else -result
+	return 0
 
 
-## Orders values of different types by type first, like Firestore does.
-func _compare(a: Variant, b: Variant) -> int:
-	var a_key: Variant = _sort_value(a)
-	var b_key: Variant = _sort_value(b)
-	var a_rank := _type_rank(a_key)
-	var b_rank := _type_rank(b_key)
-	if a_rank != b_rank:
-		return signi(a_rank - b_rank)
-	if a_key is Array and b_key is Array:
-		for index in mini(a_key.size(), b_key.size()):
-			var result := _compare(a_key[index], b_key[index])
-			if result != 0:
-				return result
-		return signi(a_key.size() - b_key.size())
-	if a_rank >= 4:
-		return 0 if a_key == b_key else 1
-	return 0 if a_key == b_key else (-1 if a_key < b_key else 1)
-
-
-func _sort_value(value: Variant) -> Variant:
-	if FirebaseValue.tag_of(value) == FirebaseValue.TIMESTAMP:
-		return FirebaseValue.to_unix_seconds(value)
-	return String(value) if value is StringName else value
-
-
-func _type_rank(value: Variant) -> int:
+## Values.typeOrder() for the Variant types that validation admits.
+func _type_order(value: Variant) -> TypeOrder:
 	match typeof(value):
-		TYPE_NIL: return 0
-		TYPE_BOOL: return 1
-		TYPE_INT, TYPE_FLOAT: return 2
-		TYPE_STRING: return 3
-	return 4
+		TYPE_NIL: return TypeOrder.NULL_VALUE
+		TYPE_BOOL: return TypeOrder.BOOLEAN
+		TYPE_INT: return TypeOrder.NUMBER
+		TYPE_FLOAT: return TypeOrder.NAN_VALUE if is_nan(value) else TypeOrder.NUMBER
+		TYPE_STRING, TYPE_STRING_NAME: return TypeOrder.STRING
+		TYPE_PACKED_BYTE_ARRAY: return TypeOrder.BYTES
+		TYPE_DICTIONARY: return TypeOrder.TIMESTAMP if FirebaseValue.tag_of(value) == FirebaseValue.TIMESTAMP else TypeOrder.MAP
+	# Array and every packed array except PackedByteArray.
+	return TypeOrder.ARRAY
+
+
+## Values.compare(): the type order first, then the values within that type.
+func _compare(a: Variant, b: Variant) -> int:
+	var order := _type_order(a)
+	if order != _type_order(b):
+		return signi(order - _type_order(b))
+	match order:
+		TypeOrder.BOOLEAN: return _compare_scalars(int(a), int(b))
+		TypeOrder.NUMBER: return _compare_numbers(a, b)
+		TypeOrder.TIMESTAMP: return _compare_timestamps(a, b)
+		# Godot compares Strings by code point, which is UTF-8 byte order.
+		TypeOrder.STRING: return _compare_scalars(String(a), String(b))
+		TypeOrder.BYTES, TypeOrder.ARRAY: return _compare_sequences(a, b)
+		TypeOrder.MAP: return _compare_maps(a, b)
+	# Every null equals null and every NaN equals NaN.
+	return 0
+
+
+func _compare_scalars(a: Variant, b: Variant) -> int:
+	return 0 if a == b else (-1 if a < b else 1)
+
+
+## Values.compareNumbers(): exact for int64 against double, where GDScript rounds the int.
+func _compare_numbers(a: Variant, b: Variant) -> int:
+	if a is float and b is int:
+		return _compare_float_with_int(a, b)
+	if a is int and b is float:
+		return -_compare_float_with_int(b, a)
+	return _compare_scalars(a, b)
+
+
+## NumberComparisonHelper.firestoreCompareDoubleWithLong() for a non-NaN double.
+func _compare_float_with_int(value: float, integer: int) -> int:
+	if value < -INT64_BOUND:
+		return -1
+	if value >= INT64_BOUND:
+		return 1
+	var truncated := int(value)
+	if truncated != integer:
+		return -1 if truncated < integer else 1
+	return _compare_scalars(value, float(integer))
+
+
+## Values.compareTimestamps(): seconds, then nanoseconds, without float rounding.
+func _compare_timestamps(a: Dictionary, b: Dictionary) -> int:
+	var result := _compare_scalars(a.get("seconds", 0), b.get("seconds", 0))
+	return result if result != 0 else _compare_scalars(a.get("nanos", 0), b.get("nanos", 0))
+
+
+## Values.compareArrays() and compareBinaries() (unsigned bytes): elements, then length.
+func _compare_sequences(a: Variant, b: Variant) -> int:
+	for index in mini(a.size(), b.size()):
+		var result := _compare(a[index], b[index])
+		if result != 0:
+			return result
+	return signi(a.size() - b.size())
+
+
+## Values.compareMaps(): sorted keys pairwise, key before value, then the field count.
+func _compare_maps(a: Dictionary, b: Dictionary) -> int:
+	var a_keys := a.keys()
+	var b_keys := b.keys()
+	a_keys.sort()
+	b_keys.sort()
+	for index in mini(a_keys.size(), b_keys.size()):
+		var result := _compare_scalars(a_keys[index], b_keys[index])
+		if result == 0:
+			result = _compare(a[a_keys[index]], b[b_keys[index]])
+		if result != 0:
+			return result
+	return signi(a_keys.size() - b_keys.size())
 
 
 func _notify(listener_id: int) -> void:
