@@ -136,6 +136,10 @@ if platform == "ios":
         first_existing(["third_party/GoogleSignIn/GoogleSignIn.xcframework"], "Google Sign-In (run tools/build_google_signin_ios.sh)")
         folders += [("third_party/GoogleSignIn", None)]
         bundles += sorted(glob.glob("third_party/GoogleSignIn/resources/*.bundle"))
+    if "admob" in modules:
+        first_existing(["third_party/GoogleMobileAds/GoogleMobileAds.xcframework"], "Google Mobile Ads (run tools/bootstrap.sh)")
+        folders += [("third_party/GoogleMobileAds", None)]
+        bundles += sorted(glob.glob("third_party/GoogleMobileAds/resources/*.bundle"))
     for folder, only in folders:
         for xcframework in sorted(glob.glob(folder + "/*.xcframework")):
             name = os.path.basename(xcframework)[: -len(".xcframework")]
