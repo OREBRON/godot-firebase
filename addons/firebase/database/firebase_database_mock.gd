@@ -7,6 +7,8 @@ signal value_changed(listener_id: int, ok: bool, snapshot: Dictionary, error_cod
 ## The whole database value. Empty containers and null descendants are absent.
 var root: Variant = null
 var _listeners: Dictionary[int, String] = {}
+## Last snapshot sent to each listener; the SDKs raise value events only on change.
+var _sent: Dictionary[int, Dictionary] = {}
 var _push_count := 0
 ## Test-observable startup option. The mock does not persist to disk.
 var persistence_enabled := false
@@ -15,7 +17,10 @@ var _initialized := false
 var _reference_used := false
 ## Test fixture state set by simulate_connection().
 var _server_reachable := true
-var _connected := true
+## Like the SDKs, the connection opens shortly after the first reference.
+var _connected := false
+## Unknown until the first connection, like .info/serverTimeOffset on devices.
+var _server_time_offset: Variant = null
 var _server_root: Variant = null
 var _pending_writes: Array[Dictionary] = []
 var _pending_registrations: Array[Dictionary] = []
@@ -31,7 +36,7 @@ func initialize(persistence_enabled: bool = false) -> int:
 
 
 func get_value(path: String) -> int:
-	_reference_used = true
+	_use_reference()
 	var id := _take_id()
 	if not _fail_if_requested(id):
 		_finish(id, _snapshot(path))
@@ -93,13 +98,22 @@ func simulate_connection(connected: bool) -> void:
 	_update_connection()
 
 
+## The SDKs create the connection with the first reference; it opens shortly after.
+func _use_reference() -> void:
+	if not _reference_used:
+		_reference_used = true
+		_update_connection.call_deferred()
+
+
 func _update_connection() -> void:
 	var open := network_enabled and _server_reachable
 	if open == _connected:
 		return
 	_connected = open
+	if open:
+		_server_time_offset = 0
 	for listener_id in _listeners:
-		if _listeners[listener_id] == ".info/connected":
+		if _listeners[listener_id] in FirebaseDatabase.INFO_PATHS:
 			_notify(listener_id)
 	if open:
 		_flush_offline_work()
@@ -132,7 +146,7 @@ func _run_disconnect_actions() -> void:
 
 
 func _register_disconnect(registration: Dictionary) -> int:
-	_reference_used = true
+	_use_reference()
 	var id := _take_id()
 	if _fail_if_requested(id):
 		return id
@@ -194,7 +208,7 @@ func _keep_uncancelled(path: String, value: Variant, cancelled: String) -> void:
 
 
 func listen_value(path: String) -> int:
-	_reference_used = true
+	_use_reference()
 	var id := _take_id()
 	_listeners[id] = path
 	_notify(id)
@@ -203,11 +217,12 @@ func listen_value(path: String) -> int:
 
 func remove_listener(id: int) -> void:
 	_listeners.erase(id)
+	_sent.erase(id)
 
 
 ## Local snapshots update immediately; write completion models a server ACK.
 func _write(changes: Array, result: Variant = null) -> int:
-	_reference_used = true
+	_use_reference()
 	var id := _take_id()
 	if _fail_if_requested(id):
 		return id
@@ -306,7 +321,8 @@ func _resolve(value: Variant) -> Variant:
 
 func _snapshot(path: String) -> Dictionary:
 	if path in FirebaseDatabase.INFO_PATHS:
-		return {"key": path.get_file(), "exists": true, "value": _connected if path == ".info/connected" else 0}
+		var info: Variant = _connected if path == ".info/connected" else _server_time_offset
+		return {"key": path.get_file(), "exists": info != null, "value": info}
 	var value: Variant = root
 	for key in _keys(path):
 		value = _child(value, key)
@@ -362,8 +378,13 @@ static func _is_list_index(key: String) -> bool:
 
 
 func _notify(listener_id: int) -> void:
-	if _listeners.has(listener_id):
-		_deliver_snapshot.call_deferred(listener_id, _snapshot(_listeners[listener_id]))
+	if not _listeners.has(listener_id):
+		return
+	var snapshot := _snapshot(_listeners[listener_id])
+	if _sent.has(listener_id) and _sent[listener_id] == snapshot:
+		return
+	_sent[listener_id] = snapshot.duplicate(true)
+	_deliver_snapshot.call_deferred(listener_id, snapshot)
 
 
 func _deliver_snapshot(listener_id: int, snapshot: Dictionary) -> void:
