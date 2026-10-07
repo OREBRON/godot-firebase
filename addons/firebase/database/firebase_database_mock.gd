@@ -310,7 +310,55 @@ func _snapshot(path: String) -> Dictionary:
 	var value: Variant = root
 	for key in _keys(path):
 		value = _child(value, key)
-	return {"key": path.get_file(), "exists": value != null, "value": value.duplicate(true) if value is Dictionary or value is Array else value}
+	return {"key": path.get_file(), "exists": value != null, "value": _delivered(value)}
+
+
+## A copy of `value` as DataSnapshot::value() delivers it on iOS and Android. The SDKs'
+## getValue()/valForExport: turn children whose keys are all list indexes into an Array,
+## null in gaps, when the largest index is below twice the child count. Other maps
+## pass through std::map, so their keys arrive in byte order.
+static func _delivered(value: Variant) -> Variant:
+	var children := _children(value)
+	if children.is_empty():
+		return value
+	var keys := children.keys()
+	keys.sort()
+	var delivered := {}
+	for key in keys:
+		delivered[key] = _delivered(children[key])
+	return _as_list(delivered)
+
+
+## Child values by key; the mock keeps lists that were written as Arrays.
+static func _children(value: Variant) -> Dictionary:
+	if value is Dictionary:
+		return value
+	var children := {}
+	if value is Array:
+		for index in value.size():
+			if value[index] != null:
+				children[str(index)] = value[index]
+	return children
+
+
+static func _as_list(children: Dictionary) -> Variant:
+	var largest := 0
+	for key: String in children:
+		if not _is_list_index(key):
+			return children
+		largest = maxi(largest, key.to_int())
+	if largest >= 2 * children.size():
+		return children
+	var items := []
+	items.resize(largest + 1)
+	for key: String in children:
+		items[key.to_int()] = children[key]
+	return items
+
+
+## Digits without a leading zero. Longer keys could never pass the size rule.
+static func _is_list_index(key: String) -> bool:
+	return key.length() <= 10 and key.is_valid_int() and (key == "0" or key[0] in "123456789")
 
 
 func _notify(listener_id: int) -> void:

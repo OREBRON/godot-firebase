@@ -25,6 +25,35 @@ func _run() -> void:
 	check(scalar is int and scalar == 7, "removing a missing descendant preserves scalar parent")
 	await db.set_value("child", 8).wait()
 	check((await db.get_value("").wait()).value.value == {"child": 8}, "writing a child replaces a scalar parent")
+	var lists := {
+		"dense index map": [{"0": "a", "1": "b"}, ["a", "b"]],
+		"gap": [{"0": "a", "2": "c"}, ["a", null, "c"]],
+		"leading gap": [{"1": "b"}, [null, "b"]],
+		"sparse index map": [{"3": "d"}, {"3": "d"}],
+		"sparse array": [[null, null, null, "d"], {"3": "d"}],
+		"leading zero": [{"0": "a", "01": "b"}, {"0": "a", "01": "b"}],
+		"negative index": [{"0": "a", "-1": "b"}, {"-1": "b", "0": "a"}],
+	}
+	for name: String in lists:
+		await db.set_value("list", lists[name][0]).wait()
+		var delivered: Variant = (await db.get_value("list").wait()).value.value
+		check(typeof(delivered) == typeof(lists[name][1]) and delivered == lists[name][1], "array rule matches the SDKs: " + name)
+	await db.set_value("list", ["a", "b", "c"]).wait()
+	await db.remove_value("list/1").wait()
+	check((await db.get_value("list").wait()).value.value == ["a", null, "c"], "removing an element leaves a null gap")
+	await db.remove_value("list/0").wait()
+	var sparse: Variant = (await db.get_value("list").wait()).value.value
+	check(sparse is Dictionary and sparse == {"2": "c"}, "a list that becomes too sparse arrives as a Dictionary")
+	await db.set_value("order", {"b": 1, "a": {"z": 1, "y": 2}, "B": 3, "10": 4, "9": 5}).wait()
+	var ordered: Variant = (await db.get_value("order").wait()).value.value
+	check(ordered is Dictionary and ordered.keys() == ["10", "9", "B", "a", "b"] and ordered.a.keys() == ["y", "z"], "map keys arrive in byte order at every level")
+	var listened: Array = []
+	var list_listener := db.listen_value("list", func(result: FirebaseResult): listened.append(result.value.value))
+	await process_frame
+	await db.set_value("list", {"0": "x"}).wait()
+	await process_frame
+	db.remove_listener(list_listener)
+	check(listened.back() is Array and listened.back() == ["x"], "listener snapshots carry delivered values")
 	var observed: Array = []
 	var listener := db.listen_value("", func(result: FirebaseResult): observed.append(result.value.value))
 	await process_frame
