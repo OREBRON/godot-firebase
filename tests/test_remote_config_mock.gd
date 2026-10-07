@@ -1,12 +1,16 @@
 extends FirebaseTest
 
+const API_PATH := "res://addons/firebase/remote_config/firebase_remote_config.gd"
+const MOCK_PATH := "res://addons/firebase/remote_config/firebase_remote_config_mock.gd"
+
 
 func _run() -> void:
-	check(FileAccess.file_exists("res://addons/firebase/remote_config/firebase_remote_config.gd"), "Remote Config module exists")
-	if not FileAccess.file_exists("res://addons/firebase/remote_config/firebase_remote_config.gd"):
+	check(FileAccess.file_exists(API_PATH), "Remote Config module exists")
+	if not FileAccess.file_exists(API_PATH):
 		return
-	var backend: RefCounted = load("res://addons/firebase/remote_config/firebase_remote_config_mock.gd").new()
-	var api: RefCounted = load("res://addons/firebase/remote_config/firebase_remote_config.gd").new(FirebaseRequests.new(backend))
+	await _clock()
+	var backend: RefCounted = load(MOCK_PATH).new(1)
+	var api: RefCounted = load(API_PATH).new(FirebaseRequests.new(backend))
 	var result: FirebaseResult = await api.ensure_initialized().wait()
 	check(result.ok and result.value.last_fetch_time_ms == 0, "initialization returns cold-start info")
 	result = await api.get_value("missing", TYPE_INT).wait()
@@ -72,6 +76,39 @@ func _run() -> void:
 	api = null
 	await process_frame
 	check(api_ref.get_ref() == null and teardown_events.is_empty(), "API teardown stops listener and suppresses queued delivery")
+
+
+## Android and iOS stamp fetches with epoch wall-clock time and reuse the cached
+## fetch while now < last fetch + minimum interval.
+func _clock() -> void:
+	var backend: RefCounted = load(MOCK_PATH).new()
+	var api: RefCounted = load(API_PATH).new(FirebaseRequests.new(backend))
+	var before := int(Time.get_unix_time_from_system() * 1000)
+	await api.fetch().wait()
+	var after := int(Time.get_unix_time_from_system() * 1000)
+	var fetched_at: int = (await api.get_info().wait()).value.last_fetch_time_ms
+	check(fetched_at >= before and fetched_at <= after, "default clock is the system clock")
+	backend.call("set_server_values", {"level": 1})
+	await api.fetch_and_activate().wait()
+	check((await api.get_value("level", TYPE_INT).wait()).value.source == api.STATIC, "default interval reuses the cached fetch")
+	backend.call("advance_time", 43200000)
+	await api.fetch_and_activate().wait()
+	check((await api.get_value("level", TYPE_INT).wait()).value.value == 1, "advance_time moves the system clock past the interval")
+
+	backend = load(MOCK_PATH).new(1000)
+	api = load(API_PATH).new(FirebaseRequests.new(backend))
+	await api.set_settings(60000, 30000).wait()
+	backend.call("set_server_values", {"level": 1})
+	await api.fetch_and_activate().wait()
+	check((await api.get_info().wait()).value.last_fetch_time_ms == 1000, "frozen test clock stamps its start time")
+	backend.call("set_server_values", {"level": 2})
+	backend.call("advance_time", 59999)
+	await api.fetch_and_activate().wait()
+	check((await api.get_value("level", TYPE_INT).wait()).value.value == 1, "fetch inside the minimum interval reuses the cache")
+	backend.call("advance_time", 1)
+	await api.fetch_and_activate().wait()
+	check((await api.get_value("level", TYPE_INT).wait()).value.value == 2, "fetch at the end of the minimum interval reaches the server")
+	check((await api.get_info().wait()).value.last_fetch_time_ms == 61000, "fetch time follows the test clock")
 
 
 func _listeners(api: RefCounted, backend: RefCounted) -> void:

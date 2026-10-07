@@ -1,7 +1,8 @@
 class_name FirebaseRemoteConfigMock
 extends FirebaseMockModule
-## Deterministic memory-only Remote Config. Helpers control server/time/network;
-## this does not emulate native disk persistence or platform conversion quirks.
+## Memory-only Remote Config. Fetch times and the minimum fetch interval use the
+## system clock like the SDKs. Helpers control server/time/network; this does
+## not emulate native disk persistence or platform conversion quirks.
 
 signal config_updated(updated_keys: PackedStringArray)
 signal config_update_failed(error_code: int, message: String)
@@ -14,13 +15,20 @@ var _fetched_version := 0
 var _active_version := 0
 var _minimum_fetch_interval_ms := 43200000
 var _fetch_timeout_ms := 30000
-var _now_ms := 1
+var _frozen_clock_ms := -1
+var _clock_offset_ms := 0
 var _network_available := true
 var _listening := false
 var _listener_generation := 0
 var _reconnect_pending := false
 var _info := {"last_fetch_time_ms": 0, "last_fetch_status": FirebaseRemoteConfig.LAST_FETCH_PENDING,
 	"last_fetch_failure_reason": FirebaseRemoteConfig.FETCH_FAILURE_INVALID, "throttled_end_time_ms": 0}
+
+
+## Tests pass `frozen_clock_ms` to pin the clock to that epoch millisecond;
+## only advance_time() moves it then.
+func _init(frozen_clock_ms := -1) -> void:
+	_frozen_clock_ms = frozen_clock_ms
 
 
 func ensure_initialized() -> int:
@@ -125,10 +133,10 @@ func set_network_available(available: bool) -> void:
 		_publish_server_update()
 
 
-## Test control: moves the fake epoch clock forward without waiting.
+## Test control: moves the mock clock forward without waiting.
 func advance_time(milliseconds: int) -> void:
 	if milliseconds >= 0:
-		_now_ms += milliseconds
+		_clock_offset_ms += milliseconds
 
 
 ## Test control: specifies the server's throttle end time in epoch milliseconds.
@@ -158,11 +166,11 @@ func _fetch(id: int) -> bool:
 		_info.last_fetch_status = FirebaseRemoteConfig.LAST_FETCH_FAILURE
 		_info.last_fetch_failure_reason = FirebaseRemoteConfig.FETCH_FAILURE_ERROR
 		return false
-	if _info.last_fetch_time_ms > 0 and _now_ms - _info.last_fetch_time_ms < _minimum_fetch_interval_ms:
+	if _info.last_fetch_time_ms > 0 and _now_ms() - _info.last_fetch_time_ms < _minimum_fetch_interval_ms:
 		_info.last_fetch_status = FirebaseRemoteConfig.LAST_FETCH_SUCCESS
 		_info.last_fetch_failure_reason = FirebaseRemoteConfig.FETCH_FAILURE_INVALID
 		return true
-	if not _network_available or _now_ms < _info.throttled_end_time_ms:
+	if not _network_available or _now_ms() < _info.throttled_end_time_ms:
 		_info.last_fetch_status = FirebaseRemoteConfig.LAST_FETCH_FAILURE
 		_info.last_fetch_failure_reason = FirebaseRemoteConfig.FETCH_FAILURE_THROTTLED if _network_available else FirebaseRemoteConfig.FETCH_FAILURE_ERROR
 		_finish_error(id, 1, "Remote Config fetch throttled" if _network_available else "Remote Config server unavailable")
@@ -175,7 +183,7 @@ func _store_fetch() -> void:
 	if _fetched_version == 0 or _server != _fetched:
 		_fetched = _server.duplicate(true)
 		_fetched_version += 1
-	_info.last_fetch_time_ms = _now_ms
+	_info.last_fetch_time_ms = _now_ms()
 	_info.last_fetch_status = FirebaseRemoteConfig.LAST_FETCH_SUCCESS
 	_info.last_fetch_failure_reason = FirebaseRemoteConfig.FETCH_FAILURE_INVALID
 	_info.throttled_end_time_ms = 0
@@ -201,6 +209,11 @@ func _publish_server_update() -> void:
 	keys.sort()
 	if not keys.is_empty():
 		_deliver_update.call_deferred(_listener_generation, keys)
+
+
+func _now_ms() -> int:
+	var base := _frozen_clock_ms if _frozen_clock_ms >= 0 else int(Time.get_unix_time_from_system() * 1000)
+	return base + _clock_offset_ms
 
 
 func _deliver_update(generation: int, keys: PackedStringArray) -> void:
