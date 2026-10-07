@@ -44,7 +44,8 @@ def main():
              ("game-b", "fedcba9876543210", "auth,analytics,crashlytics,remote_config", "123456789"),
              ("auth-only", "1111111111111111", "auth", ""),
              ("remote-only", "2222222222222222", "remote_config", ""),
-             ("analytics-only", "3333333333333333", "analytics", "")]
+             ("analytics-only", "3333333333333333", "analytics", ""),
+             ("rewarded-ads", "4444444444444444", "auth,firestore,functions,admob", "")]
     for label, suffix, modules, games_id in cases:
         game = args.output / label
         game.mkdir(exist_ok=True)
@@ -128,6 +129,7 @@ dependencies {{
         manifest = subprocess.check_output([str(aapt), "dump", "xmltree", str(apk), "--file", "AndroidManifest.xml"], text=True)
         assert "firebase_analytics_collection_enabled" in manifest and "firebase_crashlytics_collection_enabled" in manifest
         assert ("com.google.android.gms.games.APP_ID" in manifest) == bool(games_id), "Play Games metadata selection mismatch"
+        assert ("com.google.android.gms.ads.APPLICATION_ID" in manifest) == ("admob" in modules.split(",")), "AdMob App ID selection mismatch"
         resources = subprocess.check_output([str(aapt), "dump", "resources", str(apk)], text=True)
         if games_id:
             assert "game_services_project_id" in resources and f'"{games_id}"' in resources, "PGS app ID was not compiled as a string"
@@ -138,7 +140,7 @@ dependencies {{
                          "apk": str(apk), "google_values": [str(p) for p in google_values],
                          "crash_values": [str(p) for p in crash_values]})
     (args.output / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
-    print(f"Android export: five selections, debug + R8 release APKs, two distinct Crashlytics app IDs, Analytics-only resources, identical generic AAR; no uploads. Evidence: {args.output / 'evidence.json'}")
+    print(f"Android export: six selections incl. AdMob, debug + R8 release APKs, two distinct Crashlytics app IDs, Analytics-only resources, identical generic AAR; no uploads. Evidence: {args.output / 'evidence.json'}")
 
 
 if __name__ == "__main__":

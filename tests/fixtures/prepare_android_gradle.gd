@@ -1,6 +1,8 @@
 extends SceneTree
 ## Used by tools/test_android_export.py; never contacts Firebase.
 const Gradle := preload("res://addons/firebase/export/firebase_android_gradle.gd")
+## Google's test AdMob App ID; the export requires one when AdMob is selected.
+const ADMOB_TEST_APP_ID := "ca-app-pub-3940256099942544~3347511713"
 
 
 func _initialize() -> void:
@@ -20,7 +22,7 @@ func _initialize() -> void:
 		"firebase/analytics_collection": 2, "firebase/crashlytics_collection": 2,
 		"firebase/consent_analytics_storage": 2, "firebase/consent_ad_storage": 2,
 		"firebase/consent_ad_user_data": 2, "firebase/consent_ad_personalization": 2,
-	}, not args[4].is_empty()) + '</application></manifest>')
+	}, not args[4].is_empty()) + Gradle.admob_manifest(modules, ADMOB_TEST_APP_ID).get("content", "") + '</application></manifest>')
 	file.close()
 	file = FileAccess.open(args[0].path_join("build.gradle"), FileAccess.READ_WRITE)
 	file.seek_end()
