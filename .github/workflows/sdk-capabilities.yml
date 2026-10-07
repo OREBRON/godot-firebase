@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       android_export_fixture:
-        description: 'Build five synthetic AAR selections, debug + R8 APKs (requires Android platform 36/build-tools 36.1.0)'
+        description: 'Build six synthetic AAR selections incl. AdMob, debug + R8 APKs (requires Android platform 36/build-tools 36.1.0)'
         type: boolean
         required: false
         default: false
@@ -38,8 +38,10 @@ jobs:
             modules: crashlytics
           - name: telemetry
             modules: analytics,remote_config,crashlytics
-          - name: full-eight
-            modules: auth,firestore,storage,database,functions,analytics,remote_config,crashlytics
+          - name: admob
+            modules: admob
+          - name: full
+            modules: auth,firestore,storage,database,functions,analytics,remote_config,crashlytics,admob
           - name: auth-firestore
             modules: auth,firestore
           - name: auth-database
@@ -109,8 +111,8 @@ jobs:
           tools/run_tests.sh
           package_path="$(tools/package.sh)"
           python3 tests/test_sdk_capability_packages.py --smoke-package "$package_path"
-      - name: Optional full-eight Android Gradle fixture
-        if: github.event_name == 'workflow_dispatch' && inputs.android_export_fixture && matrix.name == 'full-eight'
+      - name: Optional full Android Gradle fixture
+        if: github.event_name == 'workflow_dispatch' && inputs.android_export_fixture && matrix.name == 'full'
         run: |
           set -euo pipefail
           test -f "$ANDROID_HOME/platforms/android-36/android.jar"
