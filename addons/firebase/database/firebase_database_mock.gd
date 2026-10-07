@@ -13,6 +13,8 @@ var persistence_enabled := false
 var network_enabled := true
 var _initialized := false
 var _reference_used := false
+## Test fixture state set by simulate_connection().
+var _server_reachable := true
 var _connected := true
 var _server_root: Variant = null
 var _pending_writes: Array[Dictionary] = []
@@ -54,13 +56,17 @@ func push_value(path: String, value: Variant) -> int:
 	return _write([{"path": _join(path, key), "value": _copy(value)}], key)
 
 
+## Like GoOffline/GoOnline: going offline closes the connection at once; going
+## online reconnects after this request completes, when the server is reachable.
 func set_network_enabled(enabled: bool) -> int:
 	var id := _take_id()
 	if not _fail_if_requested(id):
 		network_enabled = enabled
-		if not enabled:
-			simulate_connection(false)
 		_finish(id)
+		if enabled:
+			_update_connection.call_deferred()
+		else:
+			_update_connection()
 	return id
 
 
@@ -80,31 +86,49 @@ func on_disconnect_cancel(path: String) -> int:
 	return _register_disconnect({"cancel": path})
 
 
-## Test fixture: models this client's observed connection, independently of GoOnline.
-## Disconnect actions change simulated server data; the client sees them on reconnect.
+## Test fixture: models whether the server is reachable, independently of GoOnline.
+## The connection is open while the server is reachable and the network is enabled.
 func simulate_connection(connected: bool) -> void:
-	if connected == _connected or connected and not network_enabled:
+	_server_reachable = connected
+	_update_connection()
+
+
+func _update_connection() -> void:
+	var open := network_enabled and _server_reachable
+	if open == _connected:
 		return
-	_connected = connected
-	if not connected:
-		var actions: Array = []
-		for path in _disconnect_actions:
-			actions.append({"path": path, "value": _disconnect_actions[path]})
-		_server_root = _apply_changes(_server_root, actions)
-		_disconnect_actions.clear()
-	else:
-		for write in _pending_writes:
-			_server_root = _apply_changes(_server_root, write.changes)
-			_finish(write.id, write.result)
-		_pending_writes.clear()
-		root = _copy(_server_root)
-		for registration in _pending_registrations:
-			_accept_registration(registration)
-		_pending_registrations.clear()
-		_notify_changed([""])
+	_connected = open
 	for listener_id in _listeners:
 		if _listeners[listener_id] == ".info/connected":
 			_notify(listener_id)
+	if open:
+		_flush_offline_work()
+	else:
+		_run_disconnect_actions()
+
+
+## Like the SDKs' restoreState(): queued writes, then queued registrations, in order.
+func _flush_offline_work() -> void:
+	for write in _pending_writes:
+		_server_root = _apply_changes(_server_root, write.changes)
+		_finish(write.id, write.result)
+	_pending_writes.clear()
+	root = _copy(_server_root)
+	_notify_changed([""])
+	for registration in _pending_registrations:
+		_accept_registration(registration)
+	_pending_registrations.clear()
+
+
+## The server runs the actions, and the SDKs apply them to the local cache at once.
+func _run_disconnect_actions() -> void:
+	var actions: Array = []
+	for path in _disconnect_actions:
+		actions.append({"path": path, "value": _disconnect_actions[path]})
+	_disconnect_actions.clear()
+	_server_root = _apply_changes(_server_root, actions)
+	root = _copy(_server_root)
+	_notify_changed(actions.map(func(action): return action.path))
 
 
 func _register_disconnect(registration: Dictionary) -> int:

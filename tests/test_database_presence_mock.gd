@@ -26,9 +26,11 @@ func _run() -> void:
 	check(registration.ok and (await db.get_value("presence/session").wait()).value.exists, "registration ACK does not execute disconnect action")
 	await db.call("set_network_enabled", false).wait()
 	check(not (await db.get_value(".info/connected").wait()).value.value, "offline command closes the mock connection")
+	check(not (await db.get_value("presence/session").wait()).value.exists, "closing the connection runs disconnect actions in the local cache")
 	await db.call("set_network_enabled", true).wait()
 	check(not (await db.get_value(".info/connected").wait()).value.value, "online command success is not connection confirmation")
-	backend.call("simulate_connection", true)
+	await process_frame
+	check((await db.get_value(".info/connected").wait()).value.value, "online command reconnects")
 	check(not (await db.get_value("presence/session").wait()).value.exists, "disconnect action is observed after reconnect")
 	await db.set_value("presence/session", true).wait()
 	backend.call("simulate_connection", false)
