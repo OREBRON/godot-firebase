@@ -2,14 +2,21 @@
 extends EditorExportPlugin
 ## Adds GoogleService-Info.plist and Firebase resource bundles to iOS exports.
 ## The native library itself is embedded by Godot through the .gdextension file.
+## A selected AdMob module also gets its App ID, SKAdNetwork and tracking keys.
 ##
 ## Entitlements stay in the export preset; this plugin only warns when a
 ## sign-in option is enabled but its entitlement is missing.
 
+const AdMob := preload("res://addons/firebase/export/firebase_admob_export.gd")
+const MODULES_FILE := "res://addons/firebase/bin/modules.txt"
 const PLIST_OPTION := "firebase/google_service_info_plist"
 const APPLE_OPTION := "firebase/sign_in_with_apple"
 const GAME_CENTER_OPTION := "firebase/sign_in_with_game_center"
 const GOOGLE_OPTION := "firebase/sign_in_with_google"
+const ADMOB_TRACKING_OPTION := "firebase/admob_tracking_description"
+## Google's own network. Its partner list is not published machine-readably;
+## games that need it set the whole SKAdNetworkItems in additional plist content.
+const GOOGLE_SKADNETWORK := "cstr6suwn9.skadnetwork"
 const STARTUP_KEYS := {
 	"firebase/analytics_collection": "FIREBASE_ANALYTICS_COLLECTION_ENABLED",
 	"firebase/crashlytics_collection": "FirebaseCrashlyticsCollectionEnabled",
@@ -36,6 +43,8 @@ func _get_export_options(_platform: EditorExportPlatform) -> Array[Dictionary]:
 		{"option": {"name": APPLE_OPTION, "type": TYPE_BOOL}, "default_value": false, "update_visibility": true},
 		{"option": {"name": GAME_CENTER_OPTION, "type": TYPE_BOOL}, "default_value": false, "update_visibility": true},
 		{"option": {"name": GOOGLE_OPTION, "type": TYPE_BOOL}, "default_value": false, "update_visibility": true},
+		{"option": {"name": AdMob.APP_ID_OPTION, "type": TYPE_STRING}, "default_value": ""},
+		{"option": {"name": ADMOB_TRACKING_OPTION, "type": TYPE_STRING, "hint": PROPERTY_HINT_MULTILINE_TEXT}, "default_value": ""},
 	]
 	for key in STARTUP_KEYS:
 		options.append({"option": {"name": key, "type": TYPE_INT, "hint": PROPERTY_HINT_ENUM, "hint_string": "SDK default,Enabled / Granted,Disabled / Denied"}, "default_value": 0, "update_visibility": true})
@@ -48,6 +57,10 @@ func _get_export_option_warning(_platform: EditorExportPlatform, option: String)
 		var startup := startup_plist_checked(_startup_options(), additional_plist)
 		if startup.error != OK:
 			return startup.message
+	if option in [AdMob.APP_ID_OPTION, ADMOB_TRACKING_OPTION, "application/additional_plist_content"]:
+		var admob := _admob_plist(additional_plist)
+		if admob.error != OK:
+			return admob.message
 	if option in [GOOGLE_OPTION, "application/additional_plist_content"] and get_option(GOOGLE_OPTION):
 		var client: Variant = get_export_preset().get_project_setting("firebase/auth/google_ios_client_id")
 		var result := google_plist(client if client is String else "", additional_plist)
@@ -84,6 +97,11 @@ func _export_begin(features: PackedStringArray, _is_debug: bool, _path: String, 
 			push_error("Firebase iOS configuration error: " + result.message)
 			return
 		content += result.content
+	var admob := _admob_plist(additional_plist)
+	if admob.error != OK:
+		push_error("Firebase iOS configuration error: " + admob.message)
+		return
+	content += admob.content
 	add_apple_embedded_platform_plist_content(content)
 	var plist: String = get_option(PLIST_OPTION)
 	if FileAccess.file_exists(plist):
@@ -99,6 +117,16 @@ func _startup_options() -> Dictionary:
 	for key in STARTUP_KEYS:
 		options[key] = get_option(key)
 	return options
+
+
+func _admob_plist(additional_plist: String) -> Dictionary:
+	return admob_plist(_modules(), str(get_option(AdMob.APP_ID_OPTION)), str(get_option(ADMOB_TRACKING_OPTION)), additional_plist)
+
+
+func _modules() -> Array:
+	if not FileAccess.file_exists(MODULES_FILE):
+		return []
+	return Array(FileAccess.get_file_as_string(MODULES_FILE).strip_edges().split(",", false))
 
 
 ## Choices apply before native SDK auto-initialization. Runtime persisted overrides
@@ -173,6 +201,53 @@ static func _has_url_scheme(url_types: Dictionary, scheme: String) -> bool:
 			if _is_plist_string(candidate, scheme):
 				return true
 	return false
+
+
+## Keys are added only when AdMob is selected; a missing or malformed App ID crashes
+## the app at startup. Game-owned keys in additional plist content are kept, not
+## duplicated: GADApplicationIdentifier must equal the (still required) App ID
+## option, and SKAdNetworkItems must include Google's identifier. The tracking
+## description is added only when set; a manual one must then match it.
+static func admob_plist(modules: Array, app_id: String, tracking_description: String, additional_plist: String) -> Dictionary:
+	if not modules.has("admob"):
+		return {"error": OK, "content": ""}
+	var app_id_error := AdMob.app_id_error(app_id)
+	if not app_id_error.is_empty():
+		return _plist_error(app_id_error)
+	var parsed := _additional_plist_values(additional_plist)
+	if parsed.error != OK:
+		return parsed
+	var values: Dictionary = parsed.values
+	var content := ""
+	if not values.has("GADApplicationIdentifier"):
+		content += "<key>GADApplicationIdentifier</key><string>%s</string>\n" % app_id.xml_escape()
+	elif not _is_plist_string(values.GADApplicationIdentifier, app_id):
+		return _plist_error("GADApplicationIdentifier in application/additional_plist_content must match %s." % AdMob.APP_ID_OPTION)
+	if not values.has("SKAdNetworkItems"):
+		content += "<key>SKAdNetworkItems</key><array><dict><key>SKAdNetworkIdentifier</key><string>%s</string></dict></array>\n" % GOOGLE_SKADNETWORK
+	elif not _has_skadnetwork(values.SKAdNetworkItems, GOOGLE_SKADNETWORK):
+		return _plist_error("SKAdNetworkItems in application/additional_plist_content must be an array of dictionaries including SKAdNetworkIdentifier %s." % GOOGLE_SKADNETWORK)
+	if tracking_description.is_empty():
+		return {"error": OK, "content": content}
+	if not values.has("NSUserTrackingUsageDescription"):
+		content += "<key>NSUserTrackingUsageDescription</key><string>%s</string>\n" % tracking_description.xml_escape()
+	elif not _is_plist_string(values.NSUserTrackingUsageDescription, tracking_description):
+		return _plist_error("NSUserTrackingUsageDescription in application/additional_plist_content must match %s." % ADMOB_TRACKING_OPTION)
+	return {"error": OK, "content": content}
+
+
+## Every entry must be a dictionary, so a malformed list cannot reach the device.
+static func _has_skadnetwork(items: Dictionary, identifier: String) -> bool:
+	if items.tag != "array":
+		return false
+	var found := false
+	for entry in items.children:
+		var parsed := _plist_dictionary(entry)
+		if parsed.error != OK:
+			return false
+		var network: Dictionary = parsed.values.get("SKAdNetworkIdentifier", {})
+		found = found or (not network.is_empty() and _is_plist_string(network, identifier))
+	return found
 
 
 static func _is_plist_string(node: Dictionary, value: String) -> bool:

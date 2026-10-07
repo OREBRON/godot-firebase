@@ -17,6 +17,7 @@ func _run() -> void:
 	_check_build_directory()
 	_check_dependencies()
 	_check_startup_options()
+	_check_admob()
 	_directory = "user://android-export-test-%d" % Time.get_ticks_usec()
 	DirAccess.make_dir_recursive_absolute(_directory)
 	_check_preparation()
@@ -33,9 +34,12 @@ func _check_exporter() -> void:
 	check(exporter.has_method("_get_export_options_overrides"), "Firebase forces Gradle for required AAR/Maven integration")
 	if exporter.has_method("_get_export_options_overrides"):
 		check(exporter._get_export_options_overrides(null).get("gradle_build/use_gradle_build") == true, "prebuilt export cannot silently omit Firebase dependencies")
+	var defaults := {}
 	for option in exporter._get_export_options(null):
-		if option.option.name != "firebase/google_services_json":
-			check(option.default_value == 0, "collection/consent export defaults preserve SDK behavior")
+		defaults[option.option.name] = option.default_value
+	for key in _helper.METADATA:
+		check(defaults.get(key) == 0, "collection/consent export defaults preserve SDK behavior")
+	check(defaults.get("firebase/admob_app_id") == "", "the game's AdMob App ID is an export option without a default")
 	exporter._export_error = "Fixture configuration failure"
 	check(exporter._get_android_manifest_application_element_contents(null, false).contains("godot_firebase_configuration_error_see_export_log"), "a preparation error forces resource compilation to fail")
 
@@ -61,6 +65,11 @@ func _check_dependencies() -> void:
 	check(products.count("com.google.firebase:firebase-analytics:23.2.0") == 1, "Analytics dependency is deduplicated")
 	check(products.has("com.google.firebase:firebase-config:23.1.0"), "Remote Config Java dependency is included")
 	check(products.has("com.google.firebase:firebase-crashlytics-ndk:20.1.1"), "Crashlytics includes NDK support")
+	check(not str(minimal).contains("ads-mobile-sdk") and not str(minimal).contains("user-messaging-platform"), "Mobile Ads is absent without AdMob")
+	var ads: PackedStringArray = _helper.dependencies_for(["admob", "analytics", "admob"], false)
+	check(ads.count("com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.5.0") == 1, "AdMob adds the Next-Gen Mobile Ads SDK once")
+	check(ads.count("com.google.android.ump:user-messaging-platform:4.0.0") == 1, "AdMob adds UMP once for the consent bridge")
+	check(ads.count("com.google.firebase:firebase-analytics:23.2.0") == 1, "AdMob keeps the deduplicated Firebase dependencies")
 
 
 func _check_startup_options() -> void:
@@ -75,6 +84,36 @@ func _check_startup_options() -> void:
 		check(manifest.contains('android:name="%s" android:value="%s"' % pair), "startup metadata: %s" % pair[0])
 	check(manifest.contains('android:value="@string/game_services_project_id"'), "Play Games APP_ID refers to a string resource")
 	check(not _helper.manifest_for({}, false).contains("games.APP_ID"), "disabled Play Games has no APP_ID metadata")
+
+
+## A missing or malformed App ID crashes the app at startup, so it is an export error.
+func _check_admob() -> void:
+	var app_id := "ca-app-pub-3940256099942544~3347511713"
+	var admob: Dictionary = _helper.admob_manifest(["auth", "admob"], app_id)
+	check(admob.error == OK and admob.content == '<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="%s" />\n' % app_id, "AdMob App ID is written to the application manifest: %s" % admob)
+	for modules in [[], ["auth", "firestore"]]:
+		for value in ["", app_id, "invalid"]:
+			admob = _helper.admob_manifest(modules, value)
+			check(admob.error == OK and admob.content.is_empty(), "without AdMob the App ID option has no effect: %s %s" % [modules, value])
+	var invalid_ids := [
+		"",
+		"ca-app-pub-3940256099942544/5224354917", # Ad unit ID, not the App ID.
+		"ca-app-pub-394025609994254~3347511713",
+		"ca-app-pub-39402560999425440~3347511713",
+		"ca-app-pub-3940256099942544~334751171",
+		"ca-app-pub-3940256099942544~33475117130",
+		"ca-app-pub-394025609994254a~3347511713",
+		"pub-3940256099942544~3347511713",
+		" ca-app-pub-3940256099942544~3347511713",
+		"ca-app-pub-3940256099942544~3347511713\n",
+		'ca-app-pub-3940256099942544~3347511713" />',
+		"ca-app-pub-٣940256099942544~3347511713",
+	]
+	for value: String in invalid_ids:
+		admob = _helper.admob_manifest(["admob"], value)
+		check(admob.error != OK and admob.get("content", "").is_empty(), "AdMob export rejects App ID %s without manifest metadata" % value.c_escape())
+		check(str(admob.get("message")).contains("firebase/admob_app_id"), "the AdMob error names its export option: %s" % value.c_escape())
+	check(str(_helper.admob_manifest(["admob"], invalid_ids[1]).get("message")).contains("ad unit"), "an ad unit ID gets a specific hint")
 
 
 func _check_preparation() -> void:
