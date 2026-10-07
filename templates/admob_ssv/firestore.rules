@@ -1,0 +1,40 @@
+rules_version = '2';
+
+// AdMob reward template: each signed-in player reads only users/{their uid}.
+// Energy and reward bookkeeping are written by the reward Cloud Function
+// (Admin SDK, which bypasses these rules); clients can never write them.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // Keep in step with ENERGY_FIELD, DAY_FIELD and COUNT_FIELD in functions/src/grant.js.
+    function serverFields() {
+      return ['energy', 'ad_reward_day', 'ad_reward_count'];
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      // Other game-owned fields stay client-writable. To narrow them, add e.g.
+      // && request.resource.data.keys().hasOnly(serverFields().concat(['name', 'level']))
+      allow create: if isOwner(uid)
+          && !request.resource.data.keys().hasAny(serverFields());
+      allow update: if isOwner(uid)
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverFields());
+      // Deleting would reset energy and the daily ad count; clean up accounts
+      // server-side (Admin SDK) instead.
+      allow delete: if false;
+    }
+
+    // Player subcollections (saves, settings, ...), as in templates/firestore.rules.
+    match /users/{uid}/{collection}/{document=**} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Reward ledger keyed by transaction_id: server only.
+    match /ad_rewards/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
