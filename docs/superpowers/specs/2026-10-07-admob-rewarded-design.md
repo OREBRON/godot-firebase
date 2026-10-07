@@ -109,8 +109,10 @@ static func test_rewarded_ad_unit() -> String
 - `show_privacy_options` aynı sonucu döner. `privacy_options_required` true ise
   oyunun ayarlar ekranında bu butonu göstermesi zorunludur (Google politikası).
 - `set_request_configuration` anahtarları: `test_device_ids: PackedStringArray`,
-  `max_ad_content_rating: "G"|"PG"|"T"|"MA"`, `child_directed: bool`,
-  `under_age_of_consent: bool`. Verilmeyen anahtar SDK varsayılanında kalır.
+  `max_ad_content_rating: "G"|"PG"|"T"|"MA"`, `age_restricted_treatment: "child"|"teen"`.
+  Her çağrı önceki yapılandırmanın yerine geçer; verilmeyen anahtar SDK
+  varsayılanındadır. İki SDK da eski çocuk/yaş etiketlerini bırakıp
+  `ageRestrictedTreatment`'a geçtiği için tek anahtar kullanılır.
 - `load_rewarded` sonucu yeni `ad_id`'dir. Ad unit ID `ca-app-pub-<16 rakam>/<10 rakam>`
   biçiminde olmalıdır. Bu açılışta `request_consent` başarıyla tamamlanmadıysa ya
   da `can_request_ads` false ise `ERR_UNAVAILABLE` ile reddedilir. Yüklenen
