@@ -368,6 +368,32 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 - Editörde ve masaüstünde bellek içi mock çalışır (`Firebase.is_mock("auth")`);
   Windows/Linux/macOS kütüphaneleri Firebase içermeyen boş uzantılardır. Mobilde native
   başlatılamazsa mock'a düşülmez; istekler `ERR_UNAVAILABLE` döner.
+- Mock'lar cihazdaki SDK davranışını izler, sunucuyu taklit etmez:
+  - Güvenlik kuralları ve Firestore bileşik indeksleri uygulanmaz; editörde her
+    okuma/yazma izinlidir. Kuralları Firebase Emulator Suite ile ayrıca test et.
+  - Veri bellek içidir; her çalıştırma temiz kurulumdur (oturum, Firestore,
+    Database, Storage ve Remote Config değerleri saklanmaz). Test verisini koddan
+    `Firebase.backends.firestore.documents`, `database.root` veya `storage.files`
+    üzerinden doldur.
+  - Functions yalnızca `Firebase.backends.functions.handlers` içine kaydedilen
+    yerel fonksiyonları çağırır. Veri ve sonuç JSON'dan geçer: handler sayıları
+    float görür; tam sayı sonuçlar int, packed diziler Array döner, anahtarlar sıralanır.
+  - Storage indirme URL'leri (`https://storage.mock/...`) indirilemez; içerik tipi
+    verilmeyen yükleme `application/octet-stream` olur.
+- Auth açılışta `state_changed` sinyalini bir kez verir (oturum yoksa `{}`).
+  Anonim kullanıcı tekrar anonim giriş yaparsa aynı uid döner ve sinyal gelmez.
+  `firebase/auth/mock_platform` proje ayarı (`""` varsayılan, `"android"`, `"ios"`)
+  editörde o platformda olmayan sağlayıcıları native gibi `ERR_UNSUPPORTED` ile reddeder;
+  değişiklik yeniden başlatmada geçerli olur.
+- Firestore sorgusu `order_by` yoksa eşitsizlik alanına, sonra doküman ID'sine göre
+  sıralanır; `limit` buna göre keser. Aralık filtreleri farklı tipleri eşleştirmez,
+  `!=` null ve eksik alanı dışlar, `1 == 1.0` doğrudur.
+- Realtime Database değerleri cihazdaki gibi gelir: sözlük anahtarları bayt
+  sırasındadır (`"10"`, `"9"`'dan önce); `0..n` anahtarlı map'ler boşlukları `null`
+  olan Array, seyrek diziler sözlük olarak döner. `.info/connected` önce `false`,
+  bağlantı kurulunca `true` olur; `set_network_enabled(true)` görevi bağlantıdan önce
+  biter. Değer dinleyicisi yalnızca değer değişince çağrılır; bağlantı koparken
+  onDisconnect işlemleri yerelde hemen görünür.
 - Hesap açtıran oyunlar App Store kuralı gereği hesap silme sunmalıdır:
   `Firebase.auth.delete_account()`.
 
