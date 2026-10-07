@@ -112,8 +112,6 @@ func _validate_and_prepare(dry_run: bool) -> String:
 		var client: Variant = _project_setting("firebase/auth/google_web_client_id", "")
 		if not client is String or client.is_empty():
 			return "Play Games server authentication requires firebase/auth/google_web_client_id."
-	var directory: String = get_option("gradle_build/gradle_build_directory")
-	if directory.is_empty():
-		directory = "res://android/build"
+	var directory := Gradle.build_directory(get_option("gradle_build/gradle_build_directory"))
 	var prepared := Gradle.prepare(directory, text, package_name, _modules(), games_id, dry_run)
 	return "" if prepared.error == OK else prepared.message

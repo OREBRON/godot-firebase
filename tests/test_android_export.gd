@@ -14,6 +14,7 @@ func _run() -> void:
 		return
 	_helper = load(HELPER)
 	_check_exporter()
+	_check_build_directory()
 	_check_dependencies()
 	_check_startup_options()
 	_directory = "user://android-export-test-%d" % Time.get_ticks_usec()
@@ -36,6 +37,12 @@ func _check_exporter() -> void:
 			check(option.default_value == 0, "collection/consent export defaults preserve SDK behavior")
 	exporter._export_error = "Fixture configuration failure"
 	check(exporter._get_android_manifest_application_element_contents(null, false).contains("godot_firebase_configuration_error_see_export_log"), "a preparation error forces resource compilation to fail")
+
+
+## Godot 4.7 ExportTemplateManager::get_android_build_directory().
+func _check_build_directory() -> void:
+	check(_helper.build_directory("") == "res://android/build", "default Gradle build directory matches Godot")
+	check(_helper.build_directory("res://platform/android") == "res://platform/android/build", "custom gradle_build_directory is the parent of Godot's Gradle project")
 
 
 func _check_dependencies() -> void:

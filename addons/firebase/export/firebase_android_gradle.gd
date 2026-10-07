@@ -60,6 +60,12 @@ const METADATA := {
 }
 
 
+## Gradle project directory for the gradle_build/gradle_build_directory option.
+## Godot treats the option as the parent and builds in its build/ child.
+static func build_directory(option: String) -> String:
+	return "res://android/build" if option.is_empty() else option.path_join("build")
+
+
 static func dependencies_for(modules: Array, play_games: bool) -> PackedStringArray:
 	# Firebase C++ App initializes Analytics Java classes even without our API.
 	var dependencies := PackedStringArray([DEPENDENCIES.analytics, "com.google.android.gms:play-services-base:18.10.1"])
