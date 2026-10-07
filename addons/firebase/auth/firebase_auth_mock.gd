@@ -63,6 +63,11 @@ func _complete_sign_in(operation: Dictionary) -> void:
 	if operation.uid != _user.get("uid", ""):
 		_finish_error(operation.id, FirebaseResult.ERR_CANCELLED, "signed-in user changed")
 		return
+	if operation.provider == "anonymous" and _user.get("is_anonymous", false):
+		# The SDK returns the signed-in anonymous user; its uid stays, so no
+		# auth state change. Any other user is replaced by a new anonymous one.
+		_finish(operation.id, _user.duplicate())
+		return
 	var key: String = operation.provider + ":" + operation.account
 	var existing_uid: String = _provider_accounts.get(key, "")
 	if operation.link and not existing_uid.is_empty() and existing_uid != operation.uid:
