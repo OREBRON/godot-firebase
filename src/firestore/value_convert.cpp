@@ -45,11 +45,12 @@ bool is_reserved_segment(const String &p_segment) {
 	return p_segment.begins_with("__") && p_segment.ends_with("__");
 }
 
-// Same rule as FirebaseValue.is_reserved_field_name(): the SDK aborts when written
-// field names (or update path segments) begin and end with "__".
-bool is_reserved_field_name(const String &p_name) {
-	if (is_reserved_segment(p_name)) {
-		return true;
+// Same rule as FirebaseValue.is_reserved_field_name(): the SDK aborts when a
+// written field name begins and ends with "__". A `p_path` (update key) is
+// dotted, so each segment is a field name; other map keys are literal names.
+bool is_reserved_field_name(const String &p_name, bool p_path) {
+	if (!p_path) {
+		return is_reserved_segment(p_name);
 	}
 	const godot::PackedStringArray segments = p_name.split(".");
 	for (int64_t i = 0; i < segments.size(); i++) {
@@ -169,7 +170,8 @@ String convert_tagged(const Dictionary &p_value, const char *p_sentinel_reason, 
 	return "unknown tag " + tag;
 }
 
-String convert_map(const Dictionary &p_data, bool p_allow_delete, const char *p_sentinel_reason, MapFieldValue &r_out) {
+// Keys are literal field names unless `p_path_keys` (top-level update keys).
+String convert_map(const Dictionary &p_data, bool p_allow_delete, const char *p_sentinel_reason, bool p_path_keys, MapFieldValue &r_out) {
 	const Array keys = p_data.keys();
 	for (int64_t i = 0; i < keys.size(); i++) {
 		const Variant key = keys[i];
@@ -181,7 +183,7 @@ String convert_map(const Dictionary &p_data, bool p_allow_delete, const char *p_
 			return "field names must be non-empty: " + name;
 		}
 		// Query values may use reserved names; written data may not.
-		if (p_sentinel_reason != kInQuery && is_reserved_field_name(name)) {
+		if (p_sentinel_reason != kInQuery && is_reserved_field_name(name, p_path_keys)) {
 			return "field names cannot begin and end with __: " + name;
 		}
 		const Variant value = p_data[key];
@@ -238,7 +240,7 @@ String convert(const Variant &p_value, bool p_in_array, const char *p_sentinel_r
 				return convert_tagged(map, p_sentinel_reason, r_out);
 			}
 			MapFieldValue fields;
-			const String reason = convert_map(map, false, p_sentinel_reason, fields);
+			const String reason = convert_map(map, false, p_sentinel_reason, false, fields);
 			if (reason.is_empty()) {
 				r_out = FieldValue::Map(std::move(fields));
 			}
@@ -257,12 +259,17 @@ int segment_count(const String &p_path) {
 	return segments.has("") ? 0 : static_cast<int>(segments.size());
 }
 
+// `p_path_keys` is true when the top-level keys are dotted update paths.
+String to_document(const Dictionary &p_data, bool p_allow_delete, bool p_path_keys, MapFieldValue &r_out) {
+	std::vector<Variant> ancestors;
+	const String reason = validate_structure(p_data, ancestors, 0, true);
+	return reason.is_empty() ? convert_map(p_data, p_allow_delete, nullptr, p_path_keys, r_out) : reason;
+}
+
 } // namespace
 
 String to_map_field_value(const Dictionary &p_data, bool p_allow_delete, MapFieldValue &r_out) {
-	std::vector<Variant> ancestors;
-	const String reason = validate_structure(p_data, ancestors, 0, true);
-	return reason.is_empty() ? convert_map(p_data, p_allow_delete, nullptr, r_out) : reason;
+	return to_document(p_data, p_allow_delete, false, r_out);
 }
 
 String to_update_field_value(const Dictionary &p_data, MapFieldValue &r_out) {
@@ -272,7 +279,7 @@ String to_update_field_value(const Dictionary &p_data, MapFieldValue &r_out) {
 			return "update keys must be field paths without ~*/[]: " + String(keys[i]);
 		}
 	}
-	return to_map_field_value(p_data, true, r_out);
+	return to_document(p_data, true, true, r_out);
 }
 
 String to_query_value(const Variant &p_value, FieldValue &r_out) {

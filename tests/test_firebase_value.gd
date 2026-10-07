@@ -48,11 +48,23 @@ func _run() -> void:
 
 	for reserved in ["__x__", "__", "___"]:
 		check(not FirebaseValue.validate_data({reserved: 1}, false).is_empty(), "reserved field name is rejected: %s" % reserved)
+		check(not FirebaseValue.validate_data({reserved: FirebaseValue.delete_field()}, true).is_empty(), "reserved merge-set field is rejected: %s" % reserved)
 		check(not FirebaseValue.validate_data({"m": {reserved: 1}}, false).is_empty(), "nested reserved field name is rejected: %s" % reserved)
 		check(not FirebaseValue.validate_data({"items": [{reserved: 1}]}, false).is_empty(), "reserved field name in an array map is rejected: %s" % reserved)
+		check(not FirebaseValue.validate_update_data({reserved: 1}).is_empty(), "reserved update key is rejected: %s" % reserved)
 		check(not FirebaseValue.validate_update_data({"profile.%s" % reserved: 1}).is_empty(), "reserved update path segment is rejected: %s" % reserved)
+		check(not FirebaseValue.validate_update_data({"%s.level" % reserved: FirebaseValue.delete_field()}).is_empty(), "reserved segment of a deleted update path is rejected: %s" % reserved)
+		check(not FirebaseValue.validate_update_data({"profile": {reserved: 1}}).is_empty(), "reserved name in an update value map is rejected: %s" % reserved)
+	check(not FirebaseValue.validate_data({FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": 0}, false).is_empty(), "tag key at the document root is a reserved field name")
 	check(FirebaseValue.validate_data({"__x": 1, "x__": 2, "_x_": 3}, false).is_empty(), "names with one reserved edge are valid")
+	# Like the SDK: set keys and value-map keys are literal names; only update keys are dotted paths.
+	check(FirebaseValue.validate_data({"a.__x__": 1, "__x__.a": 2, "m": {"b.__y__": 3}}, false).is_empty(), "literal names with a reserved-looking dotted part are valid")
+	check(FirebaseValue.validate_update_data({"__a.b__": 1, "m": {"c.__d__": 2}}).is_empty(), "update paths are checked segment by segment")
+	check(FirebaseValue.is_reserved_field_name("__x__") and not FirebaseValue.is_reserved_field_name("a.__x__"), "a literal name is checked as a whole")
+	check(FirebaseValue.is_reserved_field_name("a.__x__", true) and not FirebaseValue.is_reserved_field_name("__a.b__", true), "a path is checked segment by segment")
 	check(FirebaseValue.validate_filter_value("==", {"__x__": 1}).is_empty(), "reserved names are allowed in query values")
+	check(FirebaseValue.validate_filter_value("in", [{"__x__": 1}]).is_empty(), "reserved names are allowed in 'in' values")
+	check(FirebaseValue.validate_filter_value("==", [{"m": {"__x__": 1}}]).is_empty(), "reserved names are allowed in nested query maps")
 	check(FirebaseValue.is_field_path("__name__"), "reserved names are allowed in query field paths")
 
 	check(not FirebaseValue.validate_data({"t": {FirebaseValue.TAG: 5}}, false).is_empty(), "numeric tag is rejected")

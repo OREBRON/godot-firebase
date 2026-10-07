@@ -74,10 +74,7 @@ static func is_field_path(path: Variant) -> bool:
 ## Returns an empty string when `data` can be written, otherwise the reason.
 ## `allow_delete` is true for update and merge writes.
 static func validate_data(data: Dictionary, allow_delete: bool) -> String:
-	var reason := _validate_structure(data, [], 0, true)
-	if not reason.is_empty():
-		return reason
-	return _validate_map(data, "" if allow_delete else "delete_field() needs update_doc() or set_doc(merge = true)", "")
+	return _validate_document(data, allow_delete, false)
 
 
 ## Like validate_data() for update_doc(), whose keys are field paths.
@@ -85,16 +82,25 @@ static func validate_update_data(data: Dictionary) -> String:
 	for key in data:
 		if not is_field_path(key):
 			return "update keys must be field paths without ~*/[]: %s" % str(key)
-	return validate_data(data, true)
+	return _validate_document(data, true, true)
+
+
+## `path_keys` is true when the top-level keys are dotted update paths.
+static func _validate_document(data: Dictionary, allow_delete: bool, path_keys: bool) -> String:
+	var reason := _validate_structure(data, [], 0, true)
+	if not reason.is_empty():
+		return reason
+	return _validate_map(data, "" if allow_delete else "delete_field() needs update_doc() or set_doc(merge = true)", "", path_keys)
 
 
 ## `delete_reason` is empty when delete_field() is allowed in this map.
 ## `sentinel_reason` is empty when server_timestamp() and increment() are allowed.
-static func _validate_map(data: Dictionary, delete_reason: String, sentinel_reason: String) -> String:
+## Keys are literal field names unless `path_keys` is true.
+static func _validate_map(data: Dictionary, delete_reason: String, sentinel_reason: String, path_keys := false) -> String:
 	for key in data:
 		if not key is String or key.is_empty() or key.split(".").has(""):
 			return "field names must be non-empty strings: %s" % str(key)
-		if sentinel_reason != IN_QUERY and is_reserved_field_name(key):
+		if sentinel_reason != IN_QUERY and is_reserved_field_name(key, path_keys):
 			return "field names cannot begin and end with __: %s" % key
 		var value: Variant = data[key]
 		var reason := delete_reason if tag_of(value) == DELETE else _validate_value(value, false, sentinel_reason)
@@ -103,10 +109,11 @@ static func _validate_map(data: Dictionary, delete_reason: String, sentinel_reas
 	return ""
 
 
-## True when `name`, or one of its dotted segments, begins and ends with "__".
-## The SDK aborts on such names in written data; queries may use them.
-static func is_reserved_field_name(name: String) -> bool:
-	for segment in [name] + Array(name.split(".")):
+## True when a written field name begins and ends with "__"; the SDK aborts on it.
+## A `path` (update_doc() key) is dotted, so each of its segments is a field name.
+## Set keys are literal: "a.__x__" names one field and is not reserved. Queries may use any name.
+static func is_reserved_field_name(name: String, path := false) -> bool:
+	for segment in name.split(".") if path else PackedStringArray([name]):
 		if segment.begins_with("__") and segment.ends_with("__"):
 			return true
 	return false
