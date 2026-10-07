@@ -14,6 +14,7 @@ func _run() -> void:
 
 	var early := await auth.link_with_apple().wait()
 	check(not early.ok and early.error_code == FirebaseResult.ERR_NO_USER, "link without user fails")
+	check(states == [{}], "startup reports the signed-out user exactly once")
 
 	var result := await auth.sign_in_anonymously().wait()
 	check(result.ok and result.value.is_anonymous, "anonymous sign-in returns anonymous user")
@@ -56,6 +57,8 @@ func _session_regressions() -> void:
 	var firebase := mock_firebase()
 	var auth: FirebaseAuth = firebase.auth
 	var backend = firebase.backends.auth
+	var startup: Dictionary = await auth.state_changed
+	check(startup.is_empty(), "awaiting state_changed at boot receives the restored user")
 	var result := await auth.get_id_token().wait()
 	check(not result.ok and result.error_code == FirebaseResult.ERR_NO_USER, "signed-out token fails")
 	result = await auth.delete_account().wait()

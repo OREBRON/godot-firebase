@@ -18,6 +18,12 @@ var _generation := 0
 var _closed := false
 
 
+func _init() -> void:
+	# Native reports the restored user (or {}) once its SDK listener is
+	# registered; deferred so the API created right after this can receive it.
+	auth_state_changed.emit.call_deferred(current_user())
+
+
 func sign_in(provider: String, link: bool) -> int:
 	var id := _take_id()
 	if _closed:
