@@ -76,6 +76,8 @@ else:
 
     if "crashlytics" in modules:
         sources += ["src/crashlytics/platform/crashlytics_ios.mm" if platform == "ios" else "src/crashlytics/platform/crashlytics_android.cpp"]
+    if "admob" in modules:
+        sources += ["src/admob/platform/admob_ios.mm" if platform == "ios" else "src/admob/platform/admob_android.cpp"]
 
 cpp_libraries = [lib for name in modules for lib in MODULES[name]["cpp"]] + CORE["cpp"]
 
