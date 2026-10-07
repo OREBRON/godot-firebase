@@ -22,6 +22,7 @@ func _run() -> void:
 	_check_preparation()
 	_check_toolchain()
 	_check_analytics_only()
+	_check_crlf_checkout()
 	_remove_tree(_directory)
 
 
@@ -161,6 +162,41 @@ func _check_analytics_only() -> void:
 	check(script.contains("com.google.gms.google-services") and not script.contains("com.google.firebase.crashlytics"), "Analytics applies only Google Services")
 	result = _helper.prepare(_directory, "", PACKAGE, [], "")
 	check(result.error == OK, "Analytics-only integration is removed cleanly")
+
+
+## Windows core.autocrlf checks a committed android/build out with CRLF line endings.
+func _check_crlf_checkout() -> void:
+	var build := "plugins { id 'com.android.application' }\r\nandroid { }\r\n// Game-owned customization\r\n"
+	var config_gradle := "ext.versions = [kotlinVersion: '2.1.21', androidGradlePlugin: '8.6.1']\r\n"
+	var settings := "pluginManagement { apply from: 'config.gradle'; plugins { id 'org.jetbrains.kotlin.android' version versions.kotlinVersion } }\r\n"
+	_write("build.gradle", build)
+	_write("config.gradle", config_gradle)
+	_write("settings.gradle", settings)
+	var config := FileAccess.get_file_as_string("res://tests/fixtures/google-services.json")
+	var result: Dictionary = _helper.prepare(_directory, config, PACKAGE, ["crashlytics"], "123456789")
+	check(result.error == OK, "CRLF Gradle templates are prepared: %s" % result)
+	for file in ["build.gradle", "config.gradle", "settings.gradle"]:
+		check(not _read(file).replace("\r\n", "").contains("\n"), "managed blocks keep the CRLF style of %s" % file)
+	var prepared := {}
+	for file in ["build.gradle", "config.gradle", "settings.gradle", "firebase-crashlytics.gradle", "google-services.json", "res/values/godot_firebase_play_games.xml", ".godot-firebase-export.json"]:
+		_write(file, _read(file).replace("\r\n", "\n").replace("\n", "\r\n"))
+		prepared[file] = _read(file)
+	result = _helper.prepare(_directory, config, PACKAGE, ["crashlytics"], "123456789")
+	check(result.error == OK, "a CRLF checkout of prepared files exports again: %s" % result)
+	check(prepared.keys().all(func(file): return _read(file) == prepared[file]), "repeated CRLF preparation changes nothing")
+	result = _helper.prepare(_directory, "", PACKAGE, [], "")
+	check(result.error == OK and _read("build.gradle") == build and _read("config.gradle") == config_gradle and _read("settings.gradle") == settings, "CRLF removal restores the original files byte for byte")
+
+	# Earlier versions stored the hash of a CRLF game JSON as read.
+	var crlf_config := config.replace("\n", "\r\n")
+	result = _helper.prepare(_directory, crlf_config, PACKAGE, ["crashlytics"], "")
+	var state: Dictionary = JSON.parse_string(_read(".godot-firebase-export.json"))
+	state.files["google-services.json"] = crlf_config.sha256_text()
+	_write(".godot-firebase-export.json", JSON.stringify(state, "\t") + "\n")
+	result = _helper.prepare(_directory, crlf_config, PACKAGE, ["crashlytics"], "")
+	check(result.error == OK, "state written by earlier versions for a CRLF game JSON stays valid: %s" % result)
+	result = _helper.prepare(_directory, "", PACKAGE, [], "")
+	check(result.error == OK and not FileAccess.file_exists(_directory.path_join("google-services.json")), "CRLF game JSON integration is removed cleanly")
 
 
 func _write(path: String, content: String) -> void:

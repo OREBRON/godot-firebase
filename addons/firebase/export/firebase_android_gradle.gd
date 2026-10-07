@@ -113,7 +113,7 @@ static func prepare(directory: String, config: String, package_name: String, mod
 	var build_path := directory.path_join("build.gradle")
 	if not FileAccess.file_exists(build_path):
 		return _failure("Install Godot's Android Gradle build template; no build.gradle at %s." % directory)
-	var build := FileAccess.get_file_as_string(build_path)
+	var build := _read_lf(build_path)
 	if active and not build.contains("com.android.application"):
 		return _failure("Firebase supports the Godot Android app build.gradle template; this custom template has no com.android.application plugin.")
 	var state: Dictionary = {}
@@ -125,7 +125,7 @@ static func prepare(directory: String, config: String, package_name: String, mod
 	for path: String in state:
 		if not OWNED_PATHS.has(path):
 			return _failure("Unknown path in managed Firebase export state: %s." % path)
-		if FileAccess.file_exists(directory.path_join(path)) and FileAccess.get_file_as_string(directory.path_join(path)).sha256_text() != state[path]:
+		if FileAccess.file_exists(directory.path_join(path)) and not _matches_hash(directory.path_join(path), state[path]):
 			return _failure("Generated Firebase file was edited: %s. Preserve your changes and remove the managed file/state before exporting." % path)
 	if (build.contains("// BEGIN GODOT FIREBASE (managed)") or build.contains("// BEGIN GODOT FIREBASE CLASSPATH") or build.contains("// BEGIN GODOT FIREBASE GOOGLE SERVICES")) and (not build.contains(HOOK) or not (build.contains(CLASSPATH) or build.contains(GOOGLE_CLASSPATH)) or not FileAccess.file_exists(state_path)):
 		return _failure("The managed Firebase build.gradle block was edited or its state is missing; restore it before exporting.")
@@ -144,10 +144,10 @@ static func prepare(directory: String, config: String, package_name: String, mod
 	var next_state: Dictionary = {}
 	for path: String in desired:
 		if FileAccess.file_exists(directory.path_join(path)) and not state.has(path):
-			if path == "google-services.json" and FileAccess.get_file_as_string(directory.path_join(path)) == desired[path]:
+			if path == "google-services.json" and _read_lf(directory.path_join(path)) == _lf(desired[path]):
 				continue # A matching pre-existing game config remains game-owned.
 			return _failure("Firebase export would overwrite game-owned %s. Move it aside or use a matching game configuration." % path)
-		next_state[path] = String(desired[path]).sha256_text()
+		next_state[path] = _lf(desired[path]).sha256_text()
 	var next_build := build.replace(HOOK, "").replace(CLASSPATH, "").replace(GOOGLE_CLASSPATH, "")
 	if crashlytics:
 		next_build = CLASSPATH + next_build + HOOK
@@ -160,25 +160,49 @@ static func prepare(directory: String, config: String, package_name: String, mod
 		if not desired.has(path) and FileAccess.file_exists(directory.path_join(path)):
 			changes[directory.path_join(path)] = null
 	for path: String in next_state:
-		changes[directory.path_join(path)] = desired[path]
-	if next_build != build:
-		changes[build_path] = next_build
+		_queue_text(changes, directory.path_join(path), desired[path])
+	_queue_text(changes, build_path, next_build)
 	if toolchain_config.has("content"):
-		changes[directory.path_join("config.gradle")] = toolchain_config.content
+		_queue_text(changes, directory.path_join("config.gradle"), toolchain_config.content)
 	if toolchain_settings.has("content"):
-		changes[directory.path_join("settings.gradle")] = toolchain_settings.content
+		_queue_text(changes, directory.path_join("settings.gradle"), toolchain_settings.content)
 	if active:
-		changes[state_path] = JSON.stringify({"version": 1, "files": next_state}, "\t") + "\n"
+		_queue_text(changes, state_path, JSON.stringify({"version": 1, "files": next_state}, "\t") + "\n")
 	else:
 		changes[state_path] = null
 	return Transaction.apply(changes)
+
+
+## A committed android/build may be checked out with CRLF (Windows core.autocrlf).
+## Managed blocks and hashes compare LF text, so every host sees the same files.
+static func _lf(text: String) -> String:
+	return text.replace("\r\n", "\n")
+
+
+static func _read_lf(path: String) -> String:
+	return _lf(FileAccess.get_file_as_string(path))
+
+
+## Hashes are of LF text; earlier versions hashed a CRLF game JSON as read.
+static func _matches_hash(path: String, expected: Variant) -> bool:
+	var text := FileAccess.get_file_as_string(path)
+	return _lf(text).sha256_text() == expected or text.sha256_text() == expected
+
+
+## Queues `text` for `path` unless the file already holds it, keeping the
+## file's CRLF line endings so an export does not rewrite every line.
+static func _queue_text(changes: Dictionary, path: String, text: String) -> void:
+	var current := FileAccess.get_file_as_string(path) if FileAccess.file_exists(path) else ""
+	if FileAccess.file_exists(path) and _lf(current) == _lf(text):
+		return
+	changes[path] = _lf(text).replace("\n", "\r\n") if current.contains("\r\n") else text
 
 
 static func _toolchain_config(directory: String, enabled: bool, has_state: bool) -> Dictionary:
 	var path := directory.path_join("config.gradle")
 	if not FileAccess.file_exists(path):
 		return _failure("Firebase requires Godot's standard Android config.gradle for the pinned Kotlin/R8 toolchain.") if enabled else {"error": OK}
-	var original := FileAccess.get_file_as_string(path)
+	var original := _read_lf(path)
 	if original.contains("// BEGIN GODOT FIREBASE KOTLIN") and (not original.contains(TOOLCHAIN_CONFIG) or not has_state):
 		return _failure("The managed Firebase Kotlin block was edited or its state is missing; restore it before exporting.")
 	var next := original.replace(TOOLCHAIN_CONFIG, "")
@@ -199,7 +223,7 @@ static func _toolchain_settings(directory: String, enabled: bool, has_state: boo
 	var path := directory.path_join("settings.gradle")
 	if not FileAccess.file_exists(path):
 		return _failure("Firebase requires Godot's standard Android settings.gradle for its pinned R8 toolchain.") if enabled else {"error": OK}
-	var original := FileAccess.get_file_as_string(path)
+	var original := _read_lf(path)
 	if original.contains("// BEGIN GODOT FIREBASE R8") and (not original.contains(TOOLCHAIN_CLASSPATH) or not has_state):
 		return _failure("The managed Firebase R8 block was edited or its state is missing; restore it before exporting.")
 	var next := original.replace(TOOLCHAIN_CLASSPATH, "")
