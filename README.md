@@ -15,9 +15,12 @@ ayrılmıştır; mevcut native build seçilen modülleri tek kütüphaneye bağl
 | analytics | `analytics/` | `FirebaseAnalyticsNative` | Event, kullanıcı özelliği, collection ve consent |
 | remote_config | `remote_config/` | `FirebaseRemoteConfigNative` | Defaults/fetch/activate, tipli değer, realtime güncelleme |
 | crashlytics | `crashlytics/` | `FirebaseCrashlyticsNative` | Açık nonfatal rapor, platform native crash, collection ve rapor kontrolü |
+| admob | `admob/` | `FirebaseAdmobNative` | Ödüllü reklam, UMP izin formu ve gizlilik seçenekleri, SSV parametreleri |
 
-Sekiz ürünün API/mock katmanı mevcuttur. Analytics ve Remote Config pinned
+Dokuz ürünün API/mock katmanı mevcuttur. Analytics ve Remote Config pinned
 C++ SDK'yı; Crashlytics Android Java/NDK ve iOS Objective-C++ köprülerini kullanır.
+AdMob Firebase SDK'sında yoktur; Google Mobile Ads (Android Next-Gen 1.5.0,
+iOS 13.11.0) ve UMP köprüleriyle çalışır ([AdMob doğrulama kaydı](docs/verification/admob.md)).
 Native derleme ile cihaz/console kabulü ayrı izlenir; güncel kapsam ve testler
 [SDK yetenekleri raporundadır](docs/verification/sdk-capabilities.md).
 Cihazlarda henüz doğrulanmadı (bkz. [Doğrulanmamış noktalar](#doğrulanmamış-noktalar)).
@@ -185,7 +188,7 @@ tools/package.sh
 Gereken ürün birleşimini tek build'de seç; mevcut ZIP'leri üst üste kurma.
 Tekil yeni ürün adları `godot-firebase-analytics.zip`,
 `godot-firebase-remote-config.zip` ve `godot-firebase-crashlytics.zip` olur.
-Sekiz ürün birlikte seçilirse geliştirme çıktısı `godot-firebase-sdk-capabilities.zip`;
+Bütün ürünler (AdMob dahil dokuz) birlikte seçilirse geliştirme çıktısı `godot-firebase-sdk-capabilities.zip`;
 eski beş ürünün full seçimi `godot-firebase.zip` adını korur. Paketleyici
 geçersiz/tekrarlı modül adlarını reddeder, seçilmeyen API/mock klasörlerini ve
 oyun JSON/plist dosyalarını dışlar. Native platform çıktılarının aynı seçimden
@@ -397,6 +400,54 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 - Hesap açtıran oyunlar App Store kuralı gereği hesap silme sunmalıdır:
   `Firebase.auth.delete_account()`.
 
+### AdMob ödüllü reklam
+
+Kurulum:
+
+1. `admob` modülünü seçerek derle (`tools/build.sh --modules auth,firestore,functions,admob ...`).
+2. Android ve iOS export ön ayarlarında `firebase/admob_app_id` alanına oyunun
+   AdMob App ID'sini (`ca-app-pub-<16 rakam>~<10 rakam>`) yaz. Reklam birimi ID'si
+   (`/` içeren) kabul edilmez. Alan boş veya yanlışsa export durur; App ID olmadan
+   uygulama açılışta çöker.
+3. iOS'ta export yalnız Google'ın `cstr6suwn9.skadnetwork` kimliğini ekler.
+   Google'ın tam SKAdNetwork listesi için bütün `SKAdNetworkItems` dizisini (bu
+   kimlik dahil) `application/additional_plist_content` içine koy. UMP'de IDFA
+   mesajı yapılandırdıysan `firebase/admob_tracking_description` alanını doldur;
+   ATT istemini UMP gösterir.
+4. Ödülü sunucuda ver: [`templates/admob_ssv`](templates/admob_ssv/README.md)
+   şablonunu deploy et ve AdMob'da reklam biriminin SSV callback URL'ini ayarla.
+
+```gdscript
+var consent: FirebaseResult = await Firebase.admob.request_consent().wait() # her açılışta
+if consent.ok and consent.value.can_request_ads:
+	var unit := FirebaseAdmob.test_rewarded_ad_unit() if OS.is_debug_build() else "ca-app-pub-0000000000000000/0000000000"
+	var loaded: FirebaseResult = await Firebase.admob.load_rewarded(unit).wait()
+	if loaded.ok:
+		var uid: String = Firebase.auth.current_user().uid
+		var shown: FirebaseResult = await Firebase.admob.show_rewarded(loaded.value, {"user_id": uid, "custom_data": "energy"}).wait()
+		# shown.value.rewarded yalnız arayüz içindir; enerji SSV ile users/<uid> belgesine gelir.
+```
+
+- `ad_event` sinyalinin `"opened"` olayında oyunu duraklat ve sesi kapat,
+  `"closed"` olayında devam et. Android oyun döngüsünü reklamın arkasında
+  çalıştırmaya devam eder; iOS uygulamayı arka plana almaz.
+- `privacy_options_required` true ise ayarlar ekranında
+  `show_privacy_options()` butonu göster (Google politikası).
+- Geliştirmede yalnız Google test birimlerini (`test_rewarded_ad_unit()`) ya da
+  `set_request_configuration({"test_device_ids": [...]})` ile kayıtlı test
+  cihazlarını kullan; gerçek reklamla test hesabın askıya alınmasına yol açabilir.
+  iOS'ta gerçek reklamlar uygulama App Store'da listelenene kadar gelmez.
+- Sözlük anahtarlarını tırnakla yaz (`{"user_id": uid}`); `{user_id = uid}`
+  StringName anahtar üretir ve reddedilir.
+- Yüklenen reklam 1 saat geçerlidir ve bir kez gösterilir; gösterilmeyecekse
+  `release_rewarded(ad_id)` çağır.
+- Editörde mock reklam akışı çalışır; `firebase/admob/mock_consent = "required"`
+  proje ayarı AB izin formunu taklit eder. SSV callback editöre gelmez;
+  [`examples/rewarded_energy.gd`](examples/rewarded_energy.gd) yalnız editörde
+  Firestore mock'una enerji yazan bir simülatör içerir.
+- Android Next-Gen SDK, R8 öncesi yaklaşık 17 MB bağımlılık getirir (Cronet,
+  Tink, Guava dahil); gerçek APK farkı R8 sonrası ölçülmelidir.
+
 ## Geliştirme
 
 Firestore `get_doc`/`query` için `source="default"|"cache"|"server"` seçilebilir.
@@ -533,6 +584,9 @@ kontrol edilecekler:
   İmzalı IPA/App Store thinning ve hedef altı ZIP'in boyutları doğrulanmadı.
 - Android: JNI, AAR, bağımlılıklar ve arm64-v8a build'i eklendi; Android
   cihazda export, Firebase başlatma ve modül istekleri henüz doğrulanmadı.
+- AdMob: Android köprüsü yerelde derlendi ve bağlandı; iOS köprüsü macOS CI'da
+  derlenecek. Cihazda reklam yükleme/gösterme, izin formu, iOS ATT akışı ve SSV
+  callback'i henüz doğrulanmadı ([AdMob doğrulama kaydı](docs/verification/admob.md)).
 - Birleşebilir paketlerin path/hash, import sırası, tekrar import, Core-only,
   kaldırma ve mixed-build testleri #67'de; nihai platform kararı #90'da bekliyor.
   Cihaz ve release/minification kabulü #55/#59'da açık. Güncel kanıt ayrımı

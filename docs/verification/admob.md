@@ -58,8 +58,45 @@ ve çalıştırılan kanıtı kaydeder; cihaz kabulü (ADM-8) ayrıca tamamlanı
 - Self-hosted runner: son `Build addon` çalışması (5799ce2) Xcode 27.0 (27A266a)
   kullandı; GoogleMobileAds 13.11.0'ın en az Xcode 26.2 şartını karşılar.
 
+## ADM-1…ADM-7 — uygulama kanıtı (2026-10-08, Linux)
+
+- **ADM-1, API ve mock:** `tests/test_admob_mock.gd` ve
+  `tests/test_admob_consent_mock.gd` modül yokken başarısızdı, şimdi geçiyor.
+  Tam GDScript paketi (34 test) ve Python testleri geçiyor.
+- **ADM-2, export:**
+  - Android/iOS export testleri `--script` ve `--editor --script` modlarında geçiyor.
+  - `tools/test_android_export.py` (Gradle 8.11.1, AGP 8.6.1, Kotlin 2.4.0,
+    R8 9.1.29) altı sentetik seçimin debug ve R8 release APK'larını üretti.
+    `auth,firestore,functions,admob` seçimi R8'de eksik sınıf vermedi.
+  - APK manifestinde test App ID'li `com.google.android.gms.ads.APPLICATION_ID`
+    var; AdMob seçilmeyen uygulamalarda yok.
+- **ADM-3, ADM-4, native ve Android köprüsü:**
+  - `javac --release 8` uyarısız.
+  - NDK 28.2 ile `auth,firestore,functions,analytics,crashlytics,remote_config,admob`
+    arm64 debug kütüphanesi `-Wl,--no-undefined` ile bağlandı. Dört
+    `FirebaseAdmobBridge` JNI fonksiyonu dışa aktarılıyor; descriptor'lar
+    `javap -s` ile eşleşti.
+  - `tests/test_android_aar.sh` geçiyor.
+- **APK boyutu (imzasız sentetik fixture, Godot motoru ve native `.so` hariç):**
+
+  | Seçim | R8 release | Debug |
+  |---|---|---|
+  | `auth,firestore,functions` | 3,06 MB | 10,8 MB |
+  | `auth,firestore,functions,admob` | 4,67 MB | 14,6 MB |
+
+  AdMob'un R8 sonrası payı yaklaşık 1,5 MB.
+- **ADM-5, iOS köprüsü:** yazıldı, Linux'ta derlenemez; macOS CI ile doğrulanacak.
+- **ADM-6, paket:** paket testi AdMob tekil ZIP'ini ve dokuz modüllü seçimi kapsar.
+  Masaüstü paket smoke'u `request_consent` mock çağrısıyla geçti.
+- **ADM-7, SSV şablonu:**
+  - `node --test` 31/31 geçti; ağ kullanılmadı.
+  - Firestore Emulator kural testleri 6/6 geçti.
+  - `examples/rewarded_energy.gd` gerçek Auth/Firestore/AdMob mock'larıyla
+    yük→göster→ödül akışında enerjiyi 5 yaptı ve oyunu devam ettirdi
+    (geçici test, commit edilmedi).
+
 ## Açık
 
-- R8'li release APK boyutu ve AdMob kuralları: ADM-4/ADM-8.
 - iOS derlemesi ve bağlama: ADM-5, macOS CI.
-- Cihazda reklam, izin ve SSV senaryoları: ADM-8.
+- Cihazda reklam, izin, iOS ATT ve SSV senaryoları; gerçek APK/IPA boyutu: ADM-8.
+- Test reklamlarının SSV callback'lerinin hangi anahtar listesiyle imzalandığı: ADM-8.
