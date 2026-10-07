@@ -48,44 +48,39 @@ describe("firestore.rules", { skip: !HOST && "set FIRESTORE_EMULATOR_HOST (npm r
     });
     assert.equal(rules.status, 200, await rules.text());
     await fetch(`${EMULATOR}/databases/(default)/documents`, { method: "DELETE" });
-    assert.equal(await call(ADMIN, "PATCH", "users/alice", { data: { energy: 10, ad_reward_count: 1, name: "Ada" } }), 200);
+    assert.equal(await call(ADMIN, "PATCH", "wallets/alice", { data: { energy: 10, lives: 3, coins: 50 } }), 200);
+    assert.equal(await call(ADMIN, "PATCH", "wallets/alice/ad_days/2026-10-08", { data: { energy: 1 } }), 200);
+    assert.equal(await call(ADMIN, "PATCH", "users/alice", { data: { name: "Ada" } }), 200);
   });
 
-  test("players read only their own user document", async () => {
+  test("players read only their own wallet and its ad counts", async () => {
+    assert.equal(await call("alice", "GET", "wallets/alice"), 200);
+    assert.equal(await call("alice", "GET", "wallets/alice/ad_days/2026-10-08"), 200);
+    assert.equal(await call("bob", "GET", "wallets/alice"), 403);
+    assert.equal(await call("bob", "GET", "wallets/alice/ad_days/2026-10-08"), 403);
+  });
+
+  test("no client writes a wallet, a balance or an ad count", async () => {
+    assert.equal(await call("alice", "PATCH", "wallets/alice", { data: { coins: 999999 }, mask: ["coins"] }), 403);
+    assert.equal(await call("alice", "PATCH", "wallets/alice", { data: { lives: 2 }, mask: ["lives"] }), 403);
+    assert.equal(await call("alice", "DELETE", "wallets/alice"), 403);
+    assert.equal(await call("bob", "PATCH", "wallets/bob", { data: { gems: 1 } }), 403);
+    assert.equal(await call("alice", "PATCH", "wallets/alice/ad_days/2026-10-08", { data: { energy: 0 } }), 403);
+  });
+
+  test("players own their user document and subcollections", async () => {
     assert.equal(await call("alice", "GET", "users/alice"), 200);
-    assert.equal(await call("bob", "GET", "users/alice"), 403);
-  });
-
-  test("players change game-owned fields but not energy or reward bookkeeping", async () => {
     assert.equal(await call("alice", "PATCH", "users/alice", { data: { name: "Bea" }, mask: ["name"] }), 200);
-    assert.equal(await call("alice", "PATCH", "users/alice", { data: { energy: 99 }, mask: ["energy"] }), 403);
-    assert.equal(await call("alice", "PATCH", "users/alice", { data: { ad_reward_count: 0 }, mask: ["ad_reward_count"] }), 403);
-    assert.equal(await call("alice", "PATCH", "users/alice", { data: { ad_reward_day: "2000-01-01" }, mask: ["ad_reward_day"] }), 403);
-    // A full set that keeps the server fields unchanged is allowed; dropping them is not.
-    assert.equal(await call("alice", "PATCH", "users/alice", { data: { energy: 10, ad_reward_count: 1, name: "Cem" } }), 200);
-    assert.equal(await call("alice", "PATCH", "users/alice", { data: { name: "Cem" } }), 403);
+    assert.equal(await call("alice", "PATCH", "users/alice/saves/main", { data: { level: 3 } }), 200);
+    assert.equal(await call("alice", "GET", "users/alice/saves/main"), 200);
+    assert.equal(await call("bob", "GET", "users/alice"), 403);
     assert.equal(await call("bob", "PATCH", "users/alice", { data: { name: "Eve" }, mask: ["name"] }), 403);
-  });
-
-  test("new user documents cannot start with energy", async () => {
-    assert.equal(await call("bob", "PATCH", "users/bob", { data: { name: "Bob" } }), 200);
-    assert.equal(await call("carol", "PATCH", "users/carol", { data: { name: "Cy", energy: 100 } }), 403);
-  });
-
-  test("players cannot delete their user document", async () => {
-    assert.equal(await call("alice", "DELETE", "users/alice"), 403);
+    assert.equal(await call("bob", "GET", "users/alice/saves/main"), 403);
   });
 
   test("the reward ledger is closed to clients", async () => {
     assert.equal(await call(ADMIN, "PATCH", "ad_rewards/t1", { data: { uid: "alice" } }), 200);
     assert.equal(await call("alice", "GET", "ad_rewards/t1"), 403);
     assert.equal(await call("alice", "PATCH", "ad_rewards/t2", { data: { uid: "alice" } }), 403);
-  });
-
-  test("player subcollections stay owner-only", async () => {
-    assert.equal(await call("alice", "PATCH", "users/alice/saves/main", { data: { level: 3 } }), 200);
-    assert.equal(await call("alice", "GET", "users/alice/saves/main"), 200);
-    assert.equal(await call("bob", "GET", "users/alice/saves/main"), 403);
-    assert.equal(await call("bob", "PATCH", "users/alice/saves/main", { data: { level: 9 } }), 403);
   });
 });

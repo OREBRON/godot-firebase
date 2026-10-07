@@ -281,7 +281,7 @@ ve GMA'nın istediği sistem framework'leri).
 **Dependencies:** Bağımsız (Karar 2 onaylandı). **Files:** `templates/admob_ssv/` (**yapılacak**):
 - Cloud Function (TypeScript) ve birim testleri,
 - `firestore.rules` örneği,
-- `examples/rewarded_energy.gd` (istemci akışı + yalnız-editör SSV simülatörü).
+- `examples/rewarded_ads.gd` (istemci akışı + yalnız-editör SSV simülatörü).
 
 - [x] **Step 1 — Testler:**
   - Kendi ürettiğimiz P-256 anahtarıyla imzalanmış sorgu kabul edilir.
@@ -295,7 +295,8 @@ ve GMA'nın istediği sistem framework'leri).
   - Anahtarlar `verifier-keys.json`'dan 24 saate kadar önbelleklenir; testte
     `verifier-keys-test.json` kullanılır.
   - Firestore transaction'ı `ad_rewards/{transaction_id}` ve
-    `users/{uid}.energy` artışını birlikte yazar.
+    `wallets/{uid}.<ödül>` artışını birlikte yazar. Ödül türleri (enerji, can,
+    altın, …) `CONFIG.rewards`'tadır; `spendReward` bakiyeyi atomik harcar.
   - Şablon eklenti ZIP'ine girmez (mevcut `templates/` gibi).
 - [x] **Step 4 — Doğrulama:** `npm test` + Firebase Emulator. Gerçek AdMob
   callback'i ADM-8'dedir.

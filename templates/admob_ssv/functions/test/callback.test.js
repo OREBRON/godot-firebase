@@ -14,12 +14,15 @@ function setup(initialDocs = {}) {
   return { store, handle };
 }
 
-test("a valid callback grants energy and records the transaction", async () => {
+test("a valid callback grants the chosen reward and records the transaction", async () => {
   const { store, handle } = setup();
   const result = await handle(google.signQuery(callbackMessage()));
   assert.deepEqual(result, { status: 200, reason: "granted", amount: 5, transactionId: "18fa792de1bca816048293fc71035638" });
-  assert.equal(store.docs.get("users/player1").energy, 5);
+  assert.equal(store.docs.get("wallets/player1").energy, 5);
   assert.equal(store.docs.get("ad_rewards/18fa792de1bca816048293fc71035638").status, "granted");
+  const lives = await handle(google.signQuery(callbackMessage({ custom_data: "lives", transaction_id: "lives1" })));
+  assert.equal(lives.amount, 1);
+  assert.deepEqual(store.docs.get("wallets/player1"), { energy: 5, lives: 1 });
 });
 
 test("the same transaction_id grants once and answers 200 again", async () => {
@@ -27,7 +30,7 @@ test("the same transaction_id grants once and answers 200 again", async () => {
   const query = google.signQuery(callbackMessage());
   assert.equal((await handle(query)).reason, "granted");
   assert.deepEqual(await handle(query), { status: 200, reason: "duplicate", amount: 0, transactionId: "18fa792de1bca816048293fc71035638" });
-  assert.equal(store.docs.get("users/player1").energy, 5);
+  assert.equal(store.docs.get("wallets/player1").energy, 5);
 });
 
 test("signature failures answer 403 and malformed callbacks 400, without writes", async () => {
@@ -41,11 +44,11 @@ test("signature failures answer 403 and malformed callbacks 400, without writes"
   assert.equal(store.docs.size, 0);
 });
 
-test("a verified callback outside the allowlist answers 200 without energy", async () => {
+test("a verified callback outside the allowlist answers 200 without a reward", async () => {
   const { store, handle } = setup();
   const cases = [
     { ad_unit: "9999999999" },
-    { reward_item: "gems" },
+    { ad_unit: "2222222222", custom_data: "lives" },
     { custom_data: "gems" },
     { custom_data: null },
     { user_id: null },

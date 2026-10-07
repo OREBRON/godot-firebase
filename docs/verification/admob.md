@@ -88,12 +88,19 @@ ve çalıştırılan kanıtı kaydeder; cihaz kabulü (ADM-8) ayrıca tamamlanı
 - **ADM-5, iOS köprüsü:** yazıldı, Linux'ta derlenemez; macOS CI ile doğrulanacak.
 - **ADM-6, paket:** paket testi AdMob tekil ZIP'ini ve dokuz modüllü seçimi kapsar.
   Masaüstü paket smoke'u `request_consent` mock çağrısıyla geçti.
-- **ADM-7, SSV şablonu:**
-  - `node --test` 31/31 geçti; ağ kullanılmadı.
-  - Firestore Emulator kural testleri 6/6 geçti.
-  - `examples/rewarded_energy.gd` gerçek Auth/Firestore/AdMob mock'larıyla
-    yük→göster→ödül akışında enerjiyi 5 yaptı ve oyunu devam ettirdi
-    (geçici test, commit edilmedi).
+- **ADM-7, SSV şablonu (ödül türleri genelleştirildi):**
+  - `node --test` 40/40 geçti; ağ kullanılmadı.
+  - Üst sınırı yok sayan ve günlük limiti türler arasında paylaştıran mutasyonları
+    testler yakaladı.
+  - Firestore Emulator kural testleri 4/4 geçti; cüzdana istemci yazmasına izin
+    veren mutasyon yakalandı.
+  - Gerçek `firebase-functions` 7.4.0/`firebase-admin` 14.5.0 ile `spendReward`
+    emulator'da şunları döndürdü: harcadı, yetersizde `failed-precondition`,
+    bilinmeyen ödülde `invalid-argument`, oturumsuz istekte `unauthenticated`.
+  - `examples/rewarded_ads.gd` gerçek Auth/Firestore/Functions/AdMob mock'larıyla
+    çalıştırıldı: can ve altın için izleme, can üst sınırı, harcama ve yetersiz
+    bakiye doğru sonuç verdi; oyun reklamdan sonra devam etti (geçici test,
+    commit edilmedi).
 
 ## Açık
 

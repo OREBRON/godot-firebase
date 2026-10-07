@@ -172,31 +172,43 @@ Kurallar:
   `ERROR_AD_EXPIRED=6`, `ERROR_AD_ALREADY_USED=7`, `ERROR_SHOW_FAILED=8`.
   Platform kodu ve mesajı `error_message` içinde korunur.
 
-## Enerji akışı (oyun tarafı)
+## Ödül akışı (oyun tarafı)
 
+Ödül enerji, can, altın ya da oyunun tanımladığı herhangi bir bakiye olabilir.
 Onaylanan yol sunucu doğrulamasıdır (Karar 2):
 
 1. Oyun açılışta `request_consent()`, sonra seviye başında `load_rewarded(unit)` çağırır.
-2. Oyuncu "Reklam izle +5 enerji"ye basar:
-   `show_rewarded(ad, {user_id: auth_uid, custom_data: "energy"})`.
+2. Oyuncu bir ödül için izlemeyi seçer ("Reklam izle +1 can"):
+   `show_rewarded(ad, {"user_id": auth_uid, "custom_data": "lives"})`.
+   `custom_data` ödülün adıdır.
 3. Google ödülü SSV callback URL'ine imzalı GET isteğiyle bildirir. Cloud Function:
-   - imzayı `https://www.gstatic.com/admob/reward/verifier-keys.json` anahtarlarıyla
-     ECDSA P-256/SHA-256 olarak doğrular (anahtarlar en fazla 24 saat önbelleklenir;
-     imzalanan kısım sorgunun `&signature=` öncesidir),
-   - `ad_unit` ve `custom_data` izinli listede mi bakar,
-   - `ad_rewards/{transaction_id}` belgesiyle idempotent çalışır,
-   - aynı transaction'da `users/{user_id}.energy` alanını üst sınıra kadar artırır,
-   - 200 döner (Google 200 dışında 1 sn arayla 5 kez tekrar dener).
-4. Oyun `listen_doc("users/<uid>")` ile enerjiyi gösterir. Task
+   - **İmza:** `https://www.gstatic.com/admob/reward/verifier-keys.json`
+     anahtarlarıyla ECDSA P-256/SHA-256 olarak doğrular. Anahtarlar en fazla 24
+     saat önbelleklenir; imzalanan kısım sorgunun `&signature=` öncesidir.
+   - **İzin:** `ad_unit` izinli mi, `custom_data` o birimin izin verdiği bir ödül
+     mü bakar.
+   - **Miktar:** sunucu yapılandırmasından alır (`CONFIG.rewards`: miktar, üst
+     sınır, ödül başına günlük limit). AdMob'daki birim ödül ayarı yalnız kayda
+     yazılır.
+   - **Tek sefer:** `ad_rewards/{transaction_id}` belgesiyle idempotent çalışır;
+     aynı transaction'da `wallets/{user_id}.<ödül>` bakiyesini artırır.
+   - **Yanıt:** 200 döner; Google 200 dışında 1 sn arayla 5 kez tekrar dener.
+4. Oyun `listen_doc("wallets/<uid>")` ile bakiyeleri gösterir. Task
    `rewarded: true` döndüğünde "ödül işleniyor" gösterilir; SSV gecikebilir.
-5. Firestore kuralları istemcinin `energy` ve `ad_rewards` yazmasını engeller.
+5. Harcama (can kullanmak, enerji harcamak) `spendReward` callable
+   fonksiyonuyla yapılır. Fonksiyon bakiyeyi sıfırın altına düşürmeden atomik
+   azaltır; yetmezse `failed-precondition` döner.
+6. Firestore kuralları istemcinin `wallets` ve `ad_rewards` yazmasını engeller.
+   Bakiyeler oyunun `users/{uid}` verisinden ayrı tutulduğu için yeni ödül türü
+   kural değişikliği gerektirmez.
 
 Basit alternatif istemci tarafı vermedir: `rewarded: true` olunca oyun kendisi
-enerji ekler. Bu, değiştirilmiş istemciyle reklam izlemeden enerji alınabileceği
+ödül ekler. Bu, değiştirilmiş istemciyle reklam izlemeden ödül alınabileceği
 anlamına gelir; çevrimiçi ekonomi için önerilmez.
 
-Editörde SSV callback'i gelmez. Referans örnek, `Firebase.is_mock("admob")`
-iken `ad_event` `reward_earned` olayında Firestore mock'una aynı artışı yazan
+Editörde SSV callback'i gelmez. Referans örnek (`examples/rewarded_ads.gd`),
+`Firebase.is_mock("admob")` iken `ad_event` `reward_earned` olayında ve harcamada
+Firestore mock'undaki cüzdana fonksiyonların yapacağı değişikliği yazan
 yalnız-editör bir simülatör içerir; bu kod oyunun debug koduna aittir.
 
 ## Mock

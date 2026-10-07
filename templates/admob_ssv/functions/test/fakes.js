@@ -3,10 +3,17 @@
 import { generateKeyPairSync, sign } from "node:crypto";
 
 export const AD_UNIT = "1234567890";
+export const ENERGY_ONLY_UNIT = "2222222222";
 export const CONFIG = {
-  adUnits: { [`ca-app-pub-1111111111111111/${AD_UNIT}`]: { rewardItem: "energy", customData: "energy", maxAmount: 5 } },
-  energyCap: 100,
-  dailyLimit: 0,
+  rewards: {
+    energy: { amount: 5, cap: 100, dailyLimit: 0 },
+    lives: { amount: 1, cap: 5, dailyLimit: 0 },
+    coins: { amount: 50, cap: 0, dailyLimit: 0 },
+  },
+  adUnits: {
+    [`ca-app-pub-1111111111111111/${AD_UNIT}`]: ["energy", "lives", "coins"],
+    [ENERGY_ONLY_UNIT]: ["energy"],
+  },
 };
 
 /** Signs callback queries like Google does, with a fresh key pair. */

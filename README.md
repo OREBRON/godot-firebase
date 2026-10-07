@@ -424,9 +424,17 @@ if consent.ok and consent.value.can_request_ads:
 	var loaded: FirebaseResult = await Firebase.admob.load_rewarded(unit).wait()
 	if loaded.ok:
 		var uid: String = Firebase.auth.current_user().uid
-		var shown: FirebaseResult = await Firebase.admob.show_rewarded(loaded.value, {"user_id": uid, "custom_data": "energy"}).wait()
-		# shown.value.rewarded yalnız arayüz içindir; enerji SSV ile users/<uid> belgesine gelir.
+		# custom_data ödülün adıdır: "energy", "lives", "coins" ya da sunucu CONFIG'indeki başka bir ad.
+		var shown: FirebaseResult = await Firebase.admob.show_rewarded(loaded.value, {"user_id": uid, "custom_data": "lives"}).wait()
+		# shown.value.rewarded yalnız arayüz içindir; ödül SSV ile wallets/<uid> belgesine gelir.
+
+# Harcama sunucuda: bakiye yetmezse error_code 9 (FAILED_PRECONDITION).
+var spent: FirebaseResult = await Firebase.functions.call_function("spendReward", {"reward": "lives", "amount": 1}).wait()
 ```
+
+- Ödül türleri, miktarları, üst sınırları ve günlük limitleri sunucudaki
+  `CONFIG`'tedir; istemci yalnız hangi ödül için izlendiğini seçer. Bakiyeler
+  istemcinin yazamadığı `wallets/{uid}` belgesindedir.
 
 - `ad_event` sinyalinin `"opened"` olayında oyunu duraklat ve sesi kapat,
   `"closed"` olayında devam et. Android oyun döngüsünü reklamın arkasında
@@ -443,8 +451,8 @@ if consent.ok and consent.value.can_request_ads:
   `release_rewarded(ad_id)` çağır.
 - Editörde mock reklam akışı çalışır; `firebase/admob/mock_consent = "required"`
   proje ayarı AB izin formunu taklit eder. SSV callback editöre gelmez;
-  [`examples/rewarded_energy.gd`](examples/rewarded_energy.gd) yalnız editörde
-  Firestore mock'una enerji yazan bir simülatör içerir.
+  [`examples/rewarded_ads.gd`](examples/rewarded_ads.gd) yalnız editörde
+  Firestore mock'undaki cüzdana ödül ve harcama yazan bir simülatör içerir.
 - Android Next-Gen SDK, R8 öncesi yaklaşık 17 MB bağımlılık getirir (Cronet,
   Tink, Guava dahil); gerçek APK farkı R8 sonrası ölçülmelidir.
 

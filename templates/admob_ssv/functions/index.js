@@ -1,29 +1,37 @@
 // AdMob rewarded ad server-side verification (SSV) callback: verifies
-// Google's signature and grants energy once per transaction_id.
+// Google's signature and grants the reward the game chose once per
+// transaction_id. spendReward lets players spend those server-owned balances.
 // Template: copy it into the game's Firebase project and adapt CONFIG.
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
-import { onRequest } from "firebase-functions/https";
+import { HttpsError, onCall, onRequest } from "firebase-functions/https";
 import { handleRewardCallback } from "./src/callback.js";
+import { checkConfig } from "./src/grant.js";
+import { readSpend, spendReward as spend } from "./src/spend.js";
 import { createKeyStore, KEYS_URL, rawQueryOf, TEST_KEYS_URL } from "./src/verify.js";
 
 /** Choose a region close to the Firestore database. */
 const REGION = "europe-west1";
 
-const CONFIG = {
-  // Allowed ad units: "ca-app-pub-XXXXXXXXXXXXXXXX/NNNNNNNNNN" (or only NNNNNNNNNN).
-  // rewardItem: the reward item set on the ad unit in AdMob.
-  // customData: what the game passes as show_rewarded(ad, {"custom_data": ...}).
-  // maxAmount: most energy one ad grants, whatever reward_amount says.
-  adUnits: {
-    "ca-app-pub-0000000000000000/0000000000": { rewardItem: "energy", customData: "energy", maxAmount: 5 },
+const CONFIG = checkConfig({
+  // What one rewarded ad can grant. The game picks one per show:
+  //   show_rewarded(ad, {"user_id": uid, "custom_data": "lives"})
+  // Balances live in wallets/{uid}.<name>. amount: what one ad grants (this
+  // value, not the ad unit's AdMob reward amount). cap: the most a player can
+  // hold through ads (0 = no cap). dailyLimit: granted ads of this reward per
+  // player per UTC day (0 = no limit). Names are plain field names.
+  rewards: {
+    energy: { amount: 5, cap: 100, dailyLimit: 20 },
+    lives: { amount: 1, cap: 5, dailyLimit: 5 },
+    coins: { amount: 50, cap: 0, dailyLimit: 10 },
   },
-  energyCap: 100,
-  // Granted ads per player per UTC day; 0 means no limit. Callbacks over the
-  // limit are recorded and answered 200 without energy.
-  dailyLimit: 20,
-};
+  // Allowed ad units, "ca-app-pub-XXXXXXXXXXXXXXXX/NNNNNNNNNN" (or only
+  // NNNNNNNNNN), and the rewards each one may grant.
+  adUnits: {
+    "ca-app-pub-0000000000000000/0000000000": ["energy", "lives", "coins"],
+  },
+});
 
 // Only a development project sets ADMOB_SSV_KEYS=test (functions/.env.<project-id>).
 const keyStore = createKeyStore({ url: process.env.ADMOB_SSV_KEYS === "test" ? TEST_KEYS_URL : KEYS_URL });
@@ -56,4 +64,15 @@ export const admobRewardCallback = onRequest({ region: REGION, invoker: "public"
     logger.error("AdMob reward callback failed; Google will retry", error);
     response.status(500).send("retry");
   }
+});
+
+// Callable: Firebase.functions.call_function("spendReward", {"reward": "lives", "amount": 1}).
+// Result {reward, balance}; not enough balance fails with failed-precondition.
+export const spendReward = onCall({ region: REGION }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "sign in to spend rewards");
+  const { reward, amount, reason } = readSpend(request.data, CONFIG);
+  if (reason) throw new HttpsError("invalid-argument", reason);
+  const result = await spend(store, request.auth.uid, reward, amount);
+  if (result.status === "insufficient") throw new HttpsError("failed-precondition", `not enough ${reward}`, { balance: result.balance });
+  return { reward, balance: result.balance };
 });
