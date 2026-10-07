@@ -7,6 +7,13 @@ signal auth_state_changed(user: Dictionary)
 # firebase::auth::kAuthErrorCredentialAlreadyInUse (pinned C++ SDK).
 const CREDENTIAL_ALREADY_IN_USE := 10
 
+## Project setting read at creation: "" (default) allows every provider;
+## "android" or "ios" fails sign-in like the native addon on that platform.
+const PLATFORM_SETTING := "firebase/auth/mock_platform"
+const PLATFORM_NAMES := {"android": "Android", "ios": "iOS"}
+# Providers FirebaseAuth passes to sign_in() that src/auth/platform/ rejects.
+const UNSUPPORTED_PROVIDERS := {"android": ["apple", "game_center"], "ios": ["play_games_platform"]}
+
 var _user: Dictionary = {}
 var _accounts: Dictionary = {}
 var _provider_accounts: Dictionary = {}
@@ -16,9 +23,11 @@ var _delayed: Array[Dictionary] = []
 var _delay_next := false
 var _generation := 0
 var _closed := false
+var _platform := ""
 
 
 func _init() -> void:
+	_platform = _read_platform()
 	# Native reports the restored user (or {}) once its SDK listener is
 	# registered; deferred so the API created right after this can receive it.
 	auth_state_changed.emit.call_deferred(current_user())
@@ -36,6 +45,8 @@ func sign_in(provider: String, link: bool) -> int:
 		_finish_error(id, FirebaseResult.ERR_UNSUPPORTED, "unknown auth provider")
 	elif link and provider == "anonymous":
 		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "cannot link an anonymous account")
+	elif provider in UNSUPPORTED_PROVIDERS.get(_platform, []):
+		_finish_error(id, FirebaseResult.ERR_UNSUPPORTED, "%s sign-in is not supported on %s" % [provider, PLATFORM_NAMES[_platform]])
 	elif not _fail_if_requested(id):
 		var canonical := "play_games" if provider == "play_games_platform" else provider
 		_pending = {"id": id, "provider": canonical, "link": link, "uid": _user.get("uid", ""), "generation": _generation, "account": _selected_accounts.get(canonical, "default")}
@@ -50,10 +61,24 @@ func sign_in(provider: String, link: bool) -> int:
 
 func sign_in_play_games(server_auth_code: String, link: bool) -> int:
 	if server_auth_code.is_empty():
-		var id := _take_id()
-		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "Play Games server auth code is required")
-		return id
+		return _fail(FirebaseResult.ERR_INVALID_ARGUMENT, "Play Games server auth code is required")
+	if _platform == "ios":
+		return _fail(FirebaseResult.ERR_UNSUPPORTED, "Play Games sign-in requires Android")
 	return sign_in("play_games", link)
+
+
+func _fail(code: int, message: String) -> int:
+	var id := _take_id()
+	_finish_error(id, code, message)
+	return id
+
+
+func _read_platform() -> String:
+	var platform: Variant = ProjectSettings.get_setting(PLATFORM_SETTING, "")
+	if platform is String and (platform.is_empty() or PLATFORM_NAMES.has(platform)):
+		return platform
+	push_error("Firebase: %s must be \"\", \"android\" or \"ios\"; the auth mock allows every provider" % PLATFORM_SETTING)
+	return ""
 
 
 func _complete_sign_in(operation: Dictionary) -> void:
