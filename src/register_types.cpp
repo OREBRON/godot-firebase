@@ -1,7 +1,6 @@
-// GDExtension entry point. SConstruct defines GODOT_FIREBASE_<MODULE> (AUTH,
-// FIRESTORE, STORAGE, DATABASE, FUNCTIONS) for the modules selected with
-// `modules=`, or GODOT_FIREBASE_EDITOR_STUB for the macOS editor library
-// without Firebase.
+// GDExtension entry point. SConstruct defines GODOT_FIREBASE_<MODULE> (for
+// example AUTH or REMOTE_CONFIG) for the modules selected with `modules=`, or
+// GODOT_FIREBASE_EDITOR_STUB for the macOS editor library without Firebase.
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/class_db.hpp>
@@ -35,6 +34,9 @@
 #endif
 #ifdef GODOT_FIREBASE_CRASHLYTICS
 #include "crashlytics/firebase_crashlytics_native.h"
+#endif
+#ifdef GODOT_FIREBASE_ADMOB
+#include "admob/firebase_admob_native.h"
 #endif
 
 using namespace godot;
@@ -72,6 +74,9 @@ void initialize_godot_firebase([[maybe_unused]] ModuleInitializationLevel p_leve
 #ifdef GODOT_FIREBASE_CRASHLYTICS
 	GDREGISTER_CLASS(godot_firebase::FirebaseCrashlyticsNative);
 #endif
+#ifdef GODOT_FIREBASE_ADMOB
+	GDREGISTER_CLASS(godot_firebase::FirebaseAdmobNative);
+#endif
 #endif
 }
 
@@ -101,6 +106,9 @@ void uninitialize_godot_firebase([[maybe_unused]] ModuleInitializationLevel p_le
 #endif
 #ifdef GODOT_FIREBASE_CRASHLYTICS
 		godot_firebase::FirebaseCrashlyticsNative::shutdown_all();
+#endif
+#ifdef GODOT_FIREBASE_ADMOB
+		godot_firebase::FirebaseAdmobNative::shutdown_all();
 #endif
 		godot_firebase::FirebaseAppNative::shutdown();
 	}

@@ -11,9 +11,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULES = re.search(r"const MODULES: Array\[String\] = \[(.*?)\]", (ROOT / "addons/firebase/core/firebase.gd").read_text()).group(1)
-# Modules whose native class is not written yet; ADM-3 removes "admob".
-NATIVE_PENDING = {"admob"}
-MODULES = [module for module in re.findall(r'"(\w+)"', MODULES) if module not in NATIVE_PENDING]
+MODULES = re.findall(r'"(\w+)"', MODULES)
 SPECIAL_NAMES = {"remote_config": "RemoteConfig"}
 
 
