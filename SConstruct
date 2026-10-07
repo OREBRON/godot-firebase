@@ -61,6 +61,8 @@ if platform == "macos":
 else:
     env.Append(CPPDEFINES=["GODOT_FIREBASE_" + name.upper() for name in modules])
     sources += Glob("src/core/*.cpp")
+    if platform == "ios":
+        sources += Glob("src/core/*.mm")
     for name in modules:
         sources += Glob("src/%s/*.cpp" % name)
     if "auth" in modules:

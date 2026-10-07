@@ -4,49 +4,13 @@
 #include <map>
 #include <mutex>
 #include <firebase/auth.h>
-#include "../../core/firebase_app_native.h"
+#include "../../core/android_bridge.h"
 #include "../../core/outcome.h"
 
 namespace {
 std::mutex callbacks_mutex;
 std::map<int64_t, godot_firebase::CredentialCallback> callbacks;
 std::atomic<int64_t> next_id{0};
-
-struct JniContext {
-	JavaVM *vm = nullptr;
-	JNIEnv *env = nullptr;
-	jobject activity = nullptr;
-	jclass bridge = nullptr;
-	bool attached = false;
-
-	JniContext() {
-		auto *app = godot_firebase::FirebaseAppNative::get_app();
-		if (!app) return;
-		vm = app->java_vm();
-		activity = app->activity();
-		if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) == JNI_EDETACHED) {
-			attached = vm->AttachCurrentThread(&env, nullptr) == JNI_OK;
-		}
-		if (!env) return;
-		// Godot's render thread is attached natively: FindClass cannot see the game's loader.
-		jclass activity_class = env->GetObjectClass(activity);
-		jmethodID get_loader = env->GetMethodID(activity_class, "getClassLoader", "()Ljava/lang/ClassLoader;");
-		jobject loader = get_loader ? env->CallObjectMethod(activity, get_loader) : nullptr;
-		jclass loader_class = loader ? env->GetObjectClass(loader) : nullptr;
-		jmethodID load_class = loader_class ? env->GetMethodID(loader_class, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;") : nullptr;
-		jstring name = env->NewStringUTF("org.godotengine.godotfirebase.FirebaseAuthBridge");
-		if (load_class) bridge = static_cast<jclass>(env->CallObjectMethod(loader, load_class, name));
-		env->DeleteLocalRef(name);
-		if (loader_class) env->DeleteLocalRef(loader_class);
-		if (loader) env->DeleteLocalRef(loader);
-		env->DeleteLocalRef(activity_class);
-		if (env->ExceptionCheck()) { env->ExceptionClear(); bridge = nullptr; }
-	}
-	~JniContext() {
-		if (env && bridge) env->DeleteLocalRef(bridge);
-		if (attached) vm->DetachCurrentThread();
-	}
-};
 
 std::string string_value(JNIEnv *env, jstring value) {
 	if (!value) return {};
@@ -76,7 +40,7 @@ void request_platform_credential(const std::string &provider, const PlatformCred
 		done({false, {}, kUnsupported, provider + " sign-in is not supported on Android"});
 		return;
 	}
-	JniContext jni;
+	AndroidBridge jni("org.godotengine.godotfirebase.FirebaseAuthBridge");
 	jmethodID request = jni.bridge ? jni.env->GetStaticMethodID(jni.bridge, "request", "(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;J)V") : nullptr;
 	if (!request) {
 		if (jni.env && jni.env->ExceptionCheck()) jni.env->ExceptionClear();
@@ -104,7 +68,7 @@ void clear_platform_credential_state() {
 		std::lock_guard<std::mutex> lock(callbacks_mutex);
 		callbacks.clear();
 	}
-	JniContext jni;
+	AndroidBridge jni("org.godotengine.godotfirebase.FirebaseAuthBridge");
 	if (!jni.bridge) return;
 	jmethodID clear = jni.env->GetStaticMethodID(jni.bridge, "clearState", "(Landroid/app/Activity;)V");
 	if (clear) jni.env->CallStaticVoidMethod(jni.bridge, clear, jni.activity);

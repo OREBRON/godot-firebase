@@ -13,7 +13,11 @@
 #include <firebase/auth.h>
 #include <atomic>
 
+#include "../../core/ios_presenter.h"
 #include "../../core/outcome.h"
+
+using godot_firebase::key_window;
+using godot_firebase::top_view_controller;
 
 using godot_firebase::CredentialCallback;
 using godot_firebase::PlatformCredential;
@@ -37,28 +41,6 @@ PlatformCredential success(const firebase::auth::Credential &credential) {
 
 std::string describe(NSError *error, const char *fallback) {
 	return error ? std::string(error.localizedDescription.UTF8String) : std::string(fallback);
-}
-
-UIWindow *key_window() {
-	for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-		if (![scene isKindOfClass:UIWindowScene.class]) {
-			continue;
-		}
-		for (UIWindow *window in ((UIWindowScene *)scene).windows) {
-			if (window.isKeyWindow) {
-				return window;
-			}
-		}
-	}
-	return nil;
-}
-
-UIViewController *top_view_controller() {
-	UIViewController *controller = key_window().rootViewController;
-	while (controller.presentedViewController) {
-		controller = controller.presentedViewController;
-	}
-	return controller;
 }
 
 // Random nonce; Apple receives its SHA-256, Firebase the raw value.
