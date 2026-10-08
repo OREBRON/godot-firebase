@@ -75,8 +75,12 @@ for pair in GoogleMobileAds:GoogleMobileAdsResources UserMessagingPlatform:UserM
 	framework=${pair%%:*}
 	name=${pair##*:}
 	bundle="$ads_dir/resources/$name.bundle"
+	# Recreated every run: the archive's files are read-only on macOS, so a
+	# copy left in the persistent CI cache cannot be overwritten.
+	rm -rf "$bundle"
 	mkdir -p "$bundle"
 	cp "$ads_dir/$framework.xcframework/ios-arm64/$framework.framework/PrivacyInfo.xcprivacy" "$bundle/"
+	chmod u+w "$bundle/PrivacyInfo.xcprivacy"
 	cat > "$bundle/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
