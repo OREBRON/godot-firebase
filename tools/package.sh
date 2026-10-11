@@ -39,12 +39,9 @@ def package():
     if not modules or len(set(modules)) != len(modules) or any(not re.fullmatch(r"[a-z][a-z0-9_]*", module) or module not in available for module in modules):
         raise ValueError("modules.txt must select distinct installed product names separated by commas")
     selected = set(modules)
-    # Preserve the existing six-package milestone's release asset names.
-    legacy = {"auth", "firestore", "storage", "database", "functions"}
-    if selected == legacy:
+    # Only the full selection owns the plain name; every other selection names its products.
+    if selected == available:
         name = "godot-firebase.zip"
-    elif selected == available:
-        name = "godot-firebase-sdk-capabilities.zip"
     else:
         name = "godot-firebase-" + "-".join(module.replace("_", "-") for module in modules) + ".zip"
     output_dir = Path("build/dist")

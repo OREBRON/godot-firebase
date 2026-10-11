@@ -185,8 +185,8 @@ tools/package.sh
 Gereken ürün birleşimini tek build'de seç; mevcut ZIP'leri üst üste kurma.
 Tekil yeni ürün adları `godot-firebase-analytics.zip`,
 `godot-firebase-remote-config.zip` ve `godot-firebase-crashlytics.zip` olur.
-Sekiz ürün birlikte seçilirse geliştirme çıktısı `godot-firebase-sdk-capabilities.zip`;
-eski beş ürünün full seçimi `godot-firebase.zip` adını korur. Paketleyici
+Sekiz ürün birlikte seçilirse çıktı `godot-firebase.zip` olur; diğer her
+birleşim seçilen ürünlerin adını alır (örneğin `godot-firebase-auth-firestore.zip`). Paketleyici
 geçersiz/tekrarlı modül adlarını reddeder, seçilmeyen API/mock klasörlerini ve
 oyun JSON/plist dosyalarını dışlar. Native platform çıktılarının aynı seçimden
 geldiğini build sahibi sağlamalıdır; stale/mixed build doğrulaması halen yoktur.
@@ -543,7 +543,7 @@ Linux runner'da SDKMAN (JDK `.sdkmanrc` ile bash'te seçilir, varsayılan JDK de
 `zip` ve `unzip` gerekir; Android SDK platform 35 ve NDK 28.1.13356709
 `android-actions/setup-android` ile kurulur. macOS runner'da Xcode, `uv` ve
 `python3` gerekir; CocoaPods yalnız Auth seçimlerinde kilitli sürümle kurulur.
-Node.js kullanan bir adım yoktur. SDK indirmeleri her runner'da
+Runner'a ayrıca Node.js kurmak gerekmez; action'lar runner'ın kendi Node.js'iyle çalışır. SDK indirmeleri her runner'da
 `../godot-firebase-third-party` altında kalıcı tutulur; godot-cpp nesneleri
 SCons imzalarıyla seçimler arasında yeniden kullanılır. Fork PR'ları
 self-hosted runner'larda çalışmaz.

@@ -46,9 +46,8 @@ The package fixture tests were first run against the previous packager: seven as
 
 `tools/package.sh` validates `bin/modules.txt`, removes unselected API/mock directories and excludes known game JSON/plist names plus parsed Firebase game config content (including binary plist). Resource `Info.plist` files remain. Symlink inputs are rejected. The selected monolithic native binaries and common Core/export files still occupy shared paths.
 
-- Legacy five-product full remains `godot-firebase.zip`; existing single-product release names are preserved.
+- Only the full selection of every installed product is `godot-firebase.zip`. The former `godot-firebase-sdk-capabilities.zip` name is gone, and the five-product selection is now `godot-firebase-auth-firestore-storage-database-functions.zip`. Existing single-product release names are preserved.
 - New singles: `godot-firebase-analytics.zip`, `godot-firebase-remote-config.zip`, `godot-firebase-crashlytics.zip`.
-- Eight-product full development selection: `godot-firebase-sdk-capabilities.zip`.
 - `sdk-capabilities.yml` builds three new singles, telemetry, full-eight, Auth+Firestore and Auth+Database for iOS/Android/macOS. It stores development ZIP/symbol artifacts only, never publishes a release.
 - The serialized matrix preserves external godot-cpp outputs and restores/saves root SCons signatures between selections. Local reuse within one workspace was observed; cross-job hosted cache reuse has not been run or measured.
 - Optional manual input `android_export_fixture=true` enables the five synthetic Android Gradle debug/R8 fixture selections only for full-eight. It verifies installed Android platform 36/build-tools 36.1.0 and downloads Gradle 8.11.1 to the workspace with pinned SHA-256 `f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6`. No global tools are installed and no Firebase upload is enabled. The local fixture passed as recorded above; the workflow itself has not run.

@@ -114,13 +114,13 @@ class DevelopmentPackageTests(unittest.TestCase):
         for module in MODULES:
             self.assertEqual(f"addons/firebase/{module}/firebase_{module}_mock.gd" in files, module in ["auth", "database", "remote_config"])
 
-    def test_legacy_full_name_unchanged_and_new_full_distinct(self):
-        legacy, files = self.package(",".join(MODULES[:5]))
-        self.assertEqual(legacy, "godot-firebase.zip")
-        self.assertNotIn("addons/firebase/analytics/firebase_analytics.gd", files)
-        current, files = self.package(",".join(MODULES))
-        self.assertEqual(current, "godot-firebase-sdk-capabilities.zip")
+    def test_only_full_selection_is_named_godot_firebase(self):
+        full, files = self.package(",".join(MODULES))
+        self.assertEqual(full, "godot-firebase.zip")
         self.assertTrue(all(f"addons/firebase/{module}/firebase_{module}.gd" in files for module in MODULES))
+        five, files = self.package(",".join(MODULES[:5]))
+        self.assertEqual(five, "godot-firebase-auth-firestore-storage-database-functions.zip")
+        self.assertNotIn("addons/firebase/analytics/firebase_analytics.gd", files)
 
     def test_game_config_excluded_including_custom_names(self):
         (self.addon / "google-services.dev.json").write_text("invalid but sensitive filename")
