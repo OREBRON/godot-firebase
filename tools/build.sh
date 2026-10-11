@@ -56,7 +56,9 @@ collect_android_symbols() { # target
 	local directory="$symbols_root/android/$1/arm64-v8a"
 	local sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 	local ndk="$sdk/ndk/${NDK_VERSION:-28.1.13356709}"
-	local readelf="${LLVM_READELF:-$ndk/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf}"
+	local host=linux-x86_64
+	[ "$(uname -s)" != Darwin ] || host=darwin-x86_64
+	local readelf="${LLVM_READELF:-$ndk/toolchains/llvm/prebuilt/$host/bin/llvm-readelf}"
 	test -x "$readelf" || { echo "Set LLVM_READELF to the build NDK's llvm-readelf" >&2; return 1; }
 	mkdir -p "$directory"
 	cp "build/android/$stem" "$directory/$stem"

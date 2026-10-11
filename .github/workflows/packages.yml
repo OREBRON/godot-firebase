@@ -1,0 +1,338 @@
+name: Module packages
+
+# Builds one full package and one package per module. Each package is a complete
+# selection: use exactly one of them in a game, never unzip two on top of each
+# other. Artifacts only; releases stay in build.yml.
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request replaces its unfinished run.
+concurrency:
+  group: godot-firebase-packages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GODOT: godot
+  NDK_VERSION: 28.1.13356709
+  # SDK downloads (~2.1 GB) plus mobile builds need this much free space.
+  MIN_FREE_GB: 10
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: Mock and package tests
+    # Fork pull requests never run on the persistent self-hosted runners: they keep
+    # third_party/ and SCons state between runs and have a writable $HOME. Every
+    # other job needs this one and is skipped with it.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 30
+    env:
+      CXX: clang++
+    steps:
+      - name: Checkout ready-to-load editor libraries
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          lfs: true
+          persist-credentials: false
+
+      - &check-godot
+        name: Check Godot version
+        run: |
+          set -euo pipefail
+          source tools/versions.env
+          actual="$("$GODOT" --version)"
+          case "$actual" in
+            "$GODOT_VERSION.stable"|"$GODOT_VERSION.stable".*) ;;
+            *)
+              echo "::error::Godot $GODOT_VERSION is required; runner has $actual"
+              exit 1
+              ;;
+          esac
+
+      - name: Test GDScript APIs, Auth lifecycle and packaging
+        run: |
+          set -euo pipefail
+          tools/run_tests.sh
+          python3 tests/test_auth_lifecycle.py
+          python3 tests/test_sdk_capability_packages.py
+
+      - &clean-godot
+        name: Clean workspace and Godot user data
+        if: always()
+        run: |
+          set -uo pipefail
+          git -C "$GITHUB_WORKSPACE" clean -ffdxq
+          for project in 'Godot Firebase' 'Firebase package smoke'; do
+            rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/godot/app_userdata/$project"
+          done
+
+  android:
+    name: Android and editor (${{ matrix.artifact }})
+    needs: test
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 90
+    strategy:
+      matrix:
+        include: &selections
+          - artifact: godot-firebase
+            modules: auth,firestore,storage,database,functions,analytics,remote_config,crashlytics
+          - artifact: godot-firebase-auth
+            modules: auth
+          - artifact: godot-firebase-firestore
+            modules: firestore
+          - artifact: godot-firebase-storage
+            modules: storage
+          - artifact: godot-firebase-database
+            modules: database
+          - artifact: godot-firebase-functions
+            modules: functions
+          - artifact: godot-firebase-analytics
+            modules: analytics
+          - artifact: godot-firebase-remote-config
+            modules: remote_config
+          - artifact: godot-firebase-crashlytics
+            modules: crashlytics
+    env:
+      # Builds the Linux stub natively and cross-links the Windows stub with lld-link.
+      CC: clang
+      MODULE_SELECTION: ${{ matrix.modules }}
+      # Extracted SDK sources and godot-cpp objects stay on the runner between runs.
+      THIRD_PARTY_CACHE: ${{ github.workspace }}/../godot-firebase-third-party
+    steps:
+      - &check-disk
+        name: Check free disk space
+        run: |
+          set -euo pipefail
+          df -h "$GITHUB_WORKSPACE"
+          free_gb=$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 {print int($4 / 1048576)}')
+          if [ "$free_gb" -lt "$MIN_FREE_GB" ]; then
+            echo "::error::Runner has ${free_gb} GB free; this build needs ${MIN_FREE_GB} GB."
+            exit 1
+          fi
+
+      - name: Check runner tools
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          for tool in zsh uvx python3 clang lld-link curl shasum unzip zip git; do
+            command -v "$tool" >/dev/null || {
+              echo "::error::$tool is required on this runner."
+              exit 1
+            }
+          done
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Select SDKMAN Java 17
+        run: zsh tools/setup_sdkman_java_ci.zsh
+
+      - name: Install Android SDK and pinned NDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;28.1.13356709'
+
+      - name: Check Android toolchain
+        run: |
+          set -euo pipefail
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          "$JAVA_HOME/bin/javac" -version
+
+      - &download-dependencies
+        name: Download pinned dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p "$THIRD_PARTY_CACHE"
+          ln -sfn "$THIRD_PARTY_CACHE" third_party
+          tools/bootstrap.sh
+          # Kept SCons signatures let every selection reuse the godot-cpp objects.
+          if [ -f "$THIRD_PARTY_CACHE/.packages.sconsign.dblite" ]; then
+            cp "$THIRD_PARTY_CACHE/.packages.sconsign.dblite" .sconsign.dblite
+          fi
+
+      - name: Build Android and Linux/Windows editor libraries
+        run: |
+          set -euo pipefail
+          tools/build.sh --platforms android,linux,windows --modules "$MODULE_SELECTION"
+          test "$(cat addons/firebase/bin/modules.txt)" = "$MODULE_SELECTION"
+
+      - name: Upload native outputs for packaging
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-android-${{ matrix.artifact }}
+          path: |
+            addons/firebase/bin/android/
+            addons/firebase/bin/linux/
+            addons/firebase/bin/windows/
+            addons/firebase/bin/modules.txt
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+      # Runs after success, failure and cancellation so the runner disk never fills.
+      - &clean-build
+        name: Clean workspace and dependency leftovers
+        if: always()
+        run: |
+          set -uo pipefail
+          if [ -f "$GITHUB_WORKSPACE/.sconsign.dblite" ] && [ -d "$THIRD_PARTY_CACHE" ]; then
+            cp "$GITHUB_WORKSPACE/.sconsign.dblite" "$THIRD_PARTY_CACHE/.packages.sconsign.dblite"
+          fi
+          git -C "$GITHUB_WORKSPACE" clean -ffdxq
+          if [ -d "$THIRD_PARTY_CACHE" ]; then
+            # Interrupted downloads and extractions are redone by the next bootstrap.
+            rm -f "$THIRD_PARTY_CACHE"/*.zip
+            for dir in "$THIRD_PARTY_CACHE/firebase_cpp_sdk" "$THIRD_PARTY_CACHE/Firebase"; do
+              [ -f "$dir/.complete" ] || rm -rf "$dir"
+            done
+            du -sh "$THIRD_PARTY_CACHE"
+          fi
+          df -h "$GITHUB_WORKSPACE"
+
+  ios:
+    name: iOS and editor (${{ matrix.artifact }})
+    needs: test
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 120
+    strategy:
+      matrix:
+        include: *selections
+    env:
+      MODULE_SELECTION: ${{ matrix.modules }}
+      THIRD_PARTY_CACHE: ${{ github.workspace }}/../godot-firebase-third-party
+    steps:
+      - *check-disk
+
+      - name: Check Xcode toolchain
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          DEVELOPER_DIR="$(xcode-select -p)"
+          if ! test -x "$DEVELOPER_DIR/usr/bin/xcodebuild"; then
+            DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+          fi
+          test -x "$DEVELOPER_DIR/usr/bin/xcodebuild" || {
+            echo '::error::Full Xcode is required on this runner.'
+            exit 1
+          }
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          xcodebuild -version
+          for tool in uvx python3 curl shasum unzip git; do
+            command -v "$tool" >/dev/null || {
+              echo "::error::$tool is required on this runner."
+              exit 1
+            }
+          done
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      # Only Auth builds Google Sign-In from source through CocoaPods.
+      - name: Install locked CocoaPods
+        if: contains(format(',{0},', matrix.modules), ',auth,')
+        run: bash tools/setup_cocoapods_ci.sh
+
+      - *download-dependencies
+
+      - name: Build iOS and macOS editor libraries
+        run: |
+          set -euo pipefail
+          tools/build.sh --platforms ios,macos --modules "$MODULE_SELECTION"
+          test "$(cat addons/firebase/bin/modules.txt)" = "$MODULE_SELECTION"
+
+      - name: Upload native outputs for packaging
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-apple-${{ matrix.artifact }}
+          path: |
+            addons/firebase/bin/ios/
+            addons/firebase/bin/macos/
+            addons/firebase/bin/modules.txt
+          # bin/ios/resources/.gdignore keeps Godot from importing the bundles.
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+      - *clean-build
+
+  package:
+    name: Package ${{ matrix.artifact }}
+    needs: [android, ios]
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        include: *selections
+    env:
+      MODULE_SELECTION: ${{ matrix.modules }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - *check-godot
+
+      - name: Download Android and Linux/Windows outputs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-android-${{ matrix.artifact }}
+          path: build/native/android
+
+      - name: Download iOS and macOS outputs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-apple-${{ matrix.artifact }}
+          path: build/native/apple
+
+      # Both runners must have built this selection; checked-out LFS pointers are
+      # dropped so every native file in the package comes from this run.
+      - name: Assemble native libraries
+        run: |
+          set -euo pipefail
+          bin=addons/firebase/bin
+          for part in android apple; do
+            test "$(cat "build/native/$part/modules.txt")" = "$MODULE_SELECTION"
+          done
+          rm -rf "$bin/android" "$bin/ios" "$bin/linux" "$bin/macos" "$bin/windows"
+          cp -R build/native/android/. "$bin/"
+          cp -R build/native/apple/. "$bin/"
+
+      - name: Package and smoke test
+        run: |
+          set -euo pipefail
+          package_path="$(tools/package.sh)"
+          python3 tests/test_sdk_capability_packages.py --smoke-package "$package_path"
+          mkdir -p build/artifacts
+          mv "$package_path" "build/artifacts/${{ matrix.artifact }}.zip"
+
+      # Unarchived upload: the artifact is the package ZIP itself, named after it.
+      - name: Upload package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: build/artifacts/${{ matrix.artifact }}.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: true
+
+      - *clean-godot

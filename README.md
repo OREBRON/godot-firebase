@@ -514,6 +514,39 @@ içermez ve cihazda çalıştırmaz. Kurulu Android platform 36
 ve build-tools 36.1.0 ister; Gradle 8.11.1 SHA-256 kontrolüyle çalışma dizinine
 indirilir. Global SDK/JDK kurulmaz, Firebase'e rapor/sembol yüklenmez.
 
+#### Modül paketleri (Linux + macOS self-hosted)
+
+`.github/workflows/packages.yml` push/main, PR ve manual tetiklenir; yalnız
+workflow artifact'ı üretir, release yayımlamaz. Dokuz seçim derlenir:
+sekiz ürünün tümünü içeren `godot-firebase.zip` ve her ürün için tek
+`godot-firebase-<ürün>.zip` (`auth`, `firestore`, `storage`, `database`,
+`functions`, `analytics`, `remote-config`, `crashlytics`). Artifact
+doğrudan paket ZIP'idir; oyunda **ya tek ürün ZIP'ini ya full ZIP'i** oyun
+köküne aç. Her ZIP ayrı bir native seçimdir; iki ZIP'i üst üste açma.
+
+| Job | Runner | Yaptığı iş |
+| --- | --- | --- |
+| `test` | `[self-hosted, Linux, X64]` | Mock testleri, Auth lifecycle ve paketleyici testleri |
+| `android` | `[self-hosted, Linux, X64]` | Android `.so`/AAR, Linux ve Windows editör kütüphaneleri |
+| `ios` | `[self-hosted, macOS, ARM64]` | iOS xcframework'leri, resource bundle'lar ve macOS editör kütüphaneleri |
+| `package` | `[self-hosted, Linux, X64]` | İki runner çıktısını birleştirir, `tools/package.sh` ve paket smoke testi |
+
+`package`, iki runner çıktısının aynı `modules.txt` seçimini taşıdığını doğrular
+ve checkout'taki LFS kütüphanelerini atar; paketteki her native dosya aynı
+çalışmada derlenir. Herhangi bir test, build veya smoke adımı başarısız olursa
+workflow başarısız olur ve paket yüklenmez. Ara native artifact'lar 1 gün,
+paketler 30 gün tutulur. Crashlytics sembolleri artifact'a eklenmez.
+
+Linux runner'da SDKMAN (JDK `.sdkmanrc` ile seçilir, betik `zsh` ister),
+`godot` 4.7.2, `uv`, `python3`, `clang`, `lld` (`lld-link`), `curl`, `shasum`,
+`zip` ve `unzip` gerekir; Android SDK platform 35 ve NDK 28.1.13356709
+`android-actions/setup-android` ile kurulur. macOS runner'da Xcode, `uv` ve
+`python3` gerekir; CocoaPods yalnız Auth seçimlerinde kilitli sürümle kurulur.
+Node.js kullanan bir adım yoktur. SDK indirmeleri her runner'da
+`../godot-firebase-third-party` altında kalıcı tutulur; godot-cpp nesneleri
+SCons imzalarıyla seçimler arasında yeniden kullanılır. Fork PR'ları
+self-hosted runner'larda çalışmaz.
+
 Firebase C++/iOS ve godot-cpp sürümleri `tools/versions.env` içindedir.
 GoogleSignIn kaynak sürümleri `tools/google_signin_ios/Podfile` ve lock dosyasında,
 Android bridge bağımlılıkları `android/build.gradle` ve lock dosyasında,
