@@ -29,12 +29,6 @@ MODULES = {
     "analytics": {"cpp": ["firebase_analytics"], "ios_folder": "FirebaseAnalytics", "system_frameworks": ["StoreKit", "AdSupport"]},
     "remote_config": {"cpp": ["firebase_remote_config"], "ios_folder": "FirebaseRemoteConfig", "system_frameworks": []},
     "crashlytics": {"cpp": [], "ios_folder": "FirebaseCrashlytics", "system_frameworks": []},
-    # Google Mobile Ads and UMP are not Firebase.zip products; tools/bootstrap.sh
-    # puts them in third_party/GoogleMobileAds. Frameworks from their podspecs.
-    "admob": {"cpp": [], "ios_folder": None, "system_frameworks": [
-        "AudioToolbox", "AVFoundation", "CFNetwork", "CoreGraphics", "CoreMedia", "CoreTelephony", "CoreVideo",
-        "JavaScriptCore", "MediaPlayer", "MessageUI", "MobileCoreServices", "Network", "QuartzCore", "StoreKit",
-        "WebKit", "AdSupport", "SafariServices", "AppTrackingTransparency"]},
 }
 # tools/build.sh copies the resource bundles listed here into the addon.
 RESOURCE_BUNDLES_LIST = "build/ios/resource_bundles.txt"
@@ -76,8 +70,6 @@ else:
 
     if "crashlytics" in modules:
         sources += ["src/crashlytics/platform/crashlytics_ios.mm" if platform == "ios" else "src/crashlytics/platform/crashlytics_android.cpp"]
-    if "admob" in modules:
-        sources += ["src/admob/platform/admob_ios.mm" if platform == "ios" else "src/admob/platform/admob_android.cpp"]
 
 cpp_libraries = [lib for name in modules for lib in MODULES[name]["cpp"]] + CORE["cpp"]
 
@@ -131,15 +123,11 @@ if platform == "ios":
     env.Append(LIBPATH=[lib_dir], LIBS=cpp_libraries)
     linked = set()
     bundles = []
-    folders = [(FIREBASE_IOS + "/FirebaseAnalytics", CORE["ios_frameworks"])] + [(FIREBASE_IOS + "/" + MODULES[name]["ios_folder"], None) for name in modules if MODULES[name]["ios_folder"]]
+    folders = [(FIREBASE_IOS + "/FirebaseAnalytics", CORE["ios_frameworks"])] + [(FIREBASE_IOS + "/" + MODULES[name]["ios_folder"], None) for name in modules]
     if "auth" in modules:
         first_existing(["third_party/GoogleSignIn/GoogleSignIn.xcframework"], "Google Sign-In (run tools/build_google_signin_ios.sh)")
         folders += [("third_party/GoogleSignIn", None)]
         bundles += sorted(glob.glob("third_party/GoogleSignIn/resources/*.bundle"))
-    if "admob" in modules:
-        first_existing(["third_party/GoogleMobileAds/GoogleMobileAds.xcframework"], "Google Mobile Ads (run tools/bootstrap.sh)")
-        folders += [("third_party/GoogleMobileAds", None)]
-        bundles += sorted(glob.glob("third_party/GoogleMobileAds/resources/*.bundle"))
     for folder, only in folders:
         for xcframework in sorted(glob.glob(folder + "/*.xcframework")):
             name = os.path.basename(xcframework)[: -len(".xcframework")]

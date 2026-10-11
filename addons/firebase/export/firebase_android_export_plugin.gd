@@ -2,7 +2,6 @@
 extends EditorExportPlugin
 ## Adds the generic bridge and prepares game-owned Android configuration.
 
-const AdMob := preload("res://addons/firebase/export/firebase_admob_export.gd")
 const Gradle := preload("res://addons/firebase/export/firebase_android_gradle.gd")
 const AAR := "res://addons/firebase/bin/android/godot_firebase.aar"
 const MODULES_FILE := "res://addons/firebase/bin/modules.txt"
@@ -26,7 +25,6 @@ func _get_export_options_overrides(_platform: EditorExportPlatform) -> Dictionar
 func _get_export_options(_platform: EditorExportPlatform) -> Array[Dictionary]:
 	var options: Array[Dictionary] = [
 		{"option": {"name": CONFIG_OPTION, "type": TYPE_STRING, "hint": PROPERTY_HINT_FILE, "hint_string": "*.json"}, "default_value": "res://google-services.json"},
-		{"option": {"name": AdMob.APP_ID_OPTION, "type": TYPE_STRING}, "default_value": ""},
 	]
 	for key: String in Gradle.METADATA:
 		options.append({"option": {"name": key, "type": TYPE_INT, "hint": PROPERTY_HINT_ENUM,
@@ -35,8 +33,6 @@ func _get_export_options(_platform: EditorExportPlatform) -> Array[Dictionary]:
 
 
 func _get_export_option_warning(_platform: EditorExportPlatform, option: String) -> String:
-	if option == AdMob.APP_ID_OPTION:
-		return _admob().get("message", "")
 	if option != CONFIG_OPTION:
 		return ""
 	return _validate_and_prepare(true)
@@ -74,11 +70,7 @@ func _get_android_manifest_application_element_contents(_platform: EditorExportP
 	var options := {}
 	for key: String in Gradle.METADATA:
 		options[key] = get_option(key)
-	return Gradle.manifest_for(options, _play_games_enabled()) + _admob().get("content", "")
-
-
-func _admob() -> Dictionary:
-	return Gradle.admob_manifest(_modules(), str(get_option(AdMob.APP_ID_OPTION)))
+	return Gradle.manifest_for(options, _play_games_enabled())
 
 
 func _modules() -> Array:
@@ -120,9 +112,6 @@ func _validate_and_prepare(dry_run: bool) -> String:
 		var client: Variant = _project_setting("firebase/auth/google_web_client_id", "")
 		if not client is String or client.is_empty():
 			return "Play Games server authentication requires firebase/auth/google_web_client_id."
-	var admob := _admob()
-	if admob.error != OK:
-		return admob.message
 	var directory := Gradle.build_directory(get_option("gradle_build/gradle_build_directory"))
 	var prepared := Gradle.prepare(directory, text, package_name, _modules(), games_id, dry_run)
 	return "" if prepared.error == OK else prepared.message

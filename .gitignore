@@ -31,3 +31,4 @@ google-services*.json
 # Android bridge dependency resolution
 /android/.gradle/
 /android/build/
+.tokensave

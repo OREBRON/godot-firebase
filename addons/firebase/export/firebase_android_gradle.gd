@@ -3,7 +3,6 @@ extends RefCounted
 ## Game-owned Android build integration. The generic SDK/AAR never contains an
 ## app ID. Hashes protect existing game files during updates and module removal.
 
-const AdMob := preload("res://addons/firebase/export/firebase_admob_export.gd")
 const Transaction := preload("res://addons/firebase/export/firebase_android_transaction.gd")
 const STATE := ".godot-firebase-export.json"
 const SCRIPT := "firebase-crashlytics.gradle"
@@ -41,7 +40,6 @@ buildscript {
 
 """
 const OWNED_PATHS := [SCRIPT, GAMES_RESOURCE, "google-services.json"]
-## Maven coordinates per module; a module that needs several artifacts lists them.
 const DEPENDENCIES := {
 	"auth": "com.google.firebase:firebase-auth:24.2.0",
 	"firestore": "com.google.firebase:firebase-firestore:26.6.0",
@@ -51,11 +49,6 @@ const DEPENDENCIES := {
 	"analytics": "com.google.firebase:firebase-analytics:23.2.0",
 	"crashlytics": "com.google.firebase:firebase-crashlytics-ndk:20.1.1",
 	"remote_config": "com.google.firebase:firebase-config:23.1.0",
-	# The bridge compiles against UMP; pin it instead of the SDK's transitive version.
-	"admob": [
-		"com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.5.0",
-		"com.google.android.ump:user-messaging-platform:4.0.0",
-	],
 }
 const METADATA := {
 	"firebase/analytics_collection": "firebase_analytics_collection_enabled",
@@ -77,10 +70,8 @@ static func dependencies_for(modules: Array, play_games: bool) -> PackedStringAr
 	# Firebase C++ App initializes Analytics Java classes even without our API.
 	var dependencies := PackedStringArray([DEPENDENCIES.analytics, "com.google.android.gms:play-services-base:18.10.1"])
 	for module: String in modules:
-		var coordinates: Variant = DEPENDENCIES.get(module, [])
-		for coordinate: String in (coordinates if coordinates is Array else [coordinates]):
-			if not dependencies.has(coordinate):
-				dependencies.append(coordinate)
+		if DEPENDENCIES.has(module) and not dependencies.has(DEPENDENCIES[module]):
+			dependencies.append(DEPENDENCIES[module])
 	if modules.has("auth"):
 		dependencies.append_array(PackedStringArray([
 			"androidx.credentials:credentials:1.6.0",
@@ -102,17 +93,6 @@ static func manifest_for(options: Dictionary, play_games: bool) -> String:
 	if play_games:
 		manifest += '<meta-data android:name="com.google.android.gms.games.APP_ID" android:value="@string/game_services_project_id" />\n'
 	return manifest
-
-
-## Mobile Ads and UMP read the App ID from the manifest; the app crashes at startup
-## without it. Only a selected AdMob module uses the option; an invalid ID adds nothing.
-static func admob_manifest(modules: Array, app_id: String) -> Dictionary:
-	if not modules.has("admob"):
-		return {"error": OK, "content": ""}
-	var error := AdMob.app_id_error(app_id)
-	if not error.is_empty():
-		return _failure(error)
-	return {"error": OK, "content": '<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="%s" />\n' % app_id}
 
 
 ## dry_run validates the same planned writes without changing game files.

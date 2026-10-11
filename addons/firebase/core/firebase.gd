@@ -11,7 +11,7 @@ extends Node
 ##   FirebaseResult.ERR_UNAVAILABLE instead of silently losing data.
 
 const ROOT := "res://addons/firebase/"
-const MODULES: Array[String] = ["auth", "firestore", "storage", "database", "functions", "analytics", "remote_config", "crashlytics", "admob"]
+const MODULES: Array[String] = ["auth", "firestore", "storage", "database", "functions", "analytics", "remote_config", "crashlytics"]
 
 ## Each is the module API (FirebaseAuth, FirebaseFirestore, ...) or null
 ## when the module folder is missing.
@@ -23,7 +23,6 @@ var functions: RefCounted
 var analytics: RefCounted
 var remote_config: RefCounted
 var crashlytics: RefCounted
-var admob: RefCounted
 ## Module name -> backend object (null when unavailable).
 var backends: Dictionary[String, Object] = {}
 

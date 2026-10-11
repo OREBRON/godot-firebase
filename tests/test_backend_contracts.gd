@@ -11,7 +11,6 @@ const TEST_HELPERS := {
 	"analytics": [],
 	"remote_config": ["set_server_values", "set_network_available", "advance_time", "throttle_until", "publish_update", "publish_error"],
 	"crashlytics": [],
-	"admob": ["simulate_no_fill", "close_next_early", "set_mock_reward", "advance_time"],
 }
 
 func _run() -> void:

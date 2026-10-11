@@ -1,8 +1,6 @@
 extends FirebaseTest
 
 const Plugin := preload("res://addons/firebase/export/firebase_ios_export_plugin.gd")
-const APP_ID := "ca-app-pub-3940256099942544~1458002511"
-const GOOGLE_NETWORK := "cstr6suwn9.skadnetwork"
 
 func _run() -> void:
 	check(Plugin.startup_plist({}).is_empty(), "absent startup choices preserve SDK defaults")
@@ -64,88 +62,3 @@ func _run() -> void:
 
 	google = Plugin.google_plist("123-test.apps.googleusercontent.com", "<key>GIDClientID</key><string><![CDATA[123-test.apps.googleusercontent.com]]></string>")
 	check(google.error == OK and not google.content.contains("GIDClientID"), "CDATA preserves matching client ID without parser errors")
-	_check_admob()
-	await _check_admob_options()
-
-
-func _check_admob() -> void:
-	var admob: Dictionary = Plugin.admob_plist(["auth"], "", "Ads", "<key>GADApplicationIdentifier</key><string>other</string>")
-	check(admob.error == OK and admob.content.is_empty(), "without AdMob its options and plist keys are ignored")
-	admob = Plugin.admob_plist(["admob"], APP_ID, "", "")
-	check(admob.error == OK, "AdMob plist is generated: %s" % admob)
-	var values := _values(admob.get("content", ""))
-	check(_string(values, "GADApplicationIdentifier") == APP_ID, "AdMob App ID is exported as GADApplicationIdentifier")
-	check(_identifiers(values) == [GOOGLE_NETWORK], "Google's SKAdNetwork identifier is exported")
-	check(not values.has("NSUserTrackingUsageDescription"), "no tracking description unless the game sets one")
-	for invalid in ["", "ca-app-pub-3940256099942544/1712485313", "ca-app-pub-3940256099942544~1458002511\n"]:
-		admob = Plugin.admob_plist(["admob"], invalid, "", "")
-		check(admob.error != OK and str(admob.get("message")).contains("firebase/admob_app_id"), "missing or malformed App ID is an export error: " + invalid.c_escape())
-
-	var manual_id := "<key>GADApplicationIdentifier</key><string>%s</string>" % APP_ID
-	admob = Plugin.admob_plist(["admob"], APP_ID, "", manual_id)
-	check(admob.error == OK and not admob.content.contains("GADApplicationIdentifier"), "matching manual App ID is not duplicated")
-	admob = Plugin.admob_plist(["admob"], APP_ID, "", manual_id.replace("1458002511", "0000000000"))
-	check(admob.error != OK, "conflicting manual App ID is rejected")
-	admob = Plugin.admob_plist(["admob"], "", "", manual_id)
-	check(admob.error != OK, "the App ID option is required even when the additional plist sets it")
-	admob = Plugin.admob_plist(["admob"], APP_ID, "", "<key>GADApplicationIdentifier</key><integer>1</integer>")
-	check(admob.error != OK, "manual App ID must be a plist string")
-
-	var networks := "<key>SKAdNetworkItems</key><array><dict><key>SKAdNetworkIdentifier</key><string>4fzdc2evr5.skadnetwork</string></dict>\n<!-- Google --><dict><key>SKAdNetworkIdentifier</key><string>%s</string></dict></array>" % GOOGLE_NETWORK
-	admob = Plugin.admob_plist(["admob"], APP_ID, "", networks)
-	check(admob.error == OK and not admob.content.contains("SKAdNetworkItems") and admob.content.contains("GADApplicationIdentifier"), "the game's SKAdNetwork list is preserved without a duplicate key")
-	check(Plugin.admob_plist(["admob"], APP_ID, "", networks.replace(GOOGLE_NETWORK, "other.skadnetwork")).error != OK, "a game SKAdNetwork list without Google's identifier is rejected")
-	for malformed in [
-		"<key>SKAdNetworkItems</key><array/>",
-		"<key>SKAdNetworkItems</key><string>%s</string>" % GOOGLE_NETWORK,
-		"<key>SKAdNetworkItems</key><array><string>%s</string></array>" % GOOGLE_NETWORK,
-		"<key>SKAdNetworkItems</key><array><dict><key>OtherIdentifier</key><string>%s</string></dict></array>" % GOOGLE_NETWORK,
-		"<key>SKAdNetworkItems</key><array><dict><key>SKAdNetworkIdentifier</key></dict><dict><key>SKAdNetworkIdentifier</key><string>%s</string></dict></array>" % GOOGLE_NETWORK,
-		"<key>SKAdNetworkItems</key><array><!-- <dict><key>SKAdNetworkIdentifier</key><string>%s</string></dict> --></array>" % GOOGLE_NETWORK,
-	]:
-		check(Plugin.admob_plist(["admob"], APP_ID, "", malformed).error != OK, "invalid SKAdNetworkItems is rejected: " + malformed)
-	admob = Plugin.admob_plist(["admob"], APP_ID, "", "<key>OtherSetting</key><array><dict><key>SKAdNetworkIdentifier</key><string>%s</string></dict></array>" % GOOGLE_NETWORK)
-	check(admob.error == OK and _identifiers(_values(admob.content)) == [GOOGLE_NETWORK], "an unrelated array cannot impersonate SKAdNetworkItems")
-
-	var tracking := "Ads & rewards <energy>\n\"Personalized\" offers"
-	admob = Plugin.admob_plist(["admob"], APP_ID, tracking, "")
-	check(admob.error == OK and not admob.content.contains("<energy>"), "tracking description is XML-escaped")
-	check(_string(_values(admob.get("content", "")), "NSUserTrackingUsageDescription") == tracking, "tracking description is exported when set")
-	var manual_tracking := "<key>NSUserTrackingUsageDescription</key><string>Ads &amp; rewards &lt;energy&gt;\n\"Personalized\" offers</string>"
-	admob = Plugin.admob_plist(["admob"], APP_ID, tracking, manual_tracking)
-	check(admob.error == OK and not admob.content.contains("NSUserTrackingUsageDescription"), "matching manual tracking description is not duplicated")
-	check(Plugin.admob_plist(["admob"], APP_ID, "Other text", manual_tracking).error != OK, "conflicting manual tracking description is rejected")
-	admob = Plugin.admob_plist(["admob"], APP_ID, "", manual_tracking)
-	check(admob.error == OK and not admob.content.contains("NSUserTrackingUsageDescription"), "an empty option leaves a manual tracking description to the game")
-	check(Plugin.admob_plist(["admob"], APP_ID, "", "<key>GADApplicationIdentifier</key>").error != OK, "invalid additional plist is reported")
-
-
-func _check_admob_options() -> void:
-	if not Engine.is_editor_hint():
-		return # EditorExportPlugin can only instantiate in --editor runs.
-	await create_timer(1.0).timeout # Let the editor finish its startup scan.
-	var options := {}
-	for option in Plugin.new()._get_export_options(null):
-		options[option.option.name] = option
-	check(options.has("firebase/admob_app_id") and options["firebase/admob_app_id"].default_value == "", "the game's AdMob App ID is an export option without a default")
-	var tracking: Dictionary = options.get("firebase/admob_tracking_description", {})
-	check(tracking.get("default_value") == "" and tracking.get("option", {}).get("hint") == PROPERTY_HINT_MULTILINE_TEXT, "the tracking description is an optional multiline export option")
-
-
-func _values(content: String) -> Dictionary:
-	var parsed: Dictionary = Plugin._additional_plist_values(content)
-	check(parsed.error == OK, "generated AdMob plist content is valid: %s" % parsed)
-	return parsed.get("values", {})
-
-
-func _string(values: Dictionary, key: String) -> Variant:
-	var node: Dictionary = values.get(key, {})
-	return node.text if node.get("tag") == "string" and node.children.is_empty() else null
-
-
-func _identifiers(values: Dictionary) -> Array:
-	var identifiers := []
-	var items: Dictionary = values.get("SKAdNetworkItems", {})
-	for item in items.get("children", []):
-		identifiers.append(_string(Plugin._plist_dictionary(item).get("values", {}), "SKAdNetworkIdentifier"))
-	return identifiers

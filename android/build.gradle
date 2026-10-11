@@ -9,8 +9,6 @@ dependencies {
     bridgeCompile 'com.google.android.libraries.identity.googleid:googleid:1.2.1'
     bridgeCompile 'com.google.android.gms:play-services-games-v2:22.0.0'
     bridgeCompile 'com.google.firebase:firebase-crashlytics:20.1.1'
-    bridgeCompile 'com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.5.0'
-    bridgeCompile 'com.google.android.ump:user-messaging-platform:4.0.0'
 }
 dependencyLocking { lockAllConfigurations() }
 tasks.register('bridgeClasspath') {

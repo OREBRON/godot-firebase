@@ -12,7 +12,7 @@ import unittest
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = ["auth", "firestore", "storage", "database", "functions", "analytics", "remote_config", "crashlytics", "admob"]
+MODULES = ["auth", "firestore", "storage", "database", "functions", "analytics", "remote_config", "crashlytics"]
 
 
 def smoke_package(package_path, api_only=False):
@@ -48,7 +48,7 @@ func _run() -> void:
             push_error("unselected API was installed: " + module)
             quit(1)
             return
-    var calls := {"auth": ["sign_in_anonymously"], "firestore": ["set_doc", "smoke/doc", {"value": 1}], "database": ["set_value", "smoke", 1], "analytics": ["log_event", "smoke"], "remote_config": ["set_defaults", {"smoke": true}], "crashlytics": ["log_message", "smoke"], "admob": ["request_consent"]}
+    var calls := {"auth": ["sign_in_anonymously"], "firestore": ["set_doc", "smoke/doc", {"value": 1}], "database": ["set_value", "smoke", 1], "analytics": ["log_event", "smoke"], "remote_config": ["set_defaults", {"smoke": true}], "crashlytics": ["log_message", "smoke"]}
     for module in selected:
         if not calls.has(module):
             continue
@@ -99,7 +99,7 @@ class DevelopmentPackageTests(unittest.TestCase):
             names = set(archive.namelist())
         return path.name, names
 
-    def test_new_single_payloads(self):
+    def test_three_new_single_payloads(self):
         for module in MODULES[5:]:
             with self.subTest(module=module):
                 name, files = self.package(module)

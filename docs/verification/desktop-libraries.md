@@ -38,7 +38,7 @@ Firebase SDK/network desteği veya mobil cihaz kabulü anlamına gelmez.
 
 Derleme komutları ve kullanıcı kurulumu [README](../../README.md#desktop-editöründe-geliştirme)
 içindedir. Godot platform/mimari seçimi
-[resmi descriptor rehberine](https://docs.godotengine.org/en/4.5/tutorials/scripting/gdextension/gdextension_file.html#libraries-section)
+[resmi descriptor rehberine](https://docs.godotengine.org/en/4.7/engine_details/engine_api/gdextension/gdextension_file.html#libraries-section)
 dayanır; runner mimarileri
 [GitHub runner referansında](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 tanımlıdır.

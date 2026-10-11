@@ -35,9 +35,6 @@
 #ifdef GODOT_FIREBASE_CRASHLYTICS
 #include "crashlytics/firebase_crashlytics_native.h"
 #endif
-#ifdef GODOT_FIREBASE_ADMOB
-#include "admob/firebase_admob_native.h"
-#endif
 
 using namespace godot;
 
@@ -74,9 +71,6 @@ void initialize_godot_firebase([[maybe_unused]] ModuleInitializationLevel p_leve
 #ifdef GODOT_FIREBASE_CRASHLYTICS
 	GDREGISTER_CLASS(godot_firebase::FirebaseCrashlyticsNative);
 #endif
-#ifdef GODOT_FIREBASE_ADMOB
-	GDREGISTER_CLASS(godot_firebase::FirebaseAdmobNative);
-#endif
 #endif
 }
 
@@ -106,9 +100,6 @@ void uninitialize_godot_firebase([[maybe_unused]] ModuleInitializationLevel p_le
 #endif
 #ifdef GODOT_FIREBASE_CRASHLYTICS
 		godot_firebase::FirebaseCrashlyticsNative::shutdown_all();
-#endif
-#ifdef GODOT_FIREBASE_ADMOB
-		godot_firebase::FirebaseAdmobNative::shutdown_all();
 #endif
 		godot_firebase::FirebaseAppNative::shutdown();
 	}
