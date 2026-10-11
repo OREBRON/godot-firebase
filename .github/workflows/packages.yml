@@ -38,13 +38,18 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 30
     env:
+      CC: clang
       CXX: clang++
     steps:
-      - name: Checkout ready-to-load editor libraries
+      # No LFS: every native file is built in this workflow. desktop.yml tests the
+      # committed LFS libraries on GitHub-hosted runners.
+      - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          lfs: true
           persist-credentials: false
+
+      - name: Build Linux editor library
+        run: python3 tools/build_desktop_stub.py --platform linux --arch x86_64
 
       - &check-godot
         name: Check Godot version
@@ -126,7 +131,7 @@ jobs:
           set -euo pipefail
           test "$(uname -s)" = Linux
           test "$(uname -m)" = x86_64
-          for tool in zsh uvx python3 clang lld-link curl shasum unzip zip git; do
+          for tool in uvx python3 clang lld-link curl shasum unzip zip git; do
             command -v "$tool" >/dev/null || {
               echo "::error::$tool is required on this runner."
               exit 1
@@ -139,7 +144,7 @@ jobs:
           persist-credentials: false
 
       - name: Select SDKMAN Java 17
-        run: zsh tools/setup_sdkman_java_ci.zsh
+        run: bash tools/setup_sdkman_java_ci.sh
 
       - name: Install Android SDK and pinned NDK
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3

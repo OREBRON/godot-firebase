@@ -526,18 +526,19 @@ köküne aç. Her ZIP ayrı bir native seçimdir; iki ZIP'i üst üste açma.
 
 | Job | Runner | Yaptığı iş |
 | --- | --- | --- |
-| `test` | `[self-hosted, Linux, X64]` | Mock testleri, Auth lifecycle ve paketleyici testleri |
+| `test` | `[self-hosted, Linux, X64]` | Linux editör kütüphanesini derler; mock, Auth lifecycle ve paketleyici testleri |
 | `android` | `[self-hosted, Linux, X64]` | Android `.so`/AAR, Linux ve Windows editör kütüphaneleri |
 | `ios` | `[self-hosted, macOS, ARM64]` | iOS xcframework'leri, resource bundle'lar ve macOS editör kütüphaneleri |
 | `package` | `[self-hosted, Linux, X64]` | İki runner çıktısını birleştirir, `tools/package.sh` ve paket smoke testi |
 
 `package`, iki runner çıktısının aynı `modules.txt` seçimini taşıdığını doğrular
-ve checkout'taki LFS kütüphanelerini atar; paketteki her native dosya aynı
-çalışmada derlenir. Herhangi bir test, build veya smoke adımı başarısız olursa
+ve checkout'taki LFS pointer'larını atar; workflow LFS indirmez, paketteki her
+native dosya aynı çalışmada derlenir. Commit'li LFS kütüphanelerini
+`desktop.yml` test eder. Herhangi bir test, build veya smoke adımı başarısız olursa
 workflow başarısız olur ve paket yüklenmez. Ara native artifact'lar 1 gün,
 paketler 30 gün tutulur. Crashlytics sembolleri artifact'a eklenmez.
 
-Linux runner'da SDKMAN (JDK `.sdkmanrc` ile seçilir, betik `zsh` ister),
+Linux runner'da SDKMAN (JDK `.sdkmanrc` ile bash'te seçilir, varsayılan JDK değişmez),
 `godot` 4.7.2, `uv`, `python3`, `clang`, `lld` (`lld-link`), `curl`, `shasum`,
 `zip` ve `unzip` gerekir; Android SDK platform 35 ve NDK 28.1.13356709
 `android-actions/setup-android` ile kurulur. macOS runner'da Xcode, `uv` ve
