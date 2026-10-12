@@ -191,17 +191,18 @@ geçersiz/tekrarlı modül adlarını reddeder, seçilmeyen API/mock klasörleri
 oyun JSON/plist dosyalarını dışlar. Native platform çıktılarının aynı seçimden
 geldiğini build sahibi sağlamalıdır; stale/mixed build doğrulaması halen yoktur.
 
-`v4.7.2` release workflow'u `auth,firestore,functions,analytics,crashlytics,remote_config`
-seçimini tek monolit olarak iOS, Android ve macOS için derler. Windows ve Linux
-editör kütüphaneleri LFS'den gelir. Bu release'in `godot-firebase.zip` dosyası
-yalnız bu altı ürünün API/mock klasörlerini içerir; Storage ve Database
-dahil değildir, bunlar için seçimi kaynaktan derle. ZIP'leri üst üste kurma;
-seçilen ürünleri birlikte kullanmak için bu tek ZIP'i aç. Bu sürüm dokuz adet birleşebilir paket hedefinin kabulü değildir.
+Release workflow'u (`build.yml`) sekiz ürünün tümünü tek monolit olarak iOS,
+Android ve macOS için derler. Windows ve Linux editör kütüphaneleri LFS'den
+gelir. Release'in `godot-firebase.zip` dosyası her zaman bütün modülleri
+içerir. `v4.7.2` release'indeki `godot-firebase.zip` bu kuraldan önce
+yayımlandı ve altı ürün içerir; Storage ve Database o pakette yoktur. ZIP'leri
+üst üste kurma; seçilen ürünleri birlikte kullanmak için tek ZIP'i aç. Bu,
+dokuz adet birleşebilir paket hedefinin kabulü değildir.
 
 #224 takip release hedefi sekiz tekil ürün + full, toplam dokuz ZIP'tir.
 Birleşebilir native topoloji, ortak path/hash, full=union ve build-ID kabulü
-#90/#85/#86/#67/#68 sonuçlarını bekler. Aşağıdaki altı-paket bölümü önceki
-beş ürün milestone'unun hedefidir; yeni geliştirme ZIP'leri bu kabulü tamamlamaz.
+#90/#85/#86/#67/#68 sonuçlarını bekler. Aşağıdaki bölüm bu hedefi tarif eder;
+yeni geliştirme ZIP'leri bu kabulü tamamlamaz.
 
 ## Birlikte kurulabilen paketler (hedef; henüz yayın kabulü yok)
 
@@ -210,17 +211,20 @@ kurulumu tarif eder. Bugün yukarıdaki kombinasyon build'ini kullan.
 
 | Paket | Seçilen API |
 | --- | --- |
-| `godot-firebase.zip` | Beş modülün tümü |
+| `godot-firebase.zip` | Bütün modüller |
 | `godot-firebase-auth.zip` | Auth |
 | `godot-firebase-firestore.zip` | Firestore |
 | `godot-firebase-storage.zip` | Storage |
 | `godot-firebase-database.zip` | Realtime Database |
 | `godot-firebase-functions.zip` | Functions |
+| `godot-firebase-analytics.zip` | Analytics |
+| `godot-firebase-remote-config.zip` | Remote Config |
+| `godot-firebase-crashlytics.zip` | Crashlytics |
 
 Her tek modül ZIP'i ortak Core, eklenti/export dosyaları ve ilgili platform
 çıktılarını içerir; **ayrıca Core indirilmez**. Aynı `build_id` içindeki ortak
 yollar aynı baytları taşır, modül yolları birbirinden ayrıdır. Full paket
-bu beş paketin dosya birleşimidir. Bu eşitliklerin testleri henüz #67'de
+bütün tek modül paketlerinin dosya birleşimidir. Bu eşitliklerin testleri henüz #67'de
 bekliyor; mevcut ZIP'lerde bu sözleşme veya `build_id` kontrolü bulunmaz.
 
 Hedef release'te aşağıdaki seçimin ZIP'lerini aynı oyun köküne aç:
@@ -492,7 +496,7 @@ tekrarlanır. Build öncesi test, bozuk hazır binary'nin CI'da gizlenmesini
 `.github/workflows/build.yml` `[self-hosted, macOS, ARM64]` runner'da çalışır
 (Xcode, `godot` 4.7.2, `uv`, Android SDK/NDK ve JDK 17 gerekir). SDK indirmeleri runner'da
 `../godot-firebase-third-party` altında kalıcı tutulur; ilk çalışma ~2.2 GB
-indirir. Her çalışma yukarıdaki altı ürünü tek seçimle iOS, Android ve macOS
+indirir. Her çalışma sekiz ürünün tümünü tek seçimle iOS, Android ve macOS
 için derler, mock testlerini ve paket smoke testini koşar. `v*` tag push'unda
 `godot-firebase.zip` ve `SHA256SUMS.txt` o tag'in GitHub release'ine eklenir;
 branch, PR ve elle başlatılan çalışmalar release'e yükleme yapmaz. Paket oyunun

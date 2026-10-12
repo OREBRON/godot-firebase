@@ -68,10 +68,10 @@ planlanan adlardır; henüz varlıkları veya geçtikleri iddia edilmez.
 | Tek release `build_id`, native/App öncesi mismatch reddi | #85/#86 | Bekliyor |
 | Core + beş ürün stage'i; seçilen backend | #87/#88; `tests/test_native_layout.py` | Bekliyor |
 | iOS descriptor/framework/resource sahipliği | #54; `tests/test_ios_package_layout.py`, export/signing | Bekliyor |
-| Altı exact ZIP adı, ayrı Core gerekmemesi | #67; `tests/test_packages.py` | Bekliyor |
+| Dokuz exact ZIP adı, ayrı Core gerekmemesi | #67; `tests/test_packages.py` | Bekliyor |
 | Ortak path/bayt eşitliği, ürün yolu ayrıklığı, full=union | #67; aynı testte path+SHA256 kanıtı | Bekliyor |
 | Eksik/eski platform build reddi, oyun config'i dışlama | #67; paket içerik ve hata testleri | Bekliyor |
-| Beş tekil + full + Auth/Firestore + Auth/Database smoke | #67; `tests/test_package_import.sh` | Bekliyor |
+| Sekiz tekil + full + Auth/Firestore + Auth/Database smoke | #67; `tests/test_package_import.sh` | Bekliyor |
 | Ters/tekrar import, tekilden full'a, Core-only, kaldırma | #67; import fixture'ları | Bekliyor |
 | Tek release build'inden CI, Android preflight/cache, SHA256SUMS | #68; workflow çalışması | Bekliyor |
 | iPhone beş ürün, Apple/Game Center/link/delete, oturum/token/main-thread/shutdown | #55 | Cihaz kanıtı yok |
@@ -82,9 +82,11 @@ Statik dosya birleşimi tüm 31 modül seçiminin dosya kümesini kapsayabilir;
 cihaz E2E yerine geçmez. CI build/test'i cihaz beklemeden geliştirilebilir,
 ancak native release kabulü eksik cihaz kanıtını geçmiş sayamaz.
 
-Hedef ZIP'ler: `godot-firebase.zip`, `godot-firebase-auth.zip`,
+Hedef ZIP'ler: bütün modülleri içeren `godot-firebase.zip`, `godot-firebase-auth.zip`,
 `godot-firebase-firestore.zip`, `godot-firebase-storage.zip`,
-`godot-firebase-database.zip`, `godot-firebase-functions.zip`.
+`godot-firebase-database.zip`, `godot-firebase-functions.zip`,
+`godot-firebase-analytics.zip`, `godot-firebase-remote-config.zip`,
+`godot-firebase-crashlytics.zip`.
 Mevcut CI aynı adlı varyantlar üretebilir; ad benzerliği bu kabulün geçtiğini
 göstermez.
 

@@ -13,7 +13,7 @@ on:
 permissions:
   contents: read
 
-# Share the runner/dependency lock with the existing six-package workflow.
+# Share the runner/dependency lock with the release workflow (build.yml).
 concurrency:
   group: godot-firebase-build
   cancel-in-progress: false
