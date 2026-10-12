@@ -530,24 +530,25 @@ köküne aç. Her ZIP ayrı bir native seçimdir; iki ZIP'i üst üste açma.
 
 | Job | Runner | Yaptığı iş |
 | --- | --- | --- |
-| `test` | `[self-hosted, Linux, X64]` | Linux editör kütüphanesini derler; mock, Auth lifecycle ve paketleyici testleri |
-| `android` | `[self-hosted, Linux, X64]` | Android `.so`/AAR, Linux ve Windows editör kütüphaneleri |
-| `ios` | `[self-hosted, macOS, ARM64]` | iOS xcframework'leri, resource bundle'lar ve macOS editör kütüphaneleri |
-| `package` | `[self-hosted, Linux, X64]` | İki runner çıktısını birleştirir, `tools/package.sh` ve paket smoke testi |
+| `editor` | `[self-hosted, Linux, X64]` | Linux ve Windows editör kütüphanelerini bir kez derler; mock, Auth lifecycle ve paketleyici testleri |
+| `package` | `[self-hosted, macOS, ARM64]` | Her seçim için iOS, Android ve macOS editör kütüphanelerini tek build'de derler; `tools/package.sh`, paket smoke testi ve yükleme |
 
-`package`, iki runner çıktısının aynı `modules.txt` seçimini taşıdığını doğrular
-ve checkout'taki LFS pointer'larını atar; workflow LFS indirmez, paketteki her
-native dosya aynı çalışmada derlenir. Commit'li LFS kütüphanelerini
-`desktop.yml` test eder. Herhangi bir test, build veya smoke adımı başarısız olursa
-workflow başarısız olur ve paket yüklenmez. Ara native artifact'lar 1 gün,
-paketler 30 gün tutulur. Crashlytics sembolleri artifact'a eklenmez.
+Bir paketin iOS ve Android çıktıları aynı runner'da aynı build'den gelir;
+paket farklı build'lerin mobil kütüphanelerini karıştırmaz. Linux ve Windows
+editör kütüphaneleri Firebase içermez, bütün seçimlerde aynıdır. Workflow LFS
+indirmez, paketteki her native dosya aynı çalışmada derlenir; commit'li LFS
+kütüphanelerini `desktop.yml` test eder. Herhangi bir test, build veya smoke
+adımı başarısız olursa workflow başarısız olur ve paket yüklenmez. Editör
+kütüphanesi ara artifact'ı 1 gün, paketler 30 gün tutulur. Crashlytics
+sembolleri artifact'a eklenmez.
 
-Linux runner'da SDKMAN (JDK `.sdkmanrc` ile bash'te seçilir, varsayılan JDK değişmez),
-`godot` 4.7.2, `uv`, `python3`, `clang`, `lld` (`lld-link`), `curl`, `shasum`,
-`zip` ve `unzip` gerekir; Android SDK platform 35 ve NDK 28.1.13356709
-`android-actions/setup-android` ile kurulur. macOS runner'da Xcode, `uv` ve
-`python3` gerekir; CocoaPods yalnız Auth seçimlerinde kilitli sürümle kurulur.
-Runner'a ayrıca Node.js kurmak gerekmez; action'lar runner'ın kendi Node.js'iyle çalışır. SDK indirmeleri her runner'da
+Linux runner'da `godot` 4.7.2, `python3`, `clang` ve `lld` (`lld-link`) gerekir.
+macOS runner'da Xcode, `godot` 4.7.2, SDKMAN (JDK `.sdkmanrc` ile zsh'te seçilir,
+varsayılan JDK değişmez), `uv`, `python3`, `curl`, `shasum`, `zip` ve `unzip`
+gerekir; Android SDK platform 35 ve NDK 28.1.13356709
+`android-actions/setup-android` ile kurulur, CocoaPods yalnız Auth seçimlerinde
+kilitli sürümle kurulur.
+Runner'a ayrıca Node.js kurmak gerekmez; action'lar runner'ın kendi Node.js'iyle çalışır. SDK indirmeleri macOS runner'da
 `../godot-firebase-third-party` altında kalıcı tutulur; godot-cpp nesneleri
 SCons imzalarıyla seçimler arasında yeniden kullanılır. Fork PR'ları
 self-hosted runner'larda çalışmaz.
