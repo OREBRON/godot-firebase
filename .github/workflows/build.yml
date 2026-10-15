@@ -38,6 +38,9 @@ jobs:
       MIN_FREE_GB: 10
       # godot-firebase.zip always holds every module.
       MODULE_SELECTION: auth,firestore,storage,database,functions,analytics,remote_config,crashlytics
+      IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
+      IOS_SIGNING_TEAM_ID: ${{ secrets.IOS_SIGNING_TEAM_ID }}
+      IOS_SIGNING_KEYCHAIN: ${{ secrets.IOS_SIGNING_KEYCHAIN }}
 
     steps:
       - name: Check self-hosted toolchain
@@ -85,6 +88,12 @@ jobs:
       - name: Select SDKMAN Java 17
         run: zsh tools/setup_sdkman_java_ci.zsh
 
+      - name: Check Apple signing identity and packaging gates
+        run: |
+          set -euo pipefail
+          python3 tools/ios_signing.py check-identity
+          python3 tests/test_ios_signing.py
+
       - name: Install Android SDK and pinned NDK
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
@@ -131,7 +140,7 @@ jobs:
           tools/build.sh --platforms ios,android,macos --modules "$MODULE_SELECTION"
           test "$(cat addons/firebase/bin/modules.txt)" = "$MODULE_SELECTION"
           tools/run_tests.sh
-          package_path="$(tools/package.sh)"
+          package_path="$(tools/package.sh --sign-ios)"
           test "$(basename "$package_path")" = godot-firebase.zip
           python3 tests/test_sdk_capability_packages.py --smoke-package build/dist/godot-firebase.zip
 

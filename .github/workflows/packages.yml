@@ -86,6 +86,7 @@ jobs:
           tools/run_tests.sh
           python3 tests/test_auth_lifecycle.py
           python3 tests/test_sdk_capability_packages.py
+          python3 tests/test_ios_signing.py
 
       - name: Upload editor libraries for packaging
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -137,6 +138,9 @@ jobs:
             modules: crashlytics
     env:
       MODULE_SELECTION: ${{ matrix.modules }}
+      IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
+      IOS_SIGNING_TEAM_ID: ${{ secrets.IOS_SIGNING_TEAM_ID }}
+      IOS_SIGNING_KEYCHAIN: ${{ secrets.IOS_SIGNING_KEYCHAIN }}
       # Extracted SDK sources and godot-cpp objects stay on the runner between runs.
       THIRD_PARTY_CACHE: ${{ github.workspace }}/../godot-firebase-third-party
       # SDK downloads (~2.1 GB) plus iOS and Android builds need this much free space.
@@ -180,6 +184,9 @@ jobs:
           persist-credentials: false
 
       - *check-godot
+
+      - name: Check Apple signing identity
+        run: python3 tools/ios_signing.py check-identity
 
       - name: Select SDKMAN Java 17
         run: zsh tools/setup_sdkman_java_ci.zsh
@@ -229,7 +236,7 @@ jobs:
       - name: Package and smoke test
         run: |
           set -euo pipefail
-          package_path="$(tools/package.sh)"
+          package_path="$(tools/package.sh --sign-ios)"
           test "$(basename "$package_path")" = "${{ matrix.artifact }}.zip"
           python3 tests/test_sdk_capability_packages.py --smoke-package "$package_path"
 

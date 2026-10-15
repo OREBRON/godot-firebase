@@ -475,6 +475,16 @@ python3 tests/test_sdk_capability_packages.py
 argümanı olarak verilebilir. `make package`, mevcut build'i `bin/modules.txt`
 listesine göre paketler.
 
+iOS dağıtım paketi için `tools/package.sh --sign-ios` kullanılır. Bu seçenek
+son paket içeriğindeki device/simulator framework'lerini ve debug/release
+XCFramework'lerini Apple sertifikasıyla imzalar; ZIP'i tekrar açıp imzaları
+doğrulamadan çıktıyı yayımlamaz. Bayraksız komut yerel geliştirme içindir ve
+imzalı dağıtım garantisi vermez. Sertifika/Keychain kurulumu, Godot Xcode export'u
+ve son IPA kontrolü: [iOS imzalama kabulü](docs/verification/ios-signing.md).
+App Store'a yüklenecek son IPA, `tools/ios_signing.py verify-ipa ...
+--team-id <oyun-ekibi> --distribution` ile ayrıca kontrol edilir; SDK için
+kabul edilen Apple Development sertifikası uygulamanın dağıtım imzası yerine geçmez.
+
 Auth içeren iOS build, `tools/build_google_signin_ios.sh` ile pinned kaynaklardan
 GoogleSignIn bağımlılıklarını hazırlar; kurulu CocoaPods/Xcode gerekir, global araç
 kurulmaz. Testler mock'larla çalışır. Native ClassDB signature gate'i editor
@@ -502,6 +512,16 @@ için derler, mock testlerini ve paket smoke testini koşar. `v*` tag push'unda
 branch, PR ve elle başlatılan çalışmalar release'e yükleme yapmaz. Paket oyunun
 kök dizinine açılır. Cihazda Firebase runtime ve Crashlytics symbolication
 kanıtı ayrı kabul işlerinde bekliyor.
+
+Üç mobil paket workflow'u (`build.yml`, `packages.yml`, `sdk-capabilities.yml`)
+`--sign-ios` kullanır. Repository Actions secrets içinde
+`IOS_SIGNING_IDENTITY` (tam Apple Distribution/Development sertifika adı veya
+SHA-1) ve `IOS_SIGNING_TEAM_ID` gerekir; `IOS_SIGNING_KEYCHAIN` isteğe bağlı
+Keychain yoludur. Sertifika ve özel anahtarı macOS runner hesabının erişebildiği
+Keychain'de bulunmalıdır. Eksik kimlik/anahtar, yanlış ekip, imzasız/ad-hoc,
+zaman damgasız veya bozuk paket CI'ı başarısız yapar. Yeni `.p8` gerekmez.
+`build.yml` ayrıca küçük gerçek Mach-O/XCFramework imzalama fixture'ı çalıştırır;
+bu fixture son oyun IPA'sının kabulü yerine geçmez.
 
 `.github/workflows/sdk-capabilities.yml` yalnız PR/manual geliştirme doğrulamasıdır.
 Analytics, Remote Config ve Crashlytics tekil seçimlerini, telemetry

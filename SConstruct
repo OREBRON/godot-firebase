@@ -157,10 +157,10 @@ suffix = ".%s.%s%s" % (platform, env["target"], ".simulator" if platform == "ios
 if platform == "macos":
     suffix = ".macos.%s" % env["arch"]
 library_name = "libgodot_firebase%s%s" % (suffix, env["SHLIBSUFFIX"])
-# Without this the install name is the relative build path. Godot's iOS export
-# rewrites it only when install_name_tool is available on the export host.
+# The framework wrapper sets the final @rpath before SDK signing. Reserve room
+# for its longer install name; the intermediate dylib still has a usable ID.
 if platform == "ios":
-    env.Append(LINKFLAGS=["-Wl,-install_name,@rpath/" + library_name])
+    env.Append(LINKFLAGS=["-Wl,-install_name,@rpath/" + library_name, "-Wl,-headerpad_max_install_names"])
 # godot-cpp compiles .mm through CXXCOM; framework/ARC flags must be on these
 # Objective-C++ objects, rather than OBJCXXFLAGS which that command omits.
 if platform == "ios":

@@ -85,11 +85,9 @@ if [[ ",$platforms," == *",ios,"* ]]; then
 		build ios "$target" arch=arm64 ios_simulator=yes
 		collect_ios_symbols "$target" .simulator
 		out="$BIN/ios/godot_firebase.ios.$target.xcframework"
-		rm -rf "$out"
-		xcodebuild -create-xcframework \
-			-library "build/ios/libgodot_firebase.ios.$target.dylib" \
-			-library "build/ios/libgodot_firebase.ios.$target.simulator.dylib" \
-			-output "$out"
+		# Prepare framework slices now: Godot would rewrite bare dylib slices on
+		# export, losing the SDK signature. package.sh --sign-ios signs last.
+		python3 tools/build_ios_xcframework.py --target "$target" --output "$out"
 	done
 
 	# Firebase resource bundles (certificates, privacy manifests) of the linked
