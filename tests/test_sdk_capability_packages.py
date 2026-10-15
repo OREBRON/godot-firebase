@@ -175,7 +175,7 @@ class SymbolIdentityTests(unittest.TestCase):
     def test_android_build_id_and_unstripped_symbols(self):
         sdk = os.environ.get("ANDROID_HOME", os.environ.get("ANDROID_SDK_ROOT", ""))
         host = "darwin-x86_64" if sys.platform == "darwin" else "linux-x86_64"
-        ndk = Path(sdk) / "ndk" / os.environ.get("NDK_VERSION", "28.1.13356709") / "toolchains/llvm/prebuilt" / host / "bin"
+        ndk = Path(sdk) / "ndk" / os.environ.get("NDK_VERSION", "29.0.14206865") / "toolchains/llvm/prebuilt" / host / "bin"
         compiler = ndk / "aarch64-linux-android24-clang++"
         if not compiler.is_file():
             self.skipTest("Set ANDROID_HOME and NDK_VERSION for real Android ELF fixtures")
