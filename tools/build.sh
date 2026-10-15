@@ -55,7 +55,7 @@ collect_android_symbols() { # target
 	local stem="libgodot_firebase.android.$1.so"
 	local directory="$symbols_root/android/$1/arm64-v8a"
 	local sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-	local ndk="$sdk/ndk/${NDK_VERSION:-29.0.14206865}"
+	local ndk="$sdk/ndk/${NDK_VERSION:-28.1.13356709}"
 	local host=linux-x86_64
 	[ "$(uname -s)" != Darwin ] || host=darwin-x86_64
 	local readelf="${LLVM_READELF:-$ndk/toolchains/llvm/prebuilt/$host/bin/llvm-readelf}"
@@ -105,7 +105,7 @@ fi
 if [[ ",$platforms," == *",android,"* ]]; then
 	mkdir -p "$BIN/android"
 	for target in template_debug template_release; do
-		build android "$target" arch=arm64 ndk_version="${NDK_VERSION:-29.0.14206865}"
+		build android "$target" arch=arm64 ndk_version="${NDK_VERSION:-28.1.13356709}"
 		cp "build/android/libgodot_firebase.android.$target.so" "$BIN/android/"
 		collect_android_symbols "$target"
 	done

@@ -119,7 +119,7 @@ Eksik LFS binary, import/script hatası ve timeout başarısız sayılır.
 
 Android SDK (platform 35), NDK, JDK 17 ve Godot Android Gradle build template'i
 gerekir. `ANDROID_HOME` SDK dizinine işaret etmeli. Kurulu NDK varsayılan
-29.0.14206865 (Godot 4.7.2 ile aynı) değilse `NDK_VERSION` ortam değişkenini ayarla:
+28.1.13356709 değilse `NDK_VERSION` ortam değişkenini ayarla:
 
 ```bash
 ANDROID_HOME="$HOME/Library/Android/sdk" NDK_VERSION=28.2.13676358 \
@@ -527,7 +527,7 @@ bu fixture son oyun IPA'sının kabulü yerine geçmez.
 Analytics, Remote Config ve Crashlytics tekil seçimlerini, telemetry
 birleşimini, sekiz ürünün full seçimini (`full-eight`), Auth+Firestore ve Auth+Database
 seçimlerini iOS/Android/macOS için derler; mock/paket testleri ve sembol doğrulaması
-koşar. Kurulu platform 35, NDK 29.0.14206865, JDK, CocoaPods, Xcode ve Godot gerekir.
+koşar. Kurulu platform 35, NDK 28.1.13356709, JDK, CocoaPods, Xcode ve Godot gerekir.
 ZIP/semboller kısa ömürlü workflow artifact'larıdır; dokuz-paket release yayımlamaz.
 Bu workflow yerelde çalıştırılmış GitHub CI sonucu veya cihaz kabulü değildir.
 Manual çalışmada `android_export_fixture=true`, yalnız full-eight job'ında
@@ -565,7 +565,7 @@ sembolleri artifact'a eklenmez.
 Linux runner'da `godot` 4.7.2, `python3`, `clang` ve `lld` (`lld-link`) gerekir.
 macOS runner'da Xcode, `godot` 4.7.2, SDKMAN (JDK `.sdkmanrc` ile zsh'te seçilir,
 varsayılan JDK değişmez), `uv`, `python3`, `curl`, `shasum`, `zip` ve `unzip`
-gerekir; Android SDK platform 35 ve NDK 29.0.14206865
+gerekir; Android SDK platform 35 ve NDK 28.1.13356709
 `android-actions/setup-android` ile kurulur, CocoaPods yalnız Auth seçimlerinde
 kilitli sürümle kurulur.
 Runner'a ayrıca Node.js kurmak gerekmez; action'lar runner'ın kendi Node.js'iyle çalışır. SDK indirmeleri macOS runner'da

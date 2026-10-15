@@ -49,7 +49,7 @@ jobs:
         shell: bash
     env:
       GODOT: godot
-      NDK_VERSION: 29.0.14206865
+      NDK_VERSION: 28.1.13356709
       THIRD_PARTY_CACHE: ${{ github.workspace }}/../godot-firebase-third-party
       MODULE_SELECTION: ${{ matrix.modules }}
       IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
