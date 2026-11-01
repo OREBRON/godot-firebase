@@ -450,7 +450,9 @@ Maven bağımlılığı korunur; API klasörünü kaldırmak collection'ı kapat
 
 Crashlytics seçili build `debug_symbols=yes` kullanır, Android unstripped ELF ve
 iOS dSYM dosyalarını `build/symbols/<selection>/` altında kimlikleriyle saklar.
-Semboller addon ZIP'ine katılmaz. Oyun export'u kendi R8 mapping'ini saklar;
+Semboller addon ZIP'ine katılmaz; release'te ayrı `godot-firebase-symbols.zip`
+asset'i olarak yayımlanır ve oyun gerektiğinde dSYM'i `upload-symbols` ile
+Crashlytics'e kendisi yükler. Oyun export'u kendi R8 mapping'ini saklar;
 Godot engine frame'leri yalnız aynı export template'in sembolleriyle çözülebilir.
 [Debug smoke ve açık symbol upload adımları](examples/crashlytics_smoke/README.md)
 SDK build'inden ayrıdır; otomatik upload yapılmaz.
