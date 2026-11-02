@@ -14,7 +14,7 @@ using godot::Variant;
 namespace godot_firebase {
 namespace {
 std::set<FirebaseAnalyticsNative *> instances;
-// Pinned Firebase iOS 12.19.1 FIRAnalytics.h. Suggested public events remain allowed.
+// Pinned Firebase iOS 13.1.1 FIRAnalytics.h. Suggested public events remain allowed.
 const std::set<std::string> reserved_events = {
 	"ad_activeview", "ad_click", "ad_exposure", "ad_query", "ad_reward", "adunit_exposure",
 	"app_clear_data", "app_exception", "app_remove", "app_store_refund", "app_store_subscription_cancel",

@@ -8,7 +8,7 @@ dependencies {
     bridgeCompile 'androidx.credentials:credentials-play-services-auth:1.6.0'
     bridgeCompile 'com.google.android.libraries.identity.googleid:googleid:1.2.1'
     bridgeCompile 'com.google.android.gms:play-services-games-v2:22.0.0'
-    bridgeCompile 'com.google.firebase:firebase-crashlytics:20.1.1'
+    bridgeCompile 'com.google.firebase:firebase-crashlytics:21.0.1'
 }
 dependencyLocking { lockAllConfigurations() }
 tasks.register('bridgeClasspath') {

@@ -48,7 +48,7 @@ func _check_build_directory() -> void:
 
 func _check_dependencies() -> void:
 	var minimal: PackedStringArray = _helper.dependencies_for([], false)
-	check(minimal.has("com.google.firebase:firebase-analytics:23.2.0"), "Firebase C++ App keeps its Analytics Java dependency")
+	check(minimal.has("com.google.firebase:firebase-analytics:24.0.0"), "Firebase C++ App keeps its Analytics Java dependency")
 	check(not str(minimal).contains("games-v2"), "Play Games is absent by default")
 	var auth: PackedStringArray = _helper.dependencies_for(["auth"], false)
 	check(auth.has("androidx.credentials:credentials:1.6.0"), "Google login includes Credential Manager")
@@ -58,9 +58,9 @@ func _check_dependencies() -> void:
 	check(str(_helper.dependencies_for(["auth"], true)).contains("games-v2:22.0.0"), "Play Games is explicitly selectable")
 	check(not str(_helper.dependencies_for(["firestore"], true)).contains("games-v2"), "Play Games requires the Auth module")
 	var products: PackedStringArray = _helper.dependencies_for(["analytics", "crashlytics", "remote_config"], false)
-	check(products.count("com.google.firebase:firebase-analytics:23.2.0") == 1, "Analytics dependency is deduplicated")
-	check(products.has("com.google.firebase:firebase-config:23.1.0"), "Remote Config Java dependency is included")
-	check(products.has("com.google.firebase:firebase-crashlytics-ndk:20.1.1"), "Crashlytics includes NDK support")
+	check(products.count("com.google.firebase:firebase-analytics:24.0.0") == 1, "Analytics dependency is deduplicated")
+	check(products.has("com.google.firebase:firebase-config:24.0.1"), "Remote Config Java dependency is included")
+	check(products.has("com.google.firebase:firebase-crashlytics-ndk:21.0.1"), "Crashlytics includes NDK support")
 
 
 func _check_startup_options() -> void:

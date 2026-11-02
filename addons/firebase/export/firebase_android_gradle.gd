@@ -41,14 +41,14 @@ buildscript {
 """
 const OWNED_PATHS := [SCRIPT, GAMES_RESOURCE, "google-services.json"]
 const DEPENDENCIES := {
-	"auth": "com.google.firebase:firebase-auth:24.2.0",
-	"firestore": "com.google.firebase:firebase-firestore:26.6.0",
-	"storage": "com.google.firebase:firebase-storage:22.0.2",
-	"database": "com.google.firebase:firebase-database:22.0.2",
-	"functions": "com.google.firebase:firebase-functions:22.1.1",
-	"analytics": "com.google.firebase:firebase-analytics:23.2.0",
-	"crashlytics": "com.google.firebase:firebase-crashlytics-ndk:20.1.1",
-	"remote_config": "com.google.firebase:firebase-config:23.1.0",
+	"auth": "com.google.firebase:firebase-auth:25.0.0",
+	"firestore": "com.google.firebase:firebase-firestore:27.1.0",
+	"storage": "com.google.firebase:firebase-storage:23.0.0",
+	"database": "com.google.firebase:firebase-database:23.0.0",
+	"functions": "com.google.firebase:firebase-functions:23.0.0",
+	"analytics": "com.google.firebase:firebase-analytics:24.0.0",
+	"crashlytics": "com.google.firebase:firebase-crashlytics-ndk:21.0.1",
+	"remote_config": "com.google.firebase:firebase-config:24.0.1",
 }
 const METADATA := {
 	"firebase/analytics_collection": "firebase_analytics_collection_enabled",
@@ -68,7 +68,7 @@ static func build_directory(option: String) -> String:
 
 static func dependencies_for(modules: Array, play_games: bool) -> PackedStringArray:
 	# Firebase C++ App initializes Analytics Java classes even without our API.
-	var dependencies := PackedStringArray([DEPENDENCIES.analytics, "com.google.android.gms:play-services-base:18.10.1"])
+	var dependencies := PackedStringArray([DEPENDENCIES.analytics, "com.google.android.gms:play-services-base:18.11.1"])
 	for module: String in modules:
 		if DEPENDENCIES.has(module) and not dependencies.has(DEPENDENCIES[module]):
 			dependencies.append(DEPENDENCIES[module])

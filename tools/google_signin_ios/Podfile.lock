@@ -1,60 +1,69 @@
 PODS:
-  - AppAuth (2.1.0):
-    - AppAuth/Core (= 2.1.0)
-    - AppAuth/ExternalUserAgent (= 2.1.0)
-  - AppAuth/Core (2.1.0)
-  - AppAuth/ExternalUserAgent (2.1.0):
+  - AppAuth (3.0.0):
+    - AppAuth/Core (= 3.0.0)
+    - AppAuth/ExternalUserAgent (= 3.0.0)
+  - AppAuth/Core (3.0.0)
+  - AppAuth/ExternalUserAgent (3.0.0):
     - AppAuth/Core
   - AppCheckCore (11.0.0):
     - GoogleUtilities/Environment (~> 8.0)
     - GoogleUtilities/UserDefaults (~> 8.0)
     - PromisesObjC (~> 2.4)
-  - GoogleSignIn (9.2.0):
-    - AppAuth (~> 2.1)
-    - AppCheckCore (~> 11.0)
-    - GTMAppAuth (~> 5.0)
-    - GTMSessionFetcher/Core (~> 3.3)
-  - GoogleUtilities/Environment (8.1.2):
+  - GoogleSignIn (10.1.0):
+    - AppAuth (~> 3.0)
+    - AppCheckCore (< 13.0, >= 11.0)
+    - GTMAppAuth (~> 6.0)
+    - GTMSessionFetcher/Core (< 6.0, >= 3.3)
+  - GoogleUtilities/Environment (8.1.5):
     - GoogleUtilities/Privacy
-  - GoogleUtilities/Logger (8.1.2):
+  - GoogleUtilities/Logger (8.1.5):
     - GoogleUtilities/Environment
     - GoogleUtilities/Privacy
-  - GoogleUtilities/Privacy (8.1.2)
-  - GoogleUtilities/UserDefaults (8.1.2):
+  - GoogleUtilities/Privacy (8.1.5)
+  - GoogleUtilities/UserDefaults (8.1.5):
     - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
-  - GTMAppAuth (5.0.0):
-    - AppAuth/Core (~> 2.0)
-    - GTMSessionFetcher/Core (< 4.0, >= 3.3)
-  - GTMSessionFetcher/Core (3.5.0)
+  - GTMAppAuth (6.0.0):
+    - AppAuth/Core (~> 3.0)
+    - GTMSessionFetcher/Core (< 6.0, >= 3.3)
+  - GTMSessionFetcher/Core (5.3.1)
   - PromisesObjC (2.4.1)
 
 DEPENDENCIES:
-  - AppAuth (= 2.1.0)
+  - AppAuth (= 3.0.0)
   - AppCheckCore (= 11.0.0)
-  - GoogleSignIn (= 9.2.0)
-  - GTMAppAuth (= 5.0.0)
-  - GTMSessionFetcher/Core (= 3.5.0)
+  - GoogleSignIn (from `https://github.com/google/GoogleSignIn-iOS.git`, tag `10.1.0`)
+  - GTMAppAuth (= 6.0.0)
+  - GTMSessionFetcher/Core (= 5.3.1)
 
 SPEC REPOS:
   trunk:
     - AppAuth
     - AppCheckCore
-    - GoogleSignIn
     - GoogleUtilities
     - GTMAppAuth
     - GTMSessionFetcher
     - PromisesObjC
 
+EXTERNAL SOURCES:
+  GoogleSignIn:
+    :git: https://github.com/google/GoogleSignIn-iOS.git
+    :tag: 10.1.0
+
+CHECKOUT OPTIONS:
+  GoogleSignIn:
+    :git: https://github.com/google/GoogleSignIn-iOS.git
+    :tag: 10.1.0
+
 SPEC CHECKSUMS:
-  AppAuth: ef4da5a3fc2e10b90c09a0a94a9baeaedc0341d5
+  AppAuth: 5dec4b6a833eb0342b26bacbc5f3af694f71274a
   AppCheckCore: e25aaaac234b333320b0bebb8fc21ed3576819ba
-  GoogleSignIn: e449a40a92e9f2eea56e98b5214d13725dc5a00a
-  GoogleUtilities: 766ace00c6b10d8148408f329d10c4f051931850
-  GTMAppAuth: 217a876b249c3c585a54fd6f73e6b58c4f5c4238
-  GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
+  GoogleSignIn: 31fc7f61dd7c10d21175e08ebad85d40dcbf89de
+  GoogleUtilities: 7dc09b3fa9ecb5c2298b952313d14628b61b9da3
+  GTMAppAuth: 66e839a30bb63acb109b8986a0c3f642d56d48fd
+  GTMSessionFetcher: a6d2b2aa203485893d4511ff64642dc811f7c09f
   PromisesObjC: 752c3227f599e3467650e47ea36f433eeb10c273
 
-PODFILE CHECKSUM: fd779e77aa91d37c1fe843aeddda614b6c79f4f1
+PODFILE CHECKSUM: 5f8a05cb9a481316e1c38f431083a713e3f7f5d7
 
 COCOAPODS: 1.17.0

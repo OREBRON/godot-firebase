@@ -1,7 +1,7 @@
 # Godot Firebase
 
-Godot 4.7.2 için Firebase eklentisi. Firebase C++ SDK 13.13.0
-(iOS'ta Firebase iOS SDK 12.19.1) kullanır. GDScript API'leri modüllere
+Godot 4.7.2 için Firebase eklentisi. Firebase C++ SDK 14.1.0
+(iOS'ta Firebase iOS SDK 13.1.1) kullanır. GDScript API'leri modüllere
 ayrılmıştır; mevcut native build seçilen modülleri tek kütüphaneye bağlar:
 
 | Modül | Klasör | Native sınıf | İçerik |
@@ -144,7 +144,7 @@ ve [R8'in resmi Gradle override yöntemine](https://r8.googlesource.com/r8/+/ref
 dayanır. Yerel sentetik uygulama fixture'ı AGP 8.6.1, Gradle 8.11.1, Kotlin 2.4.0
 ve gerçekten kullanılan R8 9.1.29 ile geçti; gerçek Godot export/cihaz kabulü
 ayrı kalır. Crashlytics entegrasyonu Google Services 4.5.0 / Crashlytics Gradle
-3.0.8 ve Crashlytics/NDK 20.1.1 sürümlerini seçer.
+3.0.8 ve Crashlytics/NDK 21.0.1 sürümlerini seçer.
 
 Android build'i oyun bilgisi almaz; aynı `.so` ve AAR her oyunda kullanılır.
 Firebase konsolundan oyunun Android paket kimliğine ait `google-services.json`

@@ -21,7 +21,7 @@ if [[ -f "$output/.build-id" && "$(cat "$output/.build-id")" == "$fingerprint" ]
         [[ -d "$output/resources/$resource.bundle" ]] || complete=false
     done
     if $complete; then
-        echo "GoogleSignIn 9.2.0 build is current"
+        echo "GoogleSignIn 10.1.0 build is current"
         exit 0
     fi
 fi
@@ -60,4 +60,4 @@ rm -rf "$previous"
 if [[ -e "$output" ]]; then mv "$output" "$previous"; fi
 mv "$stage" "$output"
 rm -rf "$previous"
-echo "GoogleSignIn 9.2.0 frameworks and resource bundles: $output"
+echo "GoogleSignIn 10.1.0 frameworks and resource bundles: $output"
