@@ -25,6 +25,26 @@ Birbirine eklenebilen ZIP düzeni geliştirme hedefidir; mevcut tek modül
 ZIP'leri birlikte kurmak native dosyaların üzerine yazar. Geçişin durumu
 [modüler release raporunda](docs/verification/modular-release.md) kayıtlıdır.
 
+## Sürümleme
+
+Eklentinin kendi [SemVer](https://semver.org/lang/tr/) sürümü vardır
+(`addons/firebase/plugin.cfg`, tag `v<sürüm>`). Godot ve Firebase sürümleri
+`tools/versions.env` içinde sabitlenir ve release başlığında yazılır:
+
+- **MAJOR:** oyunu bozabilecek değişiklik: GDScript API silme/yeniden adlandırma,
+  asgari Godot sürümünün yükselmesi veya platform şartını değiştiren Firebase
+  ana sürümü (ör. Android minSdk).
+- **MINOR:** geriye uyumlu özellik veya Firebase ara sürümü.
+- **PATCH:** hata düzeltmesi veya Firebase yama sürümü.
+
+Yayımlanmış bir release'in dosyaları değiştirilmez; her yeni build yeni sürüm
+alır, böylece ZIP ve Crashlytics sembolleri tek build'e bağlı kalır.
+
+| Eklenti | Godot | Firebase C++ | Firebase iOS |
+|---|---|---|---|
+| 1.0.0 | 4.7.2 | 14.1.0 | 13.1.1 |
+| `v4.7.2` (eski adlandırma) | 4.7.2 | 13.13.0 | 12.19.1 |
+
 ## Mevcut sürümü oyuna ekleme
 
 ### Desktop editöründe geliştirme
