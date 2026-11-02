@@ -27,7 +27,7 @@ Yeni akış:
 4. Oluşan ZIP tekrar açılır; iki XCFramework ve içlerindeki dört framework
    aynı kontrollerden geçer. Ancak bundan sonra `build/dist/` çıktısı atomik
    olarak değiştirilir. Hatalı deneme önceki ZIP'i silmez/değiştirmez ve nonzero
-   döner; workflow artifact/release yükleme adımına ilerlemez.
+   döner; `tools/release.sh` release yükleme adımına ilerlemez.
 
 Godot 4.7.2'nin framework içeren XCFramework'ler için kullandığı yol doğrudan
 kopyadır. Üretilen Xcode projesinde gömülen dinamik framework'ler
@@ -42,17 +42,17 @@ Kaynaklar:
 - [Godot 4.7.2 Apple export kodu](https://github.com/godotengine/godot/blob/4.7.2-stable/editor/export/editor_export_platform_apple_embedded.cpp):
   `_convert_to_framework`, `_export_additional_asset`, `_add_assets_to_project`.
 
-## macOS runner kurulumu
+## Release Mac'i kurulumu
 
+CI imzalamaz; imza yalnız release'i yayımlayan Mac'te `tools/release.sh` ile yapılır.
 Geçerli Apple Distribution veya Apple Development sertifikası **özel anahtarıyla
-birlikte** runner kullanıcısının Keychain'inde olmalıdır. Runner'ın kilidi açık
-Keychain'e ve codesign özel anahtar kullanımına erişimini o makinede yapılandır.
-Sertifikayı/özel anahtarı depoya koyma. `.p8`, App Store Connect API kimliğidir;
+birlikte** o kullanıcının Keychain'inde olmalıdır. Sertifikayı/özel anahtarı
+depoya veya CI secret'larına koyma. `.p8`, App Store Connect API kimliğidir;
 bu kod imzası için yeni `.p8` oluşturulmaz.
 
-Repository Settings → Secrets and variables → Actions → Repository secrets:
+Ortam değişkenleri:
 
-| Secret | Değer |
+| Değişken | Değer |
 | --- | --- |
 | `IOS_SIGNING_IDENTITY` | Tam `Apple Distribution: …` / `Apple Development: …` sertifika adı veya 40 haneli sertifika SHA-1'i |
 | `IOS_SIGNING_TEAM_ID` | SDK sahibinin 10 karakterli Apple Team ID'si |
@@ -60,7 +60,7 @@ Repository Settings → Secrets and variables → Actions → Repository secrets
 
 `IOS_SIGNING_IDENTITY` ve `IOS_SIGNING_TEAM_ID` gerçek değerlerle doldurulmalıdır;
 dummy değerler imzalama kontrolünü geçmez. Varsayılan Keychain kullanılıyorsa
-`IOS_SIGNING_KEYCHAIN` secret'ını oluşturmak gerekmez.
+`IOS_SIGNING_KEYCHAIN` gerekmez.
 
 Development sertifika adındaki parantez bir üye ID'si olabilir; Team ID'yi bu
 addan türetme. Beklenen Team ID, imzada sertifikanın `subject.OU` alanına karşı
@@ -89,10 +89,9 @@ python3 tools/ios_signing.py verify-package build/dist/godot-firebase.zip \
   --team-id "$IOS_SIGNING_TEAM_ID"
 ```
 
-`build.yml`, `packages.yml` ve `sdk-capabilities.yml` bu imzalama kapısını
-zorunlu kullanır. Bayraksız paketleme yalnız yerel geliştirme için korunur.
-Release workflow'u başarılı `v*` tag build'inde doğrulanmış ZIP ve checksum'u
-yayımlar. Bu değişiklik kendiliğinden tag veya release oluşturmaz.
+`tools/release.sh` bu imzalama kapısını zorunlu kullanır ve doğrulanmış ZIP,
+semboller ve checksum'u tag'in release'ine yükler. `build.yml`, `packages.yml` ve
+`sdk-capabilities.yml` imzasız paketler; bunlar yalnız derleme ve test kanıtıdır.
 
 ## Godot export ve son IPA kapısı
 

@@ -13,7 +13,7 @@ on:
 permissions:
   contents: read
 
-# Share the runner/dependency lock with the release workflow (build.yml).
+# Share the runner/dependency lock with the build workflow (build.yml).
 concurrency:
   group: godot-firebase-build
   cancel-in-progress: false
@@ -52,16 +52,11 @@ jobs:
       NDK_VERSION: 28.1.13356709
       THIRD_PARTY_CACHE: ${{ github.workspace }}/../godot-firebase-third-party
       MODULE_SELECTION: ${{ matrix.modules }}
-      IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
-      IOS_SIGNING_TEAM_ID: ${{ secrets.IOS_SIGNING_TEAM_ID }}
-      IOS_SIGNING_KEYCHAIN: ${{ secrets.IOS_SIGNING_KEYCHAIN }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           lfs: true
           persist-credentials: false
-      - name: Check Apple signing identity
-        run: python3 tools/ios_signing.py check-identity
       - name: Select SDKMAN Java 17
         run: zsh tools/setup_sdkman_java_ci.zsh
       - name: Install locked CocoaPods
@@ -112,7 +107,7 @@ jobs:
           rm -rf addons/firebase/bin/ios addons/firebase/bin/android addons/firebase/bin/modules.txt build/dist build/symbols
           tools/build.sh --platforms ios,android,macos --modules "$MODULE_SELECTION"
           tools/run_tests.sh
-          package_path="$(tools/package.sh --sign-ios)"
+          package_path="$(tools/package.sh)"
           python3 tests/test_sdk_capability_packages.py --smoke-package "$package_path"
       - name: Optional full-eight Android Gradle fixture
         if: github.event_name == 'workflow_dispatch' && inputs.android_export_fixture && matrix.name == 'full-eight'

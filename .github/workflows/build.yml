@@ -3,7 +3,6 @@ name: Build addon
 on:
   push:
     branches: ['main']
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -22,9 +21,6 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 120
-    permissions:
-      # Tag builds attach their addon zips to the GitHub release.
-      contents: write
     defaults:
       run:
         shell: bash
@@ -38,9 +34,6 @@ jobs:
       MIN_FREE_GB: 10
       # godot-firebase.zip always holds every module.
       MODULE_SELECTION: auth,firestore,storage,database,functions,analytics,remote_config,crashlytics
-      IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
-      IOS_SIGNING_TEAM_ID: ${{ secrets.IOS_SIGNING_TEAM_ID }}
-      IOS_SIGNING_KEYCHAIN: ${{ secrets.IOS_SIGNING_KEYCHAIN }}
 
     steps:
       - name: Check self-hosted toolchain
@@ -62,12 +55,6 @@ jobs:
             echo '::error::uv is required on this runner (SCons runs through uvx).'
             exit 1
           }
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            command -v gh >/dev/null || {
-              echo '::error::GitHub CLI is required on this runner to publish releases.'
-              exit 1
-            }
-          fi
 
       - name: Check free disk space
         run: |
@@ -88,11 +75,8 @@ jobs:
       - name: Select SDKMAN Java 17
         run: zsh tools/setup_sdkman_java_ci.zsh
 
-      - name: Check Apple signing identity and packaging gates
-        run: |
-          set -euo pipefail
-          python3 tools/ios_signing.py check-identity
-          python3 tests/test_ios_signing.py
+      - name: Test iOS signing checks
+        run: python3 tests/test_ios_signing.py
 
       - name: Install Android SDK and pinned NDK
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
@@ -134,33 +118,16 @@ jobs:
 
       # Build every mobile target with one module selection. Windows and Linux
       # editor stubs are tracked through LFS and included by the packager.
+      # Releases are signed and published locally with tools/release.sh, never here.
       - name: Build and verify release selection
         run: |
           set -euo pipefail
           tools/build.sh --platforms ios,android,macos --modules "$MODULE_SELECTION"
           test "$(cat addons/firebase/bin/modules.txt)" = "$MODULE_SELECTION"
           tools/run_tests.sh
-          package_path="$(tools/package.sh --sign-ios)"
+          package_path="$(tools/package.sh)"
           test "$(basename "$package_path")" = godot-firebase.zip
           python3 tests/test_sdk_capability_packages.py --smoke-package build/dist/godot-firebase.zip
-
-      # Tag builds publish the verified monolith, its native symbols and checksums.
-      # Symbols stay a separate asset so the addon ZIP does not grow.
-      - name: Publish release
-        if: github.ref_type == 'tag'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          (cd build && zip -qry dist/godot-firebase-symbols.zip symbols)
-          (cd build/dist && shasum -a 256 godot-firebase.zip godot-firebase-symbols.zip > SHA256SUMS.txt)
-          assets=(build/dist/godot-firebase.zip build/dist/godot-firebase-symbols.zip build/dist/SHA256SUMS.txt)
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --verify-tag --generate-notes --title "${GITHUB_REF_NAME#v}"
-          fi
 
       # Runs after success, failure and cancellation so the shared runner disk never fills.
       - name: Clean workspace and dependency leftovers

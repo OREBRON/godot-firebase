@@ -512,28 +512,31 @@ tekrarlanır. Build öncesi test, bozuk hazır binary'nin CI'da gizlenmesini
 (Xcode, `godot` 4.7.2, `uv`, Android SDK/NDK ve JDK 17 gerekir). SDK indirmeleri runner'da
 `../godot-firebase-third-party` altında kalıcı tutulur; ilk çalışma ~2.2 GB
 indirir. Her çalışma sekiz ürünün tümünü tek seçimle iOS, Android ve macOS
-için derler, mock testlerini ve paket smoke testini koşar. `v*` tag push'unda
-`godot-firebase.zip` ve `SHA256SUMS.txt` o tag'in GitHub release'ine eklenir;
-branch, PR ve elle başlatılan çalışmalar release'e yükleme yapmaz. Paket oyunun
+için derler, mock testlerini ve paket smoke testini koşar. CI iOS paketini
+imzalamaz ve release yayımlamaz; runner'da imza sertifikası gerekmez. Paket oyunun
 kök dizinine açılır. Cihazda Firebase runtime ve Crashlytics symbolication
 kanıtı ayrı kabul işlerinde bekliyor.
 
-Üç mobil paket workflow'u (`build.yml`, `packages.yml`, `sdk-capabilities.yml`)
-`--sign-ios` kullanır. Repository Actions secrets içinde
-`IOS_SIGNING_IDENTITY` (tam Apple Distribution/Development sertifika adı veya
-SHA-1) ve `IOS_SIGNING_TEAM_ID` gerekir; `IOS_SIGNING_KEYCHAIN` isteğe bağlı
-Keychain yoludur. Sertifika ve özel anahtarı macOS runner hesabının erişebildiği
-Keychain'de bulunmalıdır. Eksik kimlik/anahtar, yanlış ekip, imzasız/ad-hoc,
-zaman damgasız veya bozuk paket CI'ı başarısız yapar. Yeni `.p8` gerekmez.
-`build.yml` ayrıca küçük gerçek Mach-O/XCFramework imzalama fixture'ı çalıştırır;
-bu fixture son oyun IPA'sının kabulü yerine geçmez.
+#### Release (yerel Mac)
+
+Release, imza anahtarı Keychain'inde olan Mac'te `tools/release.sh` ile yayımlanır:
+tag'i oluşturup push et, tag'e checkout yap ve `tools/release.sh v4.7.2` çalıştır.
+Betik temiz çalışma kopyasını ve tag eşleşmesini kontrol eder, iOS/Android/macOS'u
+derler, testleri ve paket smoke testini koşar, iOS'u `--sign-ios` ile imzalar ve
+`godot-firebase.zip`, `godot-firebase-symbols.zip`, `SHA256SUMS.txt` dosyalarını
+release'e yükler (var olan release'te `--clobber`). `IOS_SIGNING_IDENTITY` (tam Apple
+Distribution/Development sertifika adı veya SHA-1) ve `IOS_SIGNING_TEAM_ID` ortam
+değişkenleri gerekir; `IOS_SIGNING_KEYCHAIN` isteğe bağlı Keychain yoludur.
+`ANDROID_HOME` (platform 35, NDK 28.1.13356709), JDK 17 ve oturum açmış `gh` gerekir.
+Eksik kimlik/anahtar, yanlış ekip, imzasız/ad-hoc, zaman damgasız veya bozuk paket
+betiği durdurur. Yeni `.p8` gerekmez.
 
 `.github/workflows/sdk-capabilities.yml` yalnız PR/manual geliştirme doğrulamasıdır.
 Analytics, Remote Config ve Crashlytics tekil seçimlerini, telemetry
 birleşimini, sekiz ürünün full seçimini (`full-eight`), Auth+Firestore ve Auth+Database
 seçimlerini iOS/Android/macOS için derler; mock/paket testleri ve sembol doğrulaması
 koşar. Kurulu platform 35, NDK 28.1.13356709, JDK, CocoaPods, Xcode ve Godot gerekir.
-ZIP/semboller kısa ömürlü workflow artifact'larıdır; dokuz-paket release yayımlamaz.
+ZIP/semboller kısa ömürlü, imzasız workflow artifact'larıdır; dokuz-paket release yayımlamaz.
 Bu workflow yerelde çalıştırılmış GitHub CI sonucu veya cihaz kabulü değildir.
 Manual çalışmada `android_export_fixture=true`, yalnız full-eight job'ında
 beş sentetik uygulama seçiminin debug/R8 APK fixture'ını çalıştırır: telemetry,
