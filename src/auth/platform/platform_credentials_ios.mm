@@ -13,6 +13,7 @@
 #import <GoogleSignIn/GoogleSignIn.h>
 #import <Security/Security.h>
 #import <UIKit/UIKit.h>
+#import <objc/runtime.h>
 
 #include <firebase/auth.h>
 #include <atomic>
@@ -41,6 +42,28 @@ PlatformCredential success(const firebase::auth::Credential &credential) {
 	result.ok = true;
 	result.credential = credential;
 	return result;
+}
+
+// The C++ SDK (13.13–14.1) passes accessToken:nil to a selector whose Swift
+// parameter is non-optional, so the request carries an empty access_token and
+// Firebase rejects every Apple token. Route that case to the selector without
+// an access token. Remove once firebase/firebase-cpp-sdk#1954 is fixed.
+void route_empty_oauth_access_token() {
+	static dispatch_once_t once;
+	dispatch_once(&once, ^{
+		SEL selector = @selector(credentialWithProviderID:IDToken:rawNonce:accessToken:);
+		Method method = class_getClassMethod(FIROAuthProvider.class, selector);
+		if (!method) return;
+		using Factory = FIROAuthCredential *(*)(id, SEL, NSString *, NSString *, NSString *, NSString *);
+		Factory original = reinterpret_cast<Factory>(method_getImplementation(method));
+		IMP replacement = imp_implementationWithBlock(^FIROAuthCredential *(id provider_class, NSString *provider, NSString *id_token, NSString *raw_nonce, NSString *access_token) {
+			if (access_token.length == 0) {
+				return [FIROAuthProvider credentialWithProviderID:provider IDToken:id_token rawNonce:raw_nonce];
+			}
+			return original(provider_class, selector, provider, id_token, raw_nonce, access_token);
+		});
+		method_setImplementation(method, replacement);
+	});
 }
 
 std::string describe(NSError *error, const char *fallback) {
@@ -222,6 +245,7 @@ void sign_in_with_google(const godot_firebase::PlatformCredentialOptions &option
 		[self finish:failure(godot_firebase::kUnavailable, "Apple did not return an identity token")];
 		return;
 	}
+	route_empty_oauth_access_token();
 	PlatformCredential result = success(firebase::auth::OAuthProvider::GetCredential("apple.com", token.UTF8String, self.rawNonce.UTF8String, nullptr));
 	NSString *code = apple.authorizationCode ? [[NSString alloc] initWithData:apple.authorizationCode encoding:NSUTF8StringEncoding] : nil;
 	if (code) result.apple_authorization_code = code.UTF8String;
