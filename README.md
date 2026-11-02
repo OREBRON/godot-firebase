@@ -399,7 +399,10 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   biter. Değer dinleyicisi yalnızca değer değişince çağrılır; bağlantı koparken
   onDisconnect işlemleri yerelde hemen görünür.
 - Hesap açtıran oyunlar App Store kuralı gereği hesap silme sunmalıdır:
-  `Firebase.auth.delete_account()`.
+  `Firebase.auth.delete_account()`. Apple ile bağlı hesapta önce
+  `Firebase.auth.revoke_apple_token()` çağrılır: Apple sayfası bir kez açılır ve
+  Apple belirteçleri iptal edilir (değer `true`); Apple bağlı olmayan hesapta arayüz
+  açılmaz, değer `false` olur. Mock'ta `fail_next()` iptal/başarısızlığı taklit eder.
 
 ## Geliştirme
 

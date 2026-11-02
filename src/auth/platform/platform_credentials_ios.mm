@@ -5,6 +5,10 @@
 
 #import <AuthenticationServices/AuthenticationServices.h>
 #import <CommonCrypto/CommonDigest.h>
+#import <FirebaseAuth/FirebaseAuth.h>
+// FIRAuth's interface lives in the Swift header; it needs FIRAuthInterop first (as in the C++ SDK).
+#import <FirebaseAuthInterop/FIRAuthInterop.h>
+#import <FirebaseAuth/FirebaseAuth-Swift.h>
 #import <GameKit/GameKit.h>
 #import <GoogleSignIn/GoogleSignIn.h>
 #import <Security/Security.h>
@@ -212,13 +216,16 @@ void sign_in_with_google(const godot_firebase::PlatformCredentialOptions &option
 		[self finish:failure(godot_firebase::kUnsupported, "unexpected Apple credential type")];
 		return;
 	}
-	NSData *token_data = ((ASAuthorizationAppleIDCredential *)authorization.credential).identityToken;
-	NSString *token = token_data ? [[NSString alloc] initWithData:token_data encoding:NSUTF8StringEncoding] : nil;
+	ASAuthorizationAppleIDCredential *apple = (ASAuthorizationAppleIDCredential *)authorization.credential;
+	NSString *token = apple.identityToken ? [[NSString alloc] initWithData:apple.identityToken encoding:NSUTF8StringEncoding] : nil;
 	if (!token) {
 		[self finish:failure(godot_firebase::kUnavailable, "Apple did not return an identity token")];
 		return;
 	}
-	[self finish:success(firebase::auth::OAuthProvider::GetCredential("apple.com", token.UTF8String, self.rawNonce.UTF8String, nullptr))];
+	PlatformCredential result = success(firebase::auth::OAuthProvider::GetCredential("apple.com", token.UTF8String, self.rawNonce.UTF8String, nullptr));
+	NSString *code = apple.authorizationCode ? [[NSString alloc] initWithData:apple.authorizationCode encoding:NSUTF8StringEncoding] : nil;
+	if (code) result.apple_authorization_code = code.UTF8String;
+	[self finish:result];
 }
 
 - (void)authorizationController:(ASAuthorizationController *)controller didCompleteWithError:(NSError *)error {
@@ -255,6 +262,14 @@ void request_platform_credential(const std::string &p_provider, const PlatformCr
 			done(failure(kUnsupported, provider + " sign-in is not supported on iOS"));
 		}
 	});
+}
+
+// The C++ SDK has no revokeToken; on iOS it wraps this same default FIRAuth.
+void revoke_apple_token(const std::string &authorization_code, Completion done) {
+	NSString *code = [NSString stringWithUTF8String:authorization_code.c_str()];
+	[[FIRAuth auth] revokeTokenWithAuthorizationCode:code completion:^(NSError *error) {
+		done(error ? Outcome::failure(static_cast<int>(error.code), to_godot(describe(error, "Apple token revocation failed"))) : Outcome::success(true));
+	}];
 }
 
 void clear_platform_credential_state() {

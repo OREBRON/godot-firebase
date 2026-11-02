@@ -63,6 +63,10 @@ void request_platform_credential(const std::string &provider, const PlatformCred
 	}
 }
 
+void revoke_apple_token(const std::string &, Completion done) {
+	done(Outcome::failure(kUnsupported, "Apple token revocation requires iOS"));
+}
+
 void clear_platform_credential_state() {
 	{
 		std::lock_guard<std::mutex> lock(callbacks_mutex);

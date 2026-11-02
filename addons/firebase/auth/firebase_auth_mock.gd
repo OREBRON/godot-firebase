@@ -138,6 +138,28 @@ func delete_user() -> int:
 	return id
 
 
+func revoke_apple_token() -> int:
+	var id := _take_id()
+	var apple := _has_provider("apple")
+	if _user.is_empty():
+		_finish_error(id, FirebaseResult.ERR_NO_USER, "no signed-in user")
+	elif not _pending.is_empty():
+		_finish_error(id, FirebaseResult.ERR_BUSY, "another auth operation is running")
+	elif apple and "apple" in UNSUPPORTED_PROVIDERS.get(_platform, []):
+		_finish_error(id, FirebaseResult.ERR_UNSUPPORTED, "apple sign-in is not supported on %s" % PLATFORM_NAMES[_platform])
+	# fail_next() stands for a cancelled Apple sheet or a failed revocation; other accounts show no UI.
+	elif not apple or not _fail_if_requested(id):
+		_finish(id, apple)
+	return id
+
+
+func _has_provider(provider: String) -> bool:
+	for key: String in _provider_accounts:
+		if key.begins_with(provider + ":") and _provider_accounts[key] == _user.get("uid", ""):
+			return true
+	return false
+
+
 func get_id_token(_force_refresh: bool) -> int:
 	var id := _take_id()
 	if _user.is_empty():

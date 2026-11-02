@@ -28,6 +28,9 @@ public:
 	int64_t sign_in_play_games(const godot::String &p_server_auth_code, bool p_link);
 	void sign_out();
 	int64_t delete_user();
+	// Apple accounts: Sign in with Apple once more, then revoke its tokens.
+	// Succeeds with false and no UI when the user has no apple.com provider.
+	int64_t revoke_apple_token();
 	int64_t get_id_token(bool p_force_refresh);
 	godot::Dictionary current_user() const;
 

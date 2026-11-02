@@ -127,16 +127,22 @@ Outcome unavailable() {
 	return Outcome::failure(kUnavailable, "FirebaseAuthNative is not initialized");
 }
 
-void sign_in_with_credential(const std::shared_ptr<AuthSession> &session, const std::shared_ptr<AuthOperation> &operation, const Credential &credential, bool link) {
-	std::lock_guard<std::recursive_mutex> lock(session->mutex);
-	if (!session->auth || session->active != operation || operation->generation != session->generation) return;
+// After platform UI: only the user signed in before it may continue to the SDK.
+bool start_sdk_after_platform_ui(const std::shared_ptr<AuthSession> &session, const std::shared_ptr<AuthOperation> &operation) {
+	if (!session->auth || session->active != operation || operation->generation != session->generation) return false;
 	const User current = session->auth->current_user();
 	const std::string uid = current.is_valid() ? current.uid() : "";
 	if (uid != operation->source_uid) {
 		cancel_operation(session);
-		return;
+		return false;
 	}
 	operation->sdk_started = true;
+	return true;
+}
+
+void sign_in_with_credential(const std::shared_ptr<AuthSession> &session, const std::shared_ptr<AuthOperation> &operation, const Credential &credential, bool link) {
+	std::lock_guard<std::recursive_mutex> lock(session->mutex);
+	if (!start_sdk_after_platform_ui(session, operation)) return;
 	auto done = finish_operation(session, operation);
 	if (link) {
 		// The User captured BEFORE the UI is the only allowed link target.
@@ -144,6 +150,18 @@ void sign_in_with_credential(const std::shared_ptr<AuthSession> &session, const 
 	} else {
 		complete_when_done(session->auth->SignInAndRetrieveDataWithCredential(credential), std::move(done), user_of);
 	}
+}
+
+void revoke_with_apple_code(const std::shared_ptr<AuthSession> &session, const std::shared_ptr<AuthOperation> &operation, const std::string &code) {
+	std::lock_guard<std::recursive_mutex> lock(session->mutex);
+	if (start_sdk_after_platform_ui(session, operation)) revoke_apple_token(code, finish_operation(session, operation));
+}
+
+bool has_provider(const User &user, const std::string &provider) {
+	for (const auto &info : user.provider_data()) {
+		if (info.provider_id() == provider) return true;
+	}
+	return false;
 }
 
 } // namespace
@@ -266,6 +284,33 @@ int64_t FirebaseAuthNative::delete_user() {
 	});
 }
 
+int64_t FirebaseAuthNative::revoke_apple_token() {
+	const auto options = credential_options();
+	return start([this, options](Completion done) {
+		const auto state = session;
+		std::lock_guard<std::recursive_mutex> lock(state->mutex);
+		if (auth && !auth->current_user().is_valid()) {
+			done(Outcome::failure(kNoUser, "no signed-in user"));
+			return;
+		}
+		auto operation = begin_operation(state, false, std::move(done));
+		if (!operation) return;
+		if (!has_provider(operation->source_user, "apple.com")) {
+			finish_operation(state, operation)(Outcome::success(false));
+			return;
+		}
+		request_platform_credential("apple", options, [state, operation](PlatformCredential result) {
+			if (!result.ok) {
+				finish_operation(state, operation)(Outcome::failure(result.error_code, to_godot(result.error_message)));
+			} else if (result.apple_authorization_code.empty()) {
+				finish_operation(state, operation)(Outcome::failure(kUnavailable, "Apple did not return an authorization code"));
+			} else {
+				revoke_with_apple_code(state, operation, result.apple_authorization_code);
+			}
+		});
+	});
+}
+
 int64_t FirebaseAuthNative::get_id_token(bool p_force_refresh) {
 	return start_with_user([p_force_refresh](User &user, Completion done) {
 		complete_when_done(user.GetToken(p_force_refresh), std::move(done), [](const Future<std::string> &future) {
@@ -310,6 +355,7 @@ void FirebaseAuthNative::_bind_methods() {
 	godot::ClassDB::bind_method(D_METHOD("sign_in_play_games", "server_auth_code", "link"), &FirebaseAuthNative::sign_in_play_games);
 	godot::ClassDB::bind_method(D_METHOD("sign_out"), &FirebaseAuthNative::sign_out);
 	godot::ClassDB::bind_method(D_METHOD("delete_user"), &FirebaseAuthNative::delete_user);
+	godot::ClassDB::bind_method(D_METHOD("revoke_apple_token"), &FirebaseAuthNative::revoke_apple_token);
 	godot::ClassDB::bind_method(D_METHOD("get_id_token", "force_refresh"), &FirebaseAuthNative::get_id_token);
 	godot::ClassDB::bind_method(D_METHOD("current_user"), &FirebaseAuthNative::current_user);
 	ADD_SIGNAL(godot::MethodInfo("auth_state_changed", godot::PropertyInfo(godot::Variant::DICTIONARY, "user")));

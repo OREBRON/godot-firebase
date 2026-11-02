@@ -84,6 +84,13 @@ func delete_account() -> FirebaseTask:
 	return _requests.send(&"delete_user")
 
 
+## App Store 5.1.1(v): call before deleting an account. On an account with an
+## apple.com provider, shows Sign in with Apple once more and revokes its Apple
+## tokens (iOS only); the value is true. Other accounts get false and no UI.
+func revoke_apple_token() -> FirebaseTask:
+	return _requests.send(&"revoke_apple_token")
+
+
 func get_id_token(force_refresh := false) -> FirebaseTask:
 	return _requests.send(&"get_id_token", [force_refresh])
 
