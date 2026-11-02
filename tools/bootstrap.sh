@@ -24,16 +24,16 @@ verify() { # file expected_sha256
 }
 
 # fetch_zip url zip sha256 extracted_dir member-patterns...
-# extracted_dir/.complete lists the extracted patterns; a different list is redone.
+# extracted_dir/.complete lists the archive and patterns; a different version or list is redone.
 fetch_zip() {
 	local url=$1 zip=$2 sha=$3 dir=$4
 	shift 4
-	[ "$(cat "$dir/.complete" 2>/dev/null)" = "$*" ] && return
+	[ "$(cat "$dir/.complete" 2>/dev/null)" = "$(basename "$zip") $*" ] && return
 	rm -rf "$dir"
 	[ -f "$zip" ] || curl --fail --location --silent --show-error --output "$zip" "$url"
 	verify "$zip" "$sha"
 	unzip -q "$zip" "$@" -d third_party
-	echo "$*" > "$dir/.complete"
+	echo "$(basename "$zip") $*" > "$dir/.complete"
 	rm -f "$zip"
 }
 
