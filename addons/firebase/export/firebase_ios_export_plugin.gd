@@ -20,6 +20,8 @@ const STARTUP_KEYS := {
 }
 const RESOURCES_DIR := "res://addons/firebase/bin/ios/resources"
 const APPLE_ENTITLEMENT := "com.apple.developer.applesignin"
+## Compiled into the export template's dummy.cpp; fixed text, never user input.
+const FAIL_BUILD_CODE := "#error \"Godot Firebase iOS export failed: see the Firebase configuration error in the Godot export log.\"\n"
 
 
 func _get_name() -> String:
@@ -71,25 +73,20 @@ func _get_export_option_warning(_platform: EditorExportPlatform, option: String)
 func _export_begin(features: PackedStringArray, _is_debug: bool, _path: String, _flags: int) -> void:
 	if not features.has("ios"):
 		return
-	var additional_plist := str(get_option("application/additional_plist_content"))
-	var startup := startup_plist_checked(_startup_options(), additional_plist)
-	if startup.error != OK:
-		push_error("Firebase iOS configuration error: " + startup.message)
-		return
-	var content: String = startup.content
+	var google_client: Variant = null
 	if get_option(GOOGLE_OPTION):
 		var client: Variant = get_export_preset().get_project_setting("firebase/auth/google_ios_client_id")
-		var result := google_plist(client if client is String else "", additional_plist)
-		if result.error != OK:
-			push_error("Firebase iOS configuration error: " + result.message)
-			return
-		content += result.content
-	add_apple_embedded_platform_plist_content(content)
+		google_client = client if client is String else ""
 	var plist: String = get_option(PLIST_OPTION)
-	if FileAccess.file_exists(plist):
-		add_apple_embedded_platform_bundle_file(plist)
-	else:
-		push_error("Firebase: %s not found; the app cannot start Firebase." % plist)
+	var config := export_configuration(_startup_options(), str(get_option("application/additional_plist_content")), google_client, plist)
+	if config.error != OK:
+		get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_ERROR, "Firebase configuration", config.message)
+		push_error("Firebase iOS configuration error: " + config.message)
+		# Godot has no export abort API; break the generated Xcode build like Android breaks AAPT.
+		add_apple_embedded_platform_cpp_code(FAIL_BUILD_CODE)
+		return
+	add_apple_embedded_platform_plist_content(config.content)
+	add_apple_embedded_platform_bundle_file(plist)
 	for bundle in DirAccess.get_directories_at(RESOURCES_DIR):
 		add_apple_embedded_platform_bundle_file(RESOURCES_DIR.path_join(bundle))
 
@@ -112,8 +109,24 @@ static func startup_plist(options: Dictionary) -> String:
 	return result
 
 
-## Export callbacks report errors without adding conflicting content. They cannot
-## guarantee export cancellation; fix every configuration warning before shipping.
+## Everything the export adds, or the first configuration error. On error the
+## export adds no Firebase content and FAIL_BUILD_CODE stops the Xcode build, so a
+## rejected consent default or a missing plist cannot ship silently.
+static func export_configuration(startup_options: Dictionary, additional_plist: String, google_client_id: Variant, plist_path: String) -> Dictionary:
+	var startup := startup_plist_checked(startup_options, additional_plist)
+	if startup.error != OK:
+		return startup
+	var content: String = startup.content
+	if google_client_id != null:
+		var google := google_plist(str(google_client_id), additional_plist)
+		if google.error != OK:
+			return google
+		content += google.content
+	if not FileAccess.file_exists(plist_path):
+		return _plist_error("%s not found; download GoogleService-Info.plist from the Firebase console." % plist_path)
+	return {"error": OK, "content": content}
+
+
 static func startup_plist_checked(options: Dictionary, additional_plist: String) -> Dictionary:
 	var parsed := _additional_plist_values(additional_plist)
 	if parsed.error != OK:

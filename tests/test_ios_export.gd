@@ -62,3 +62,12 @@ func _run() -> void:
 
 	google = Plugin.google_plist("123-test.apps.googleusercontent.com", "<key>GIDClientID</key><string><![CDATA[123-test.apps.googleusercontent.com]]></string>")
 	check(google.error == OK and not google.content.contains("GIDClientID"), "CDATA preserves matching client ID without parser errors")
+
+	var present := "res://tests/fixtures/google-services.json"
+	var missing := "res://tests/fixtures/missing/GoogleService-Info.plist"
+	var config: Dictionary = Plugin.export_configuration({"firebase/consent_ad_storage": 2}, "", "123-test.apps.googleusercontent.com", present)
+	check(config.error == OK and config.content.contains("ALLOW_AD_STORAGE</key><false/>") and config.content.contains("GIDClientID"), "valid export adds startup and Google plist content")
+	check(Plugin.export_configuration({}, "", null, missing).error != OK, "missing GoogleService-Info.plist fails the export")
+	check(Plugin.export_configuration({"firebase/consent_ad_storage": 2}, "<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_STORAGE</key><true/>", null, present).error != OK, "conflicting denied consent fails the export instead of being dropped")
+	check(Plugin.export_configuration({}, "", "", present).error != OK, "Google sign-in without a client ID fails the export")
+	check(Plugin.FAIL_BUILD_CODE.begins_with("#error \"") and Plugin.FAIL_BUILD_CODE.count("\"") == 2, "failure code is a single fixed #error directive")
