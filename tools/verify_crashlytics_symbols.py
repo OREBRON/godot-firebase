@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -22,7 +23,8 @@ def file_record(path):
     with path.open("rb") as source:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
-    return {"path": str(path), "sha256": digest.hexdigest()}
+    # Relative to the working directory (repo root in build.sh): published manifests must not leak local paths.
+    return {"path": os.path.relpath(path), "sha256": digest.hexdigest()}
 
 
 def elf_identity(tool, binary):

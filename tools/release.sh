@@ -33,8 +33,11 @@ test "$(basename "$package_path")" = godot-firebase.zip
 python3 tests/test_sdk_capability_packages.py --smoke-package build/dist/godot-firebase.zip
 
 # Symbols stay a separate asset so the addon ZIP does not grow.
+# Only this run's selection: other build/symbols dirs were not rebuilt or verified here.
+symbols_dir="symbols/${modules//,/-}"
+test -d "build/$symbols_dir" || { echo "Missing build/$symbols_dir" >&2; exit 1; }
 rm -f build/dist/godot-firebase-symbols.zip
-(cd build && zip -qry dist/godot-firebase-symbols.zip symbols)
+(cd build && zip -qry dist/godot-firebase-symbols.zip "$symbols_dir")
 (cd build/dist && shasum -a 256 godot-firebase.zip godot-firebase-symbols.zip > SHA256SUMS.txt)
 assets=(build/dist/godot-firebase.zip build/dist/godot-firebase-symbols.zip build/dist/SHA256SUMS.txt)
 gh release create "$tag" "${assets[@]}" --verify-tag --generate-notes \
