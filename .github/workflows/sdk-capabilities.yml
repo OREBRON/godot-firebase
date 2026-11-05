@@ -121,7 +121,7 @@ jobs:
           unzip -q build/toolchains/gradle-8.11.1-bin.zip -d build/toolchains
           python3 tools/test_android_export.py --gradle "$PWD/build/toolchains/gradle-8.11.1/bin/gradle" --output "$PWD/build/android-export-ci"
       - name: Upload development outputs (no release publication)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sdk-capabilities-development-${{ matrix.name }}
           path: |
