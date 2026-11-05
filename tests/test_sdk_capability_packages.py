@@ -149,7 +149,7 @@ class SymbolIdentityTests(unittest.TestCase):
 
     def verify(self, platform, binary, symbols, *options):
         return subprocess.run(["python3", str(ROOT / "tools/verify_crashlytics_symbols.py"), platform,
-            "--binary", str(binary), "--symbols", str(symbols), *map(str, options)], capture_output=True, text=True)
+            "--binary", str(binary), "--symbols", str(symbols), *map(str, options)], capture_output=True, text=True, cwd=self.root)
 
     @unittest.skipUnless(shutil.which("xcrun"), "Xcode required for real Mach-O/dSYM fixtures")
     def test_macho_uuid_and_nonempty_dwarf(self):
@@ -162,7 +162,11 @@ class SymbolIdentityTests(unittest.TestCase):
             subprocess.run(["xcrun", "dsymutil", str(binary), "-o", str(dsym)], check=True, capture_output=True)
         result = self.verify("ios", self.root / "one.dylib", self.root / "one.dSYM")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(json.loads(result.stdout)["binary"]["sha256"]), 64)
+        manifest = json.loads(result.stdout)
+        self.assertEqual(len(manifest["binary"]["sha256"]), 64)
+        # Published identity.json files must not leak the builder's absolute paths.
+        self.assertEqual(manifest["binary"]["path"], "one.dylib")
+        self.assertTrue(all(record["path"].startswith("one.dSYM/") for record in manifest["symbols"]))
         result = self.verify("ios", self.root / "one.dylib", self.root / "two.dSYM")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("do not match", result.stderr)
@@ -188,6 +192,8 @@ class SymbolIdentityTests(unittest.TestCase):
         options = ["--readelf", ndk / "llvm-readelf"]
         result = self.verify("android", binary, self.root / "one.so", *options)
         self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads(result.stdout)
+        self.assertEqual([manifest["binary"]["path"], manifest["symbols"][0]["path"]], ["exported.so", "one.so"])
         result = self.verify("android", binary, self.root / "two.so", *options)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("do not match", result.stderr)
