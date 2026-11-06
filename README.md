@@ -602,7 +602,7 @@ Runner'a ayrıca Node.js kurmak gerekmez; action'lar runner'ın kendi Node.js'iy
 SCons imzalarıyla seçimler arasında yeniden kullanılır. Fork PR'ları
 self-hosted runner'larda çalışmaz.
 
-Firebase C++/iOS ve godot-cpp sürümleri `tools/versions.env` içindedir.
+Firebase C++/iOS, godot-cpp ve SCons sürümleri `tools/versions.env` içindedir.
 GoogleSignIn kaynakları `tools/google_signin_ios/Podfile` ve lock dosyasında (kütüphaneye
 bağlanan GoogleSignIn/AppAuth/GTMAppAuth/AppCheckCore git commit'ine pinli),
 Android bridge bağımlılıkları `android/build.gradle` ve lock dosyasında,
