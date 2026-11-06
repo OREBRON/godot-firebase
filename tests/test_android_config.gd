@@ -24,6 +24,8 @@ func _run() -> void:
 	config = FirebaseAndroidConfig.options_for(JSON.stringify(two_clients), "org.example.other")
 	check(config.error == OK and config.options.app_id == "1:123456789:android:other", "each package gets its own client")
 
+	_check_packed_config(JSON.stringify(two_clients))
+
 	check(FirebaseAndroidConfig.options_for(fixture, "org.godotengine.wrong").error == ERR_DOES_NOT_EXIST, "wrong package is rejected")
 	check(FirebaseAndroidConfig.options_for("not json", PACKAGE).error == ERR_PARSE_ERROR, "invalid JSON is rejected")
 	check(FirebaseAndroidConfig.options_for("[]", PACKAGE).error == ERR_PARSE_ERROR, "non-object JSON is rejected")
@@ -37,6 +39,18 @@ func _run() -> void:
 
 	check(FirebaseAndroidConfig.packed_options(PACKAGE).error == ERR_FILE_NOT_FOUND, "missing packed config is reported")
 	_check_export_packages(fixture)
+
+
+## The APK carries only the exported package's client, readable by packed_options().
+func _check_packed_config(two_clients: String) -> void:
+	var packed := FirebaseAndroidConfig.packed_config(two_clients, PACKAGE)
+	var reduced: Dictionary = JSON.parse_string(packed)
+	check(reduced.size() == 2 and reduced.has("project_info") and reduced.has("client"),"packed config keeps only project_info and client")
+	check(reduced.project_info == JSON.parse_string(two_clients).project_info, "packed config keeps project_info")
+	check(reduced.client.size() == 1 and reduced.client[0].client_info.android_client_info.package_name == PACKAGE, "packed config keeps only the exported package's client")
+	check(not packed.contains("org.example.other"), "other apps of the Firebase project are not packed")
+	check(FirebaseAndroidConfig.options_for(packed, PACKAGE) == FirebaseAndroidConfig.options_for(two_clients, PACKAGE), "the runtime reader gets the same options from the packed config")
+	check(FirebaseAndroidConfig.options_for(packed, "org.example.other").error == ERR_DOES_NOT_EXIST, "the packed config has no client for another package")
 
 
 func _check_export_packages(fixture: String) -> void:

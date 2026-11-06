@@ -31,6 +31,14 @@ static func packed_options(package_name: String) -> Dictionary:
 	return options_for(FileAccess.get_file_as_string(PACKED_PATH), package_name)
 
 
+## The text the export plugin packs: project_info and only the client of
+## `package_name`, so the APK does not carry the project's other apps.
+## `config_text` must already pass options_for().
+static func packed_config(config_text: String, package_name: String) -> String:
+	var config: Dictionary = JSON.parse_string(config_text)
+	return JSON.stringify({"project_info": config.get("project_info"), "client": [_client_of(config, package_name)]}, "\t")
+
+
 ## Returns {"error": OK, "options": {app_id, api_key, project_id, storage_bucket,
 ## database_url, messaging_sender_id}} for the client of `package_name`, or
 ## {"error": <Error>, "message": <reason>}. Field names follow Firebase's

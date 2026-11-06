@@ -8,9 +8,18 @@ const STATE := ".godot-firebase-export.json"
 const SCRIPT := "firebase-crashlytics.gradle"
 const GAMES_RESOURCE := "res/values/godot_firebase_play_games.xml"
 const HOOK := "\n// BEGIN GODOT FIREBASE (managed)\napply from: 'firebase-crashlytics.gradle'\n// END GODOT FIREBASE (managed)\n"
+# exclusiveContent keeps the injected Gradle plugins from resolving out of any
+# other repository the game's build script declares.
 const CLASSPATH := """// BEGIN GODOT FIREBASE CLASSPATH (managed)
 buildscript {
-    repositories { google(); mavenCentral() }
+    repositories {
+        exclusiveContent {
+            forRepository { google() }
+            filter { includeGroup('com.google.gms'); includeGroup('com.google.firebase') }
+        }
+        google()
+        mavenCentral()
+    }
     dependencies {
         classpath 'com.google.gms:google-services:4.5.0'
         classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.8'
@@ -24,7 +33,10 @@ const TOOLCHAIN_CLASSPATH := """
     buildscript {
         repositories {
             mavenCentral()
-            maven { url = uri('https://storage.googleapis.com/r8-releases/raw') }
+            exclusiveContent {
+                forRepository { maven { url = uri('https://storage.googleapis.com/r8-releases/raw') } }
+                filter { includeModule('com.android.tools', 'r8') }
+            }
         }
         dependencies { classpath 'com.android.tools:r8:9.1.29' }
     }
@@ -33,12 +45,52 @@ const TOOLCHAIN_CLASSPATH := """
 const TOOLCHAIN_CONFIG := "\n// BEGIN GODOT FIREBASE KOTLIN (managed)\nversions.kotlinVersion = '2.4.0'\n// END GODOT FIREBASE KOTLIN (managed)\n"
 const GOOGLE_CLASSPATH := """// BEGIN GODOT FIREBASE GOOGLE SERVICES (managed)
 buildscript {
-    repositories { google(); mavenCentral() }
+    repositories {
+        exclusiveContent {
+            forRepository { google() }
+            filter { includeGroup('com.google.gms') }
+        }
+        google()
+        mavenCentral()
+    }
     dependencies { classpath 'com.google.gms:google-services:4.5.0' }
 }
 // END GODOT FIREBASE GOOGLE SERVICES (managed)
 
 """
+## Blocks written by earlier SDK versions, upgraded in place on the next export.
+const LEGACY_BLOCKS := {
+	"""// BEGIN GODOT FIREBASE CLASSPATH (managed)
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies {
+        classpath 'com.google.gms:google-services:4.5.0'
+        classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.8'
+    }
+}
+// END GODOT FIREBASE CLASSPATH (managed)
+
+""": CLASSPATH,
+	"""
+    // BEGIN GODOT FIREBASE R8 (managed)
+    buildscript {
+        repositories {
+            mavenCentral()
+            maven { url = uri('https://storage.googleapis.com/r8-releases/raw') }
+        }
+        dependencies { classpath 'com.android.tools:r8:9.1.29' }
+    }
+    // END GODOT FIREBASE R8 (managed)
+""": TOOLCHAIN_CLASSPATH,
+	"""// BEGIN GODOT FIREBASE GOOGLE SERVICES (managed)
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies { classpath 'com.google.gms:google-services:4.5.0' }
+}
+// END GODOT FIREBASE GOOGLE SERVICES (managed)
+
+""": GOOGLE_CLASSPATH,
+}
 const OWNED_PATHS := [SCRIPT, GAMES_RESOURCE, "google-services.json"]
 const DEPENDENCIES := {
 	"auth": "com.google.firebase:firebase-auth:25.0.0",
@@ -113,7 +165,7 @@ static func prepare(directory: String, config: String, package_name: String, mod
 	var build_path := directory.path_join("build.gradle")
 	if not FileAccess.file_exists(build_path):
 		return _failure("Install Godot's Android Gradle build template; no build.gradle at %s." % directory)
-	var build := _read_lf(build_path)
+	var build := _read_managed(build_path)
 	if active and not build.contains("com.android.application"):
 		return _failure("Firebase supports the Godot Android app build.gradle template; this custom template has no com.android.application plugin.")
 	var state: Dictionary = {}
@@ -127,7 +179,7 @@ static func prepare(directory: String, config: String, package_name: String, mod
 			return _failure("Unknown path in managed Firebase export state: %s." % path)
 		if FileAccess.file_exists(directory.path_join(path)) and not _matches_hash(directory.path_join(path), state[path]):
 			return _failure("Generated Firebase file was edited: %s. Preserve your changes and remove the managed file/state before exporting." % path)
-	if (build.contains("// BEGIN GODOT FIREBASE (managed)") or build.contains("// BEGIN GODOT FIREBASE CLASSPATH") or build.contains("// BEGIN GODOT FIREBASE GOOGLE SERVICES")) and (not build.contains(HOOK) or not (build.contains(CLASSPATH) or build.contains(GOOGLE_CLASSPATH)) or not FileAccess.file_exists(state_path)):
+	if not _blocks_intact(build, [HOOK, CLASSPATH, GOOGLE_CLASSPATH]) or build.contains("// BEGIN GODOT FIREBASE") and (not build.contains(HOOK) or not (build.contains(CLASSPATH) or build.contains(GOOGLE_CLASSPATH)) or not FileAccess.file_exists(state_path)):
 		return _failure("The managed Firebase build.gradle block was edited or its state is missing; restore it before exporting.")
 	var toolchain_config := _toolchain_config(directory, toolchain, FileAccess.file_exists(state_path))
 	if toolchain_config.error != OK:
@@ -170,7 +222,7 @@ static func prepare(directory: String, config: String, package_name: String, mod
 		_queue_text(changes, state_path, JSON.stringify({"version": 1, "files": next_state}, "\t") + "\n")
 	else:
 		changes[state_path] = null
-	return Transaction.apply(changes)
+	return Transaction.apply(changes, directory)
 
 
 ## A committed android/build may be checked out with CRLF (Windows core.autocrlf).
@@ -181,6 +233,26 @@ static func _lf(text: String) -> String:
 
 static func _read_lf(path: String) -> String:
 	return _lf(FileAccess.get_file_as_string(path))
+
+
+## LF text of a game Gradle file with earlier managed blocks upgraded.
+static func _read_managed(path: String) -> String:
+	var text := _read_lf(path)
+	for legacy: String in LEGACY_BLOCKS:
+		text = text.replace(legacy, LEGACY_BLOCKS[legacy])
+	return text
+
+
+## Each managed block appears at most once, unedited, and no other managed
+## marker exists, such as a second, modified copy of a block.
+static func _blocks_intact(text: String, blocks: Array) -> bool:
+	var intact := 0
+	for block: String in blocks:
+		var count := text.count(block)
+		if count > 1:
+			return false
+		intact += count
+	return text.count("// BEGIN GODOT FIREBASE") == intact and text.count("// END GODOT FIREBASE") == intact
 
 
 ## Hashes are of LF text; earlier versions hashed a CRLF game JSON as read.
@@ -203,7 +275,7 @@ static func _toolchain_config(directory: String, enabled: bool, has_state: bool)
 	if not FileAccess.file_exists(path):
 		return _failure("Firebase requires Godot's standard Android config.gradle for the pinned Kotlin/R8 toolchain.") if enabled else {"error": OK}
 	var original := _read_lf(path)
-	if original.contains("// BEGIN GODOT FIREBASE KOTLIN") and (not original.contains(TOOLCHAIN_CONFIG) or not has_state):
+	if not _blocks_intact(original, [TOOLCHAIN_CONFIG]) or (original.contains(TOOLCHAIN_CONFIG) and not has_state):
 		return _failure("The managed Firebase Kotlin block was edited or its state is missing; restore it before exporting.")
 	var next := original.replace(TOOLCHAIN_CONFIG, "")
 	if enabled:
@@ -224,9 +296,10 @@ static func _toolchain_settings(directory: String, enabled: bool, has_state: boo
 	if not FileAccess.file_exists(path):
 		return _failure("Firebase requires Godot's standard Android settings.gradle for its pinned R8 toolchain.") if enabled else {"error": OK}
 	var original := _read_lf(path)
-	if original.contains("// BEGIN GODOT FIREBASE R8") and (not original.contains(TOOLCHAIN_CLASSPATH) or not has_state):
+	var upgraded := _read_managed(path)
+	if not _blocks_intact(upgraded, [TOOLCHAIN_CLASSPATH]) or (upgraded.contains(TOOLCHAIN_CLASSPATH) and not has_state):
 		return _failure("The managed Firebase R8 block was edited or its state is missing; restore it before exporting.")
-	var next := original.replace(TOOLCHAIN_CLASSPATH, "")
+	var next := upgraded.replace(TOOLCHAIN_CLASSPATH, "")
 	if enabled:
 		var matches := RegEx.create_from_string("(?m)^pluginManagement\\s*\\{").search_all(next)
 		if matches.size() != 1 or not next.contains("version versions.kotlinVersion"):

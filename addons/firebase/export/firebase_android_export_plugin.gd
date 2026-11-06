@@ -46,8 +46,8 @@ func _export_begin(features: PackedStringArray, _is_debug: bool, _path: String, 
 		get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_ERROR, "Firebase configuration", _export_error)
 		push_error("Firebase: " + _export_error)
 		return
-	var path: String = get_option(CONFIG_OPTION)
-	add_file(FirebaseAndroidConfig.PACKED_PATH, FileAccess.get_file_as_bytes(path), false)
+	var text := FileAccess.get_file_as_string(get_option(CONFIG_OPTION))
+	add_file(FirebaseAndroidConfig.PACKED_PATH, FirebaseAndroidConfig.packed_config(text, _package_name()).to_utf8_buffer(), false)
 
 
 func _get_android_libraries(_platform: EditorExportPlatform, _debug: bool) -> PackedStringArray:
@@ -89,6 +89,11 @@ func _project_setting(key: String, fallback: Variant) -> Variant:
 	return get_export_preset().get_project_setting(key)
 
 
+func _package_name() -> String:
+	var project_name: String = get_export_preset().get_project_setting("application/config/name")
+	return FirebaseAndroidConfig.resolve_package_name(get_option("package/unique_name"), project_name)
+
+
 func _validate_and_prepare(dry_run: bool) -> String:
 	if not bool(get_option("gradle_build/use_gradle_build")):
 		return "Firebase requires Android Gradle Build. Enable gradle_build/use_gradle_build and install the Android build template."
@@ -97,9 +102,7 @@ func _validate_and_prepare(dry_run: bool) -> String:
 		return "Download google-services.json for this package from the Firebase console."
 	if not FileAccess.file_exists(AAR):
 		return "Firebase Android AAR missing; build with --platforms android."
-	var preset := get_export_preset()
-	var project_name: String = preset.get_project_setting("application/config/name")
-	var package_name := FirebaseAndroidConfig.resolve_package_name(get_option("package/unique_name"), project_name)
+	var package_name := _package_name()
 	var text := FileAccess.get_file_as_string(path)
 	var config := FirebaseAndroidConfig.options_for(text, package_name)
 	if config.error != OK:

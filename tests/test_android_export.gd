@@ -22,6 +22,7 @@ func _run() -> void:
 	_check_preparation()
 	_check_toolchain()
 	_check_analytics_only()
+	_check_managed_blocks()
 	_check_crlf_checkout()
 	_remove_tree(_directory)
 
@@ -162,6 +163,48 @@ func _check_analytics_only() -> void:
 	check(script.contains("com.google.gms.google-services") and not script.contains("com.google.firebase.crashlytics"), "Analytics applies only Google Services")
 	result = _helper.prepare(_directory, "", PACKAGE, [], "")
 	check(result.error == OK, "Analytics-only integration is removed cleanly")
+
+
+## Blocks from earlier versions are upgraded; a second, edited copy of a managed
+## block is never accepted next to the intact one.
+func _check_managed_blocks() -> void:
+	var build := "plugins { id 'com.android.application' }\n"
+	var config_gradle := "ext.versions = [kotlinVersion: '2.1.21', androidGradlePlugin: '8.6.1']\n"
+	var settings := "pluginManagement { apply from: 'config.gradle'; plugins { id 'org.jetbrains.kotlin.android' version versions.kotlinVersion } }\n"
+	_write("build.gradle", build)
+	_write("config.gradle", config_gradle)
+	_write("settings.gradle", settings)
+	var config := FileAccess.get_file_as_string("res://tests/fixtures/google-services.json")
+	var result: Dictionary = _helper.prepare(_directory, config, PACKAGE, ["crashlytics"], "")
+	check(result.error == OK, "managed block fixture is prepared: %s" % result)
+	var prepared := {}
+	for file in ["build.gradle", "config.gradle", "settings.gradle"]:
+		prepared[file] = _read(file)
+	check(prepared["build.gradle"].contains("includeGroup('com.google.gms')") and prepared["build.gradle"].contains("includeGroup('com.google.firebase')"), "injected Google plugins resolve only from Google Maven")
+	check(prepared["settings.gradle"].contains("includeModule('com.android.tools', 'r8')"), "injected R8 resolves only from the R8 release repository")
+
+	for legacy: String in _helper.LEGACY_BLOCKS:
+		var current: String = _helper.LEGACY_BLOCKS[legacy]
+		var file := "settings.gradle" if current.contains("R8") else "build.gradle"
+		if not prepared[file].contains(current):
+			continue # The Analytics-only Google Services block is not in this build.
+		_write(file, prepared[file].replace(current, legacy))
+		result = _helper.prepare(_directory, config, PACKAGE, ["crashlytics"], "")
+		check(result.error == OK and _read(file) == prepared[file], "an earlier managed block in %s is upgraded in place: %s" % [file, result])
+
+	var copies := {
+		"build.gradle": "// BEGIN GODOT FIREBASE CLASSPATH (managed)\nbuildscript { dependencies { classpath 'org.example:other:1.0' } }\n// END GODOT FIREBASE CLASSPATH (managed)\n",
+		"config.gradle": "\n// BEGIN GODOT FIREBASE KOTLIN (managed)\nversions.kotlinVersion = '1.9.0'\n// END GODOT FIREBASE KOTLIN (managed)\n",
+		"settings.gradle": "// BEGIN GODOT FIREBASE R8 (managed)\nbuildscript { dependencies { classpath 'org.example:other:1.0' } }\n// END GODOT FIREBASE R8 (managed)\n",
+	}
+	for file: String in copies:
+		for edited: String in [prepared[file] + copies[file], prepared[file] + "// END GODOT FIREBASE R8 (managed)\n"]:
+			_write(file, edited)
+			result = _helper.prepare(_directory, config, PACKAGE, ["crashlytics"], "")
+			check(result.error != OK and _read(file) == edited, "a duplicate managed marker in %s is rejected without changes" % file)
+		_write(file, prepared[file])
+	result = _helper.prepare(_directory, "", PACKAGE, [], "")
+	check(result.error == OK and _read("build.gradle") == build and _read("config.gradle") == config_gradle and _read("settings.gradle") == settings, "managed block fixture is removed cleanly")
 
 
 ## Windows core.autocrlf checks a committed android/build out with CRLF line endings.
