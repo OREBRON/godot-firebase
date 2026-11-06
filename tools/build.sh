@@ -2,7 +2,7 @@
 # Builds addons/firebase/bin/ for the selected modules.
 #   tools/build.sh [--modules auth,firestore] [--platforms ios,android,macos,linux,windows]
 # Mobile builds need tools/bootstrap.sh. Desktop stubs need only a C compiler.
-# SCons runs through uv unless SCONS is set.
+# SCons runs through uv at SCONS_VERSION of tools/versions.env unless SCONS is set.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -16,7 +16,8 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-SCONS="${SCONS:-uvx scons}"
+source tools/versions.env
+SCONS="${SCONS:-uvx --from scons==$SCONS_VERSION scons}"
 mkdir -p build
 touch build/.gdignore
 BIN=addons/firebase/bin
