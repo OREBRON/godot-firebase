@@ -52,6 +52,14 @@ inline std::string to_std(const godot::String &p_text) {
 	return std::string(utf8.get_data(), static_cast<size_t>(utf8.length()));
 }
 
+// Decodes a server-supplied Dictionary key. Godot's decoder drops a leading BOM and stops at NUL,
+// so two keys could merge into one; only keys that re-encode to the same bytes are accepted.
+// Callers skip rejected keys silently: they run on SDK threads, where src/ has no logging pattern.
+inline bool to_godot_key(const std::string &p_text, godot::String &r_key) {
+	r_key = to_godot(p_text);
+	return to_std(r_key) == p_text;
+}
+
 // Calls `done` when `future` completes; `map` turns the result into a Variant.
 template <typename T, typename Map>
 void complete_when_done(const firebase::Future<T> &p_future, Completion p_done, Map p_map) {

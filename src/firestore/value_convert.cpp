@@ -325,7 +325,10 @@ Variant to_variant(const FieldValue &p_value) {
 		case FieldValue::Type::kMap: {
 			Dictionary map;
 			for (const auto &field : p_value.map_value()) {
-				map[to_godot(field.first)] = to_variant(field.second);
+				String key;
+				if (to_godot_key(field.first, key)) {
+					map[key] = to_variant(field.second);
+				}
 			}
 			return map;
 		}
@@ -344,7 +347,10 @@ Dictionary to_snapshot(const DocumentSnapshot &p_snapshot) {
 	if (p_snapshot.exists()) {
 		const MapFieldValue fields = p_snapshot.GetData(DocumentSnapshot::ServerTimestampBehavior::kEstimate);
 		for (const auto &field : fields) {
-			data[to_godot(field.first)] = to_variant(field.second);
+			String key;
+			if (to_godot_key(field.first, key)) {
+				data[key] = to_variant(field.second);
+			}
 		}
 	}
 	snapshot["data"] = data;

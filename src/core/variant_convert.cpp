@@ -58,11 +58,12 @@ String convert_map(const Dictionary &p_map, firebase::Variant &r_out, std::vecto
 	return String();
 }
 
-String key_to_string(const firebase::Variant &p_key) {
+bool key_to_string(const firebase::Variant &p_key, String &r_key) {
 	if (p_key.is_string()) {
-		return String::utf8(p_key.string_value());
+		return to_godot_key(p_key.string_value(), r_key);
 	}
-	return String(to_godot_variant(p_key));
+	r_key = String(to_godot_variant(p_key));
+	return true;
 }
 
 String convert_value(const Variant &p_value, firebase::Variant &r_out, std::vector<Variant> &p_ancestors) {
@@ -144,7 +145,11 @@ Variant to_godot_variant(const firebase::Variant &p_value) {
 		case firebase::Variant::kTypeMap: {
 			Dictionary map;
 			for (const auto &entry : p_value.map()) {
-				map[key_to_string(entry.first)] = to_godot_variant(entry.second);
+				String key;
+				// has(): string keys arrive cut at NUL and non-string keys are stringified, so they can still meet.
+				if (key_to_string(entry.first, key) && !map.has(key)) {
+					map[key] = to_godot_variant(entry.second);
+				}
 			}
 			return map;
 		}
