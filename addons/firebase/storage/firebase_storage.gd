@@ -18,6 +18,8 @@ func _init(requests: FirebaseRequests) -> void:
 
 ## Result value is the stored file's metadata.
 func upload_bytes(path: String, data: PackedByteArray, content_type := "") -> FirebaseTask:
+	if content_type.to_utf8_buffer().has(0):
+		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, "content_type must not contain NUL")
 	return _file_request(path, &"upload_bytes", [path, data, content_type])
 
 

@@ -60,6 +60,10 @@ inline bool to_godot_key(const std::string &p_text, godot::String &r_key) {
 	return to_std(r_key) == p_text;
 }
 
+// Container levels decoded from server data, above Firestore's 20 and RTDB's 32.
+// Deeper subtrees become null so a hostile payload cannot exhaust the stack.
+constexpr int kMaxIncomingDepth = 64;
+
 // Calls `done` when `future` completes; `map` turns the result into a Variant.
 template <typename T, typename Map>
 void complete_when_done(const firebase::Future<T> &p_future, Completion p_done, Map p_map) {

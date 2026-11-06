@@ -22,8 +22,6 @@ godot::String to_update_field_value(const godot::Dictionary &p_data, firebase::f
 // A filter value: write-only special values are rejected.
 godot::String to_query_value(const godot::Variant &p_value, firebase::firestore::FieldValue &r_out);
 
-godot::Variant to_variant(const firebase::firestore::FieldValue &p_value);
-
 // {id, path, exists, data, metadata}
 godot::Dictionary to_snapshot(const firebase::firestore::DocumentSnapshot &p_snapshot);
 

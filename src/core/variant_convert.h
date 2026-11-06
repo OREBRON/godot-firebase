@@ -19,6 +19,7 @@ namespace godot_firebase {
 godot::String to_firebase_variant(const godot::Variant &p_value, firebase::Variant &r_out);
 
 // Maps become Dictionary with String keys, vectors become Array, blobs PackedByteArray.
+// Containers nested deeper than kMaxIncomingDepth become null.
 godot::Variant to_godot_variant(const firebase::Variant &p_value);
 
 } // namespace godot_firebase

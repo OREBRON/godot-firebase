@@ -58,11 +58,13 @@ String convert_map(const Dictionary &p_map, firebase::Variant &r_out, std::vecto
 	return String();
 }
 
-bool key_to_string(const firebase::Variant &p_key, String &r_key) {
+Variant to_godot_at(const firebase::Variant &p_value, int p_depth);
+
+bool key_to_string(const firebase::Variant &p_key, int p_depth, String &r_key) {
 	if (p_key.is_string()) {
 		return to_godot_key(p_key.string_value(), r_key);
 	}
-	r_key = String(to_godot_variant(p_key));
+	r_key = String(to_godot_at(p_key, p_depth));
 	return true;
 }
 
@@ -114,17 +116,7 @@ String convert_value(const Variant &p_value, firebase::Variant &r_out, std::vect
 	return reason;
 }
 
-} // namespace
-
-String to_firebase_variant(const Variant &p_value, firebase::Variant &r_out) {
-	std::vector<Variant> ancestors;
-	firebase::Variant converted;
-	const String reason = convert_value(p_value, converted, ancestors);
-	r_out = reason.is_empty() ? std::move(converted) : firebase::Variant::Null();
-	return reason;
-}
-
-Variant to_godot_variant(const firebase::Variant &p_value) {
+Variant to_godot_at(const firebase::Variant &p_value, int p_depth) {
 	switch (p_value.type()) {
 		case firebase::Variant::kTypeInt64:
 			return p_value.int64_value();
@@ -136,19 +128,25 @@ Variant to_godot_variant(const firebase::Variant &p_value) {
 		case firebase::Variant::kTypeMutableString:
 			return String::utf8(p_value.string_value());
 		case firebase::Variant::kTypeVector: {
+			if (p_depth >= kMaxIncomingDepth) {
+				return Variant();
+			}
 			Array items;
 			for (const firebase::Variant &item : p_value.vector()) {
-				items.push_back(to_godot_variant(item));
+				items.push_back(to_godot_at(item, p_depth + 1));
 			}
 			return items;
 		}
 		case firebase::Variant::kTypeMap: {
+			if (p_depth >= kMaxIncomingDepth) {
+				return Variant();
+			}
 			Dictionary map;
 			for (const auto &entry : p_value.map()) {
 				String key;
 				// has(): string keys arrive cut at NUL and non-string keys are stringified, so they can still meet.
-				if (key_to_string(entry.first, key) && !map.has(key)) {
-					map[key] = to_godot_variant(entry.second);
+				if (key_to_string(entry.first, p_depth + 1, key) && !map.has(key)) {
+					map[key] = to_godot_at(entry.second, p_depth + 1);
 				}
 			}
 			return map;
@@ -156,7 +154,9 @@ Variant to_godot_variant(const firebase::Variant &p_value) {
 		case firebase::Variant::kTypeStaticBlob:
 		case firebase::Variant::kTypeMutableBlob: {
 			godot::PackedByteArray bytes;
-			bytes.resize(static_cast<int64_t>(p_value.blob_size()));
+			if (bytes.resize(static_cast<int64_t>(p_value.blob_size())) != godot::OK) {
+				return Variant();
+			}
 			if (p_value.blob_size() > 0) {
 				memcpy(bytes.ptrw(), p_value.blob_data(), p_value.blob_size());
 			}
@@ -165,6 +165,20 @@ Variant to_godot_variant(const firebase::Variant &p_value) {
 		default:
 			return Variant();
 	}
+}
+
+} // namespace
+
+String to_firebase_variant(const Variant &p_value, firebase::Variant &r_out) {
+	std::vector<Variant> ancestors;
+	firebase::Variant converted;
+	const String reason = convert_value(p_value, converted, ancestors);
+	r_out = reason.is_empty() ? std::move(converted) : firebase::Variant::Null();
+	return reason;
+}
+
+Variant to_godot_variant(const firebase::Variant &p_value) {
+	return to_godot_at(p_value, 0);
 }
 
 } // namespace godot_firebase

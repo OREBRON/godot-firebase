@@ -246,11 +246,12 @@ int64_t FirebaseRemoteConfigNative::get_value(const String &p_key, int64_t p_val
 			case Variant::PACKED_BYTE_ARRAY: {
 				const std::vector<unsigned char> bytes = config->GetData(key.c_str(), &info);
 				PackedByteArray data;
-				data.resize(static_cast<int64_t>(bytes.size()));
-				if (!bytes.empty()) {
-					memcpy(data.ptrw(), bytes.data(), bytes.size());
+				if (data.resize(static_cast<int64_t>(bytes.size())) == godot::OK) {
+					if (!bytes.empty()) {
+						memcpy(data.ptrw(), bytes.data(), bytes.size());
+					}
+					value = data;
 				}
-				value = data;
 				break;
 			}
 		}
