@@ -17,6 +17,11 @@ output="${ANDROID_AAR_OUTPUT:-$PWD/addons/firebase/bin/android/godot_firebase.aa
 mkdir -p "$stage/classes" "$stage/aar" "$(dirname "$output")"
 # The SDK-facing Java bridges compile against pinned API jars. They remain
 # compile-only: Gradle dependencies are added by the game export plugin.
+if [[ -z "${GRADLE:-}" ]]; then
+	# Official gradle-9.3.1-wrapper.jar SHA-256; update with gradle-wrapper.properties.
+	wrapper_sha=$(shasum -a 256 android/gradle/wrapper/gradle-wrapper.jar | cut -d' ' -f1)
+	[[ "$wrapper_sha" == b3a875ddc1f044746e1b1a55f645584505f4a10438c1afea9f15e92a7c42ec13 ]] || { echo "Unexpected gradle-wrapper.jar SHA-256: $wrapper_sha" >&2; exit 1; }
+fi
 "${GRADLE:-$PWD/android/gradlew}" --no-daemon -p android bridgeClasspath
 classpath="$sdk/platforms/android-35/android.jar"
 for dependency in android/build/bridge-classpath/*.jar; do

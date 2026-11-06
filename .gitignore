@@ -32,3 +32,11 @@ google-services*.json
 /android/.gradle/
 /android/build/
 .tokensave
+
+# Signing material, local secrets and per-game export settings.
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+.env
+export_presets.cfg
