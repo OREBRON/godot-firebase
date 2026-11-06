@@ -4,14 +4,16 @@ extends RefCounted
 ## move; commit failures restore them. This is not a power-loss atomic journal.
 
 
-static func apply(changes: Dictionary) -> Dictionary:
-	var staged := _stage(changes)
+## Every target must be inside `root`, the game's Gradle build directory.
+static func apply(changes: Dictionary, root: String) -> Dictionary:
+	var staged := _stage(changes, root)
 	return staged if staged.error != OK else _commit(staged.entries)
 
 
-static func _stage(changes: Dictionary) -> Dictionary:
+static func _stage(changes: Dictionary, root: String) -> Dictionary:
 	var entries: Array[Dictionary] = []
 	var paths := {}
+	var base := ProjectSettings.globalize_path(root).simplify_path()
 	# Validate every target before creating any temporary file.
 	for supplied_path in changes:
 		if not supplied_path is String or not supplied_path.is_absolute_path():
@@ -24,9 +26,11 @@ static func _stage(changes: Dictionary) -> Dictionary:
 		paths[path] = true
 		if DirAccess.dir_exists_absolute(path):
 			return _failure("Firebase export target is a directory, not a file: %s." % path)
-		var parent := DirAccess.open(path.get_base_dir())
-		if parent != null and parent.is_link(path.get_file()):
-			return _failure("Firebase export cannot replace a symbolic link: %s." % path)
+		if not path.begins_with(base + "/"):
+			return _failure("Firebase export target is outside the Gradle build directory %s: %s." % [base, path])
+		var link := _first_link(base, path)
+		if not link.is_empty():
+			return _failure("Firebase export cannot write through a symbolic link: %s." % link)
 		entries.append({"path": path, "contents": changes[supplied_path], "staged": "", "backup": "",
 			"existed": FileAccess.file_exists(path), "backed_up": false, "installed": false})
 	for entry in entries:
@@ -102,6 +106,20 @@ static func _remove_staged(entries: Array) -> PackedStringArray:
 			if DirAccess.remove_absolute(entry.staged) != OK:
 				failures.append(entry.staged)
 	return failures
+
+
+## First symbolic link among the components of `path` below `base`, or "".
+## A link anywhere on the way, not only the file itself, redirects the write.
+static func _first_link(base: String, path: String) -> String:
+	var current := base
+	for component in path.trim_prefix(base + "/").split("/"):
+		var parent := DirAccess.open(current)
+		if parent == null:
+			return "" # Not created yet; make_dir_recursive creates real directories.
+		if parent.is_link(component):
+			return current.path_join(component)
+		current = current.path_join(component)
+	return ""
 
 
 static func _temporary_path(target: String, kind: String) -> String:
