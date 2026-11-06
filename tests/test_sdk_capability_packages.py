@@ -133,6 +133,21 @@ class DevelopmentPackageTests(unittest.TestCase):
             self.assertNotIn("addons/firebase/" + relative, files)
         self.assertIn("addons/firebase/bin/Info.plist", files)
 
+    def test_files_outside_allowlist_fail_the_package(self):
+        (self.addon / "bin/modules.txt").write_text("auth\n")
+        bom_config = b"\xef\xbb\xbf" + json.dumps({"project_info": {}, "client": []}).encode()
+        for relative, content in [("google-services.json.bak", b"{}"), ("core/game.json", bom_config),
+                                  ("release.jks", b"key"), ("bin/upload.keystore", b"key"), ("core/cert.p12", b"key"),
+                                  (".env", b"TOKEN=x"), ("bin/game.mobileprovision", b"profile"), ("auth/notes.txt", b"x")]:
+            with self.subTest(file=relative):
+                path = self.addon / relative
+                path.write_bytes(content)
+                result = subprocess.run(["bash", str(self.root / "tools/package.sh")], capture_output=True, text=True)
+                path.unlink()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(relative, result.stderr)
+                self.assertFalse(list((self.root / "build/dist").glob("*.zip")))
+
     def test_invalid_selection_rejected(self):
         for selection in ["", "auth,auth", "auth,unknown", "../core", "auth,,database"]:
             with self.subTest(selection=selection):

@@ -36,6 +36,18 @@ def game_config(path):
     return False
 
 
+# What the addon legitimately ships; anything else (keystores, .env, renamed configs) fails the package.
+SHIPPED_SUFFIXES = (".gd", ".uid", ".gdextension", ".cfg", ".so", ".dylib", ".dll", ".aar",
+                    ".plist", ".xcprivacy", ".strings", ".png", ".ttf")
+SHIPPED_NAMES = {".gdignore", "modules.txt"}
+
+
+def shipped(path):
+    name = path.name.lower()
+    # A framework's executable is named after the bundle and may have no extension.
+    return name.endswith(SHIPPED_SUFFIXES) or name in SHIPPED_NAMES or path.parent.name == path.name + ".framework"
+
+
 def package():
     parser = argparse.ArgumentParser(description="Package the current selected monolithic build")
     parser.add_argument("--sign-ios", action="store_true", help="Require Apple-signed iOS release contents (macOS)")
@@ -70,6 +82,8 @@ def package():
                 if path.is_symlink():
                     raise ValueError(f"Package input must not contain symlinks: {path}")
                 if path.is_file() and not game_config(path):
+                    if not shipped(path):
+                        raise ValueError(f"Package input is not an addon file type: {path}")
                     destination = stage / path
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(path, destination)

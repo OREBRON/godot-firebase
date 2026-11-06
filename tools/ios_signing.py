@@ -114,9 +114,10 @@ def extract_archive(archive_path, destination):
             relative = PurePosixPath(entry.filename)
             mode = entry.external_attr >> 16
             if (relative.is_absolute() or ".." in relative.parts or "\\" in entry.filename
-                    or not relative.parts or relative in seen or stat.S_ISLNK(mode)):
+                    or not relative.parts or relative.as_posix().casefold() in seen or stat.S_ISLNK(mode)):
                 raise ValueError(f"Unsafe archive entry: {entry.filename}")
-            seen.add(relative)
+            # APFS is case-insensitive: Info.plist and info.plist would overwrite each other.
+            seen.add(relative.as_posix().casefold())
             target = destination.joinpath(*relative.parts)
             if entry.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
