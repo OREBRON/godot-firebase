@@ -18,8 +18,16 @@ ruby --version
 
 version=$(awk '/^COCOAPODS:/{print $2}' tools/google_signin_ios/Podfile.lock)
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Podfile.lock has no CocoaPods version' >&2; exit 1; }
+source tools/versions.env
 gem_dir="$RUNNER_TEMP/godot-firebase-cocoapods"
-gem install cocoapods --version "$version" --no-document --install-dir "$gem_dir"
+fetch_dir=$(mktemp -d)
+trap 'rm -rf "$fetch_dir"' EXIT
+(cd "$fetch_dir" && gem fetch cocoapods --version "$version")
+gem_file="$fetch_dir/cocoapods-$version.gem"
+actual_sha=$(shasum -a 256 "$gem_file" | cut -d' ' -f1)
+[[ "$actual_sha" == "$COCOAPODS_SHA256" ]] || { echo "SHA-256 mismatch for cocoapods-$version.gem (got $actual_sha); update COCOAPODS_SHA256 in tools/versions.env with the Podfile.lock version" >&2; exit 1; }
+# Only the cocoapods gem itself is verified; its dependencies still resolve from rubygems.org unpinned.
+gem install "$gem_file" --no-document --install-dir "$gem_dir"
 actual=$(GEM_HOME="$gem_dir" "$gem_dir/bin/pod" --version)
 [[ "$actual" == "$version" ]] || { echo "Expected CocoaPods $version; got $actual" >&2; exit 1; }
 echo "GEM_HOME=$gem_dir" >> "$GITHUB_ENV"
