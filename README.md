@@ -543,11 +543,12 @@ kanıtı ayrı kabul işlerinde bekliyor.
 Release, imza anahtarı Keychain'inde olan Mac'te `tools/release.sh` ile yayımlanır:
 tag'i oluşturup push et, tag'e checkout yap ve `tools/release.sh v4.7.2` çalıştır.
 Betik temiz çalışma kopyasını ve tag eşleşmesini kontrol eder, iOS/Android/macOS'u
-derler, testleri ve paket smoke testini koşar, iOS'u `--sign-ios` ile imzalar ve
-`godot-firebase.zip`, `godot-firebase-symbols.zip`, `SHA256SUMS.txt` dosyalarını
-release'e yükler (var olan release'te `--clobber`). `IOS_SIGNING_IDENTITY` (tam Apple
-Distribution/Development sertifika adı veya SHA-1) ve `IOS_SIGNING_TEAM_ID` ortam
-değişkenleri gerekir; `IOS_SIGNING_KEYCHAIN` isteğe bağlı Keychain yoludur.
+derler, testleri ve paket smoke testini koşar, iOS'u `--sign-ios` ile imzalar,
+origin'deki tag'in HEAD'i gösterdiğini doğrular ve `godot-firebase.zip`,
+`godot-firebase-symbols.zip`, `SHA256SUMS.txt` dosyalarıyla yeni release'i oluşturur.
+Var olan release'in üzerine yazılmaz; betik reddeder, `plugin.cfg` sürümünü artır.
+`IOS_SIGNING_IDENTITY` (tam Apple Distribution/Development sertifika adı veya SHA-1)
+ve `IOS_SIGNING_TEAM_ID` ortam değişkenleri gerekir; `IOS_SIGNING_KEYCHAIN` isteğe bağlı Keychain yoludur.
 `ANDROID_HOME` (platform 35, NDK 28.1.13356709), JDK 17 ve oturum açmış `gh` gerekir.
 Eksik kimlik/anahtar, yanlış ekip, imzasız/ad-hoc, zaman damgasız veya bozuk paket
 betiği durdurur. Yeni `.p8` gerekmez.

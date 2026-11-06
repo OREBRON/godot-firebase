@@ -261,12 +261,15 @@ class IOSSigningTests(unittest.TestCase):
         self.assertIn("Firebase", result.stderr)
 
     def test_unsafe_archive_is_rejected(self):
-        archive = self.root / "unsafe.zip"
-        with zipfile.ZipFile(archive, "w") as output:
-            output.writestr("../outside", "bad")
-        result = self.run_tool("verify-package", archive, "--team-id", TEAM)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Unsafe", result.stderr)
+        for names in [["../outside"], ["Info.plist", "info.plist"]]:
+            with self.subTest(names=names):
+                archive = self.root / "unsafe.zip"
+                with zipfile.ZipFile(archive, "w") as output:
+                    for name in names:
+                        output.writestr(name, "bad")
+                result = self.run_tool("verify-package", archive, "--team-id", TEAM)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Unsafe", result.stderr)
 
 
 class IOSFrameworkBuildTests(unittest.TestCase):

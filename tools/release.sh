@@ -47,6 +47,10 @@ rm -f build/dist/godot-firebase-symbols.zip
 (cd build && zip -qry dist/godot-firebase-symbols.zip "$symbols_dir")
 (cd build/dist && shasum -a 256 godot-firebase.zip godot-firebase-symbols.zip > SHA256SUMS.txt)
 assets=(build/dist/godot-firebase.zip build/dist/godot-firebase-symbols.zip build/dist/SHA256SUMS.txt)
+# --verify-tag only checks that the tag exists on origin; it must also be the built commit.
+remote_tag=$(git ls-remote origin "refs/tags/$tag^{}" | cut -f1)
+test -n "$remote_tag" || remote_tag=$(git ls-remote origin "refs/tags/$tag" | cut -f1)
+test "$remote_tag" = "$(git rev-parse HEAD)" || { echo "origin tag $tag is missing or not at HEAD; push $tag first" >&2; exit 1; }
 gh release create "$tag" "${assets[@]}" --verify-tag --generate-notes \
 	--title "$version — Godot $GODOT_VERSION · Firebase C++ $FIREBASE_CPP_VERSION"
 cat build/dist/SHA256SUMS.txt
