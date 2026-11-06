@@ -3,13 +3,19 @@
 #include <atomic>
 #include <map>
 #include <mutex>
+#include <string>
 #include <firebase/auth.h>
 #include "../../core/android_bridge.h"
 #include "../../core/outcome.h"
 
 namespace {
+// The provider is recorded here so a completion cannot pick another provider.
+struct PendingRequest {
+	std::string provider;
+	godot_firebase::CredentialCallback done;
+};
 std::mutex callbacks_mutex;
-std::map<int64_t, godot_firebase::CredentialCallback> callbacks;
+std::map<int64_t, PendingRequest> callbacks;
 std::atomic<int64_t> next_id{0};
 
 std::string string_value(JNIEnv *env, jstring value) {
@@ -21,16 +27,18 @@ std::string string_value(JNIEnv *env, jstring value) {
 	return result;
 }
 
+bool take(int64_t id, PendingRequest &request) {
+	std::lock_guard<std::mutex> lock(callbacks_mutex);
+	auto entry = callbacks.find(id);
+	if (entry == callbacks.end()) return false;
+	request = std::move(entry->second);
+	callbacks.erase(entry);
+	return true;
+}
+
 void finish(int64_t id, godot_firebase::PlatformCredential result) {
-	godot_firebase::CredentialCallback done;
-	{
-		std::lock_guard<std::mutex> lock(callbacks_mutex);
-		auto entry = callbacks.find(id);
-		if (entry == callbacks.end()) return;
-		done = std::move(entry->second);
-		callbacks.erase(entry);
-	}
-	done(std::move(result));
+	PendingRequest request;
+	if (take(id, request)) request.done(std::move(result));
 }
 } // namespace
 
@@ -50,7 +58,7 @@ void request_platform_credential(const std::string &provider, const PlatformCred
 	const int64_t id = ++next_id;
 	{
 		std::lock_guard<std::mutex> lock(callbacks_mutex);
-		callbacks.emplace(id, std::move(done));
+		callbacks.emplace(id, PendingRequest{provider, std::move(done)});
 	}
 	jstring java_provider = jni.env->NewStringUTF(provider.c_str());
 	jstring java_client = jni.env->NewStringUTF(options.google_web_client_id.c_str());
@@ -82,18 +90,25 @@ void clear_platform_credential_state() {
 
 extern "C" JNIEXPORT void JNICALL Java_org_godotengine_godotfirebase_FirebaseAuthBridge_nativeComplete(
 		JNIEnv *env, jclass, jlong id, jstring provider, jstring credential, jint code, jstring message) {
+	PendingRequest request;
+	if (!take(id, request)) return;
 	godot_firebase::PlatformCredential result;
+	if (string_value(env, provider) != request.provider) {
+		result.error_code = godot_firebase::kUnavailable;
+		result.error_message = "provider response did not match the request";
+		request.done(std::move(result));
+		return;
+	}
 	result.error_code = code;
 	result.error_message = string_value(env, message);
 	if (code == 0) {
 		const std::string token = string_value(env, credential);
 		if (!token.empty()) {
-			const std::string name = string_value(env, provider);
-			if (name == "google") result.credential = firebase::auth::GoogleAuthProvider::GetCredential(token.c_str(), nullptr);
-			else if (name == "play_games_platform") result.credential = firebase::auth::PlayGamesAuthProvider::GetCredential(token.c_str());
+			if (request.provider == "google") result.credential = firebase::auth::GoogleAuthProvider::GetCredential(token.c_str(), nullptr);
+			else if (request.provider == "play_games_platform") result.credential = firebase::auth::PlayGamesAuthProvider::GetCredential(token.c_str());
 			result.ok = result.credential.is_valid();
 		}
 		if (!result.ok) { result.error_code = godot_firebase::kUnavailable; result.error_message = "provider credential was invalid"; }
 	}
-	finish(id, std::move(result));
+	request.done(std::move(result));
 }

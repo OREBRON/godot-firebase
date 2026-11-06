@@ -44,10 +44,16 @@ PlatformCredential success(const firebase::auth::Credential &credential) {
 	return result;
 }
 
+// Set while the replacement below calls the three-argument factory. A
+// FirebaseAuth whose factory forwards to the swizzled selector then reaches the
+// original IMP instead of recursing forever.
+thread_local bool routing_oauth_credential = false;
+
 // The C++ SDK (13.13–14.1) passes accessToken:nil to a selector whose Swift
 // parameter is non-optional, so the request carries an empty access_token and
 // Firebase rejects every Apple token. Route that case to the selector without
-// an access token. Remove once firebase/firebase-cpp-sdk#1954 is fixed.
+// an access token. This process-wide swizzle exists only for
+// firebase/firebase-cpp-sdk#1954: delete it with the SDK pin that fixes it.
 void route_empty_oauth_access_token() {
 	static dispatch_once_t once;
 	dispatch_once(&once, ^{
@@ -57,8 +63,11 @@ void route_empty_oauth_access_token() {
 		using Factory = FIROAuthCredential *(*)(id, SEL, NSString *, NSString *, NSString *, NSString *);
 		Factory original = reinterpret_cast<Factory>(method_getImplementation(method));
 		IMP replacement = imp_implementationWithBlock(^FIROAuthCredential *(id provider_class, NSString *provider, NSString *id_token, NSString *raw_nonce, NSString *access_token) {
-			if (access_token.length == 0) {
-				return [FIROAuthProvider credentialWithProviderID:provider IDToken:id_token rawNonce:raw_nonce];
+			if (access_token.length == 0 && !routing_oauth_credential) {
+				routing_oauth_credential = true;
+				FIROAuthCredential *credential = [FIROAuthProvider credentialWithProviderID:provider IDToken:id_token rawNonce:raw_nonce];
+				routing_oauth_credential = false;
+				return credential;
 			}
 			return original(provider_class, selector, provider, id_token, raw_nonce, access_token);
 		});
@@ -137,7 +146,10 @@ void sign_in_with_game_center(CredentialCallback done, uint64_t generation) {
 	CredentialCallback _done;
 }
 @property(nonatomic, copy) NSString *rawNonce;
+// The controller retains itself until its delegate callback.
+@property(nonatomic, weak) ASAuthorizationController *controller;
 - (void)startWithCallback:(CredentialCallback)done;
+- (void)cancel;
 @end
 
 // Keeps the running request alive until ASAuthorizationController answers.
@@ -219,7 +231,15 @@ void sign_in_with_google(const godot_firebase::PlatformCredentialOptions &option
 	ASAuthorizationController *controller = [[ASAuthorizationController alloc] initWithAuthorizationRequests:@[ request ]];
 	controller.delegate = self;
 	controller.presentationContextProvider = self;
+	self.controller = controller;
 	[controller performRequests];
+}
+
+// Completes once as cancelled; the controller's later callback finds no _done.
+- (void)cancel {
+	ASAuthorizationController *controller = self.controller;
+	[self finish:failure(godot_firebase::kCancelled, "Sign in with Apple was cancelled")];
+	if (@available(iOS 16.0, *)) [controller cancel];
 }
 
 - (void)finish:(PlatformCredential)result {
@@ -299,6 +319,9 @@ void revoke_apple_token(const std::string &authorization_code, Completion done) 
 void clear_platform_credential_state() {
 	++platform_generation;
 	dispatch_async(dispatch_get_main_queue(), ^{
+		// A sheet left open would otherwise block every later Apple request with kBusy.
+		GodotFirebaseAppleSignIn *apple = active_apple_sign_in; // finish clears the global
+		[apple cancel];
 		[GIDSignIn.sharedInstance signOut];
 		GKLocalPlayer.localPlayer.authenticateHandler = nil;
 	});

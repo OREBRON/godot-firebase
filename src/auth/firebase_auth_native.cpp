@@ -98,6 +98,12 @@ Completion finish_operation(const std::shared_ptr<AuthSession> &session, const s
 	};
 }
 
+// A cancelled SDK sign-in that still succeeds is signed out by finish_operation.
+// The user it briefly signs in must not reach GDScript as a state change.
+bool compensating_sign_out_pending(const std::shared_ptr<AuthSession> &session) {
+	return session->active && session->active->cancelled && session->active->sdk_started;
+}
+
 PlatformCredentialOptions credential_options() {
 	PlatformCredentialOptions options;
 	auto *settings = godot::ProjectSettings::get_singleton();
@@ -345,6 +351,7 @@ void FirebaseAuthNative::OnAuthStateChanged(firebase::auth::Auth *p_auth) {
 	if (!session->auth) return;
 	const User user = p_auth->current_user();
 	const std::string uid = user.is_valid() ? user.uid() : "";
+	if (user.is_valid() && compensating_sign_out_pending(session)) return;
 	if (session->active && !session->active->sdk_started && session->active->source_uid != uid) cancel_operation(session);
 	emit_deferred("auth_state_changed", godot::Array::make(to_dictionary(user)));
 }
