@@ -124,7 +124,9 @@ Eksik LFS binary, import/script hatası ve timeout başarısız sayılır.
    Mevcut paketleyici eski platform çıktısını veya mixed build'i reddetmez.
 3. Proje ayarlarında eklentiyi aç. `Firebase` autoload'u eklenir.
 4. Firebase konsolundan `GoogleService-Info.plist` indir, `res://` köküne koy
-   (dosya adı birebir aynı kalmalı). iOS export ayarlarında:
+   (dosya adı birebir aynı kalmalı; `BUNDLE_ID` export preset'inin
+   `application/bundle_identifier` değeriyle eşleşmeli, aksi halde export Xcode
+   build'ini durdurur). iOS export ayarlarında:
    - `firebase/sign_in_with_apple` açıksa `entitlements/additional` içine
      `<key>com.apple.developer.applesignin</key><array><string>Default</string></array>`
    - `firebase/sign_in_with_game_center` açıksa `entitlements/game_center`
