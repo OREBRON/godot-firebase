@@ -23,7 +23,7 @@ def function(start):
   end+=1
  return source[pos:end]
 structs=source[source.index('struct AuthOperation {'):source.index('namespace {',source.index('struct AuthOperation {'))]
-helpers='\n'.join(function(n) for n in ['void cancel_operation(', 'Completion finish_operation('])
+helpers='\n'.join(function(n) for n in ['void cancel_operation(', 'Completion finish_operation(', 'bool compensating_sign_out_pending('])
 methods='\n'.join(function(n) for n in ['void FirebaseAuthNative::shutdown()', 'void FirebaseAuthNative::shutdown_all()', 'void FirebaseAuthNative::sign_out()'])
 prelude=r"""
 #include <functional>
@@ -67,7 +67,12 @@ void pending_sdk_completion(bool sign_out_first, bool destroy_app, bool live_at_
  operation->done=[&](Outcome result){assert(!result.ok); ++completed;};
  backend->session->active=operation;
  Completion finish=finish_operation(backend->session,operation);
- if(sign_out_first) backend->sign_out();
+ std::shared_ptr<AuthSession> session=backend->session;
+ assert(!compensating_sign_out_pending(session)); // a running sign-in reports its user
+ if(sign_out_first) {
+  backend->sign_out();
+  assert(compensating_sign_out_pending(session)); // its late user is stale
+ }
  if(live_at_app_shutdown) {
   live_modules.insert(backend.get());
   FirebaseAuthNative::shutdown_all();
@@ -81,11 +86,12 @@ void pending_sdk_completion(bool sign_out_first, bool destroy_app, bool live_at_
  if(destroy_app && !live_at_app_shutdown) FirebaseAuthNative::shutdown_all();
  finish({true});
  assert(completed==1);
+ assert(!compensating_sign_out_pending(session));
  // A disposed wrapper still compensates the uncancellable SDK success. An App
  // shutdown revokes that pointer, so even an orphan must never call Auth again.
  const int expected_signouts=(sign_out_first ? 1 : 0)+(destroy_app ? 0 : 1);
  assert(sdk.signouts==expected_signouts);
- finish={}; operation.reset();
+ finish={}; operation.reset(); session.reset();
  assert(auth_session_owner.expired());
 }
 void uninitialized_wrapper_does_not_clear_owner() {
