@@ -17,12 +17,17 @@ func _init(requests: FirebaseRequests) -> void:
 
 ## Calls the callable function `name`. Result value is its returned data.
 func call_function(name: String, data: Variant = null) -> FirebaseTask:
-	if name.is_empty():
-		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, "function name must not be empty")
+	if not is_valid_name(name):
+		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, "function name must be non-empty and contain no NUL")
 	var reason := validate_data(data)
 	if not reason.is_empty():
 		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, reason)
 	return _requests.send(&"call_function", [name, data])
+
+
+## The SDK takes the name as a C string, so NUL would cut it.
+static func is_valid_name(name: String) -> bool:
+	return not name.is_empty() and not name.to_utf8_buffer().has(0)
 
 
 ## Returns an empty string when `data` can be sent, otherwise the reason.

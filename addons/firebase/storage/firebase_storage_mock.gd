@@ -14,7 +14,9 @@ var files: Dictionary[String, Dictionary] = {}
 
 func upload_bytes(path: String, data: PackedByteArray, content_type: String) -> int:
 	var id := _take_id()
-	if not _fail_if_requested(id):
+	if content_type.to_utf8_buffer().has(0):
+		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "content_type must not contain NUL")
+	elif not _fail_if_requested(id):
 		files[path] = {"bytes": data.duplicate(), "content_type": content_type if not content_type.is_empty() else DEFAULT_CONTENT_TYPE, "updated": int(Time.get_unix_time_from_system() * 1000)}
 		_finish(id, _metadata(path))
 	return id

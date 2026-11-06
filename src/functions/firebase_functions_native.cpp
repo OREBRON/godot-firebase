@@ -66,8 +66,9 @@ int64_t FirebaseFunctionsNative::call_function(const String &p_name, const Varia
 			done(Outcome::failure(kUnavailable, "FirebaseFunctionsNative is not initialized"));
 			return;
 		}
-		if (p_name.is_empty()) {
-			done(Outcome::failure(kInvalidArgument, "function name must not be empty"));
+		const std::string name = to_std(p_name);
+		if (name.empty() || name.find('\0') != std::string::npos) {
+			done(Outcome::failure(kInvalidArgument, "function name must be non-empty and contain no NUL"));
 			return;
 		}
 		firebase::Variant data;
@@ -76,7 +77,7 @@ int64_t FirebaseFunctionsNative::call_function(const String &p_name, const Varia
 			done(Outcome::failure(kInvalidArgument, reason));
 			return;
 		}
-		complete_when_done(functions->GetHttpsCallable(to_std(p_name).c_str()).Call(data), std::move(done), [](const Future<HttpsCallableResult> &future) {
+		complete_when_done(functions->GetHttpsCallable(name.c_str()).Call(data), std::move(done), [](const Future<HttpsCallableResult> &future) {
 			return to_godot_variant(future.result()->data());
 		});
 	});

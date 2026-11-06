@@ -13,6 +13,10 @@ func _run() -> void:
 	check(not result.ok and result.error_code == FirebaseFunctionsMock.NOT_FOUND, "unknown function fails")
 	result = await functions.call_function("").wait()
 	check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "empty name rejected")
+	var backend: FirebaseFunctionsMock = firebase.backends.functions
+	var id := backend.call_function("", null)
+	var answer: Array = await backend.request_completed
+	check(answer[0] == id and not answer[1] and answer[3] == FirebaseResult.ERR_INVALID_ARGUMENT, "mock backend rejects empty name like native")
 	result = await functions.call_function("add", {"v": Vector2.ONE}).wait()
 	check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "unsupported data rejected")
 

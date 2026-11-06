@@ -266,6 +266,65 @@ String to_document(const Dictionary &p_data, bool p_allow_delete, bool p_path_ke
 	return reason.is_empty() ? convert_map(p_data, p_allow_delete, nullptr, p_path_keys, r_out) : reason;
 }
 
+// Containers nested deeper than kMaxIncomingDepth become null.
+Variant to_variant(const FieldValue &p_value, int p_depth) {
+	switch (p_value.type()) {
+		case FieldValue::Type::kBoolean:
+			return p_value.boolean_value();
+		case FieldValue::Type::kInteger:
+			return p_value.integer_value();
+		case FieldValue::Type::kDouble:
+			return p_value.double_value();
+		case FieldValue::Type::kString:
+			return to_godot(p_value.string_value());
+		case FieldValue::Type::kTimestamp: {
+			Dictionary stamp;
+			stamp[kTag] = kTimestamp;
+			stamp["seconds"] = p_value.timestamp_value().seconds();
+			stamp["nanos"] = p_value.timestamp_value().nanoseconds();
+			return stamp;
+		}
+		case FieldValue::Type::kBlob: {
+			godot::PackedByteArray bytes;
+			if (bytes.resize(static_cast<int64_t>(p_value.blob_size())) != godot::OK) {
+				return Variant();
+			}
+			if (p_value.blob_size() > 0) {
+				memcpy(bytes.ptrw(), p_value.blob_value(), p_value.blob_size());
+			}
+			return bytes;
+		}
+		case FieldValue::Type::kReference:
+			return to_godot(p_value.reference_value().path());
+		case FieldValue::Type::kArray: {
+			if (p_depth >= kMaxIncomingDepth) {
+				return Variant();
+			}
+			Array items;
+			for (const FieldValue &item : p_value.array_value()) {
+				items.push_back(to_variant(item, p_depth + 1));
+			}
+			return items;
+		}
+		case FieldValue::Type::kMap: {
+			if (p_depth >= kMaxIncomingDepth) {
+				return Variant();
+			}
+			Dictionary map;
+			for (const auto &field : p_value.map_value()) {
+				String key;
+				if (to_godot_key(field.first, key)) {
+					map[key] = to_variant(field.second, p_depth + 1);
+				}
+			}
+			return map;
+		}
+		default:
+			// Null, GeoPoint (not used by this addon) and write-only sentinels.
+			return Variant();
+	}
+}
+
 } // namespace
 
 String to_map_field_value(const Dictionary &p_data, bool p_allow_delete, MapFieldValue &r_out) {
@@ -288,56 +347,6 @@ String to_query_value(const Variant &p_value, FieldValue &r_out) {
 	return reason.is_empty() ? convert(p_value, false, kInQuery, r_out) : reason;
 }
 
-Variant to_variant(const FieldValue &p_value) {
-	switch (p_value.type()) {
-		case FieldValue::Type::kBoolean:
-			return p_value.boolean_value();
-		case FieldValue::Type::kInteger:
-			return p_value.integer_value();
-		case FieldValue::Type::kDouble:
-			return p_value.double_value();
-		case FieldValue::Type::kString:
-			return to_godot(p_value.string_value());
-		case FieldValue::Type::kTimestamp: {
-			Dictionary stamp;
-			stamp[kTag] = kTimestamp;
-			stamp["seconds"] = p_value.timestamp_value().seconds();
-			stamp["nanos"] = p_value.timestamp_value().nanoseconds();
-			return stamp;
-		}
-		case FieldValue::Type::kBlob: {
-			godot::PackedByteArray bytes;
-			bytes.resize(static_cast<int64_t>(p_value.blob_size()));
-			if (p_value.blob_size() > 0) {
-				memcpy(bytes.ptrw(), p_value.blob_value(), p_value.blob_size());
-			}
-			return bytes;
-		}
-		case FieldValue::Type::kReference:
-			return to_godot(p_value.reference_value().path());
-		case FieldValue::Type::kArray: {
-			Array items;
-			for (const FieldValue &item : p_value.array_value()) {
-				items.push_back(to_variant(item));
-			}
-			return items;
-		}
-		case FieldValue::Type::kMap: {
-			Dictionary map;
-			for (const auto &field : p_value.map_value()) {
-				String key;
-				if (to_godot_key(field.first, key)) {
-					map[key] = to_variant(field.second);
-				}
-			}
-			return map;
-		}
-		default:
-			// Null, GeoPoint (not used by this addon) and write-only sentinels.
-			return Variant();
-	}
-}
-
 Dictionary to_snapshot(const DocumentSnapshot &p_snapshot) {
 	Dictionary snapshot;
 	snapshot["id"] = to_godot(p_snapshot.id());
@@ -349,7 +358,7 @@ Dictionary to_snapshot(const DocumentSnapshot &p_snapshot) {
 		for (const auto &field : fields) {
 			String key;
 			if (to_godot_key(field.first, key)) {
-				data[key] = to_variant(field.second);
+				data[key] = to_variant(field.second, 1);
 			}
 		}
 	}

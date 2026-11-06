@@ -23,7 +23,9 @@ func call_function(name: String, data: Variant) -> int:
 	if _fail_if_requested(id):
 		return id
 	var reason := FirebaseFunctions.validate_data(data)
-	if not reason.is_empty():
+	if not FirebaseFunctions.is_valid_name(name):
+		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "function name must be non-empty and contain no NUL")
+	elif not reason.is_empty():
 		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, reason)
 	elif not handlers.has(name):
 		_finish_error(id, NOT_FOUND, "No mock handler for function %s" % name)

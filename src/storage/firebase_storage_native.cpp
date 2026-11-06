@@ -1,5 +1,6 @@
 #include "firebase_storage_native.h"
 
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <unordered_set>
@@ -98,10 +99,14 @@ int64_t FirebaseStorageNative::start_with_file(const String &p_path, const std::
 
 int64_t FirebaseStorageNative::upload_bytes(const String &p_path, const PackedByteArray &p_data, const String &p_content_type) {
 	return start_with_file(p_path, [&p_data, &p_content_type](StorageReference file, Completion done) {
+		const std::string content_type = to_std(p_content_type);
+		if (content_type.find('\0') != std::string::npos) {
+			done(Outcome::failure(kInvalidArgument, "content_type must not contain NUL"));
+			return;
+		}
 		// PutBytes reads the buffer until its future completes.
 		auto buffer = std::make_shared<std::vector<uint8_t>>(p_data.ptr(), p_data.ptr() + p_data.size());
 		Metadata metadata;
-		const std::string content_type = to_std(p_content_type);
 		if (!content_type.empty()) {
 			metadata.set_content_type(content_type.c_str());
 		}
@@ -121,7 +126,8 @@ int64_t FirebaseStorageNative::download_bytes(const String &p_path, int64_t p_ma
 		auto buffer = std::make_shared<std::vector<uint8_t>>(static_cast<size_t>(p_max_size));
 		complete_when_done(file.GetBytes(buffer->data(), buffer->size()), std::move(done), [buffer](const Future<size_t> &future) {
 			PackedByteArray bytes;
-			bytes.resize(static_cast<int64_t>(*future.result()));
+			bytes.resize(static_cast<int64_t>(std::min(*future.result(), buffer->size())));
+			// A failed resize leaves the array empty, so memcpy uses bytes.size().
 			if (!bytes.is_empty()) {
 				memcpy(bytes.ptrw(), buffer->data(), static_cast<size_t>(bytes.size()));
 			}
