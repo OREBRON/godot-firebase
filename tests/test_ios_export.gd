@@ -17,6 +17,7 @@ func _run() -> void:
 	google = Plugin.google_plist("123-test.apps.googleusercontent.com", existing.replace("com.googleusercontent.apps.123-test", "other-game"))
 	check(google.error != OK, "missing scheme in manually managed URL types reported")
 	check(Plugin.google_plist("invalid", "").error != OK, "invalid client id rejected")
+	check(Plugin.google_plist("123-test.apps.googleusercontent.com\n", "").error != OK, "client id with trailing newline rejected")
 
 	google = Plugin.google_plist("123-test.apps.googleusercontent.com", "<key>GIDClientID</key><string>123-test.apps.googleusercontent.com</string>")
 	check(google.error == OK and not google.content.contains("GIDClientID"), "matching manually configured Google client ID is not duplicated")
@@ -63,11 +64,24 @@ func _run() -> void:
 	google = Plugin.google_plist("123-test.apps.googleusercontent.com", "<key>GIDClientID</key><string><![CDATA[123-test.apps.googleusercontent.com]]></string>")
 	check(google.error == OK and not google.content.contains("GIDClientID"), "CDATA preserves matching client ID without parser errors")
 
-	var present := "res://tests/fixtures/google-services.json"
+	var present := "res://tests/fixtures/GoogleService-Info.plist"
 	var missing := "res://tests/fixtures/missing/GoogleService-Info.plist"
-	var config: Dictionary = Plugin.export_configuration({"firebase/consent_ad_storage": 2}, "", "123-test.apps.googleusercontent.com", present)
+	var bundle := "com.example.firebasetest"
+	var config: Dictionary = Plugin.export_configuration({"firebase/consent_ad_storage": 2}, "", "123-test.apps.googleusercontent.com", present, bundle)
 	check(config.error == OK and config.content.contains("ALLOW_AD_STORAGE</key><false/>") and config.content.contains("GIDClientID"), "valid export adds startup and Google plist content")
-	check(Plugin.export_configuration({}, "", null, missing).error != OK, "missing GoogleService-Info.plist fails the export")
-	check(Plugin.export_configuration({"firebase/consent_ad_storage": 2}, "<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_STORAGE</key><true/>", null, present).error != OK, "conflicting denied consent fails the export instead of being dropped")
-	check(Plugin.export_configuration({}, "", "", present).error != OK, "Google sign-in without a client ID fails the export")
+	check(Plugin.export_configuration({}, "", null, missing, bundle).error != OK, "missing GoogleService-Info.plist fails the export")
+	check(Plugin.export_configuration({"firebase/consent_ad_storage": 2}, "<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_STORAGE</key><true/>", null, present, bundle).error != OK, "conflicting denied consent fails the export instead of being dropped")
+	check(Plugin.export_configuration({}, "", "", present, bundle).error != OK, "Google sign-in without a client ID fails the export")
+	check(Plugin.export_configuration({}, "", null, present, "com.example.other").error != OK, "GoogleService-Info.plist of another bundle fails the export")
+	check(Plugin.export_configuration({}, "", null, "res://tests/fixtures/google-services.json", bundle).error != OK, "plist not named GoogleService-Info.plist fails the export")
+	var directory := "user://ios-export-test-%d" % Time.get_ticks_usec()
+	DirAccess.make_dir_recursive_absolute(directory)
+	var no_bundle := directory.path_join("GoogleService-Info.plist")
+	var file := FileAccess.open(no_bundle, FileAccess.WRITE)
+	file.store_string(FileAccess.get_file_as_string(present).replace("<key>BUNDLE_ID</key>\n\t<string>com.example.firebasetest</string>", ""))
+	file.close()
+	check(not FileAccess.get_file_as_string(no_bundle).contains("BUNDLE_ID"), "fixture without BUNDLE_ID prepared")
+	check(Plugin.export_configuration({}, "", null, no_bundle, bundle).error != OK, "GoogleService-Info.plist without BUNDLE_ID fails the export")
+	DirAccess.remove_absolute(no_bundle)
+	DirAccess.remove_absolute(directory)
 	check(Plugin.FAIL_BUILD_CODE.begins_with("#error \"") and Plugin.FAIL_BUILD_CODE.count("\"") == 2, "failure code is a single fixed #error directive")

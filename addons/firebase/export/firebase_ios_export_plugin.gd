@@ -7,6 +7,9 @@ extends EditorExportPlugin
 ## sign-in option is enabled but its entitlement is missing.
 
 const PLIST_OPTION := "firebase/google_service_info_plist"
+const PLIST_NAME := "GoogleService-Info.plist"
+const BUNDLE_ID_OPTION := "application/bundle_identifier"
+const ADDITIONAL_PLIST := "application/additional_plist_content"
 const APPLE_OPTION := "firebase/sign_in_with_apple"
 const GAME_CENTER_OPTION := "firebase/sign_in_with_game_center"
 const GOOGLE_OPTION := "firebase/sign_in_with_google"
@@ -45,22 +48,20 @@ func _get_export_options(_platform: EditorExportPlatform) -> Array[Dictionary]:
 
 
 func _get_export_option_warning(_platform: EditorExportPlatform, option: String) -> String:
-	var additional_plist := str(get_option("application/additional_plist_content"))
-	if option in STARTUP_KEYS or option == "application/additional_plist_content":
+	var additional_plist := str(get_option(ADDITIONAL_PLIST))
+	if option in STARTUP_KEYS or option == ADDITIONAL_PLIST:
 		var startup := startup_plist_checked(_startup_options(), additional_plist)
 		if startup.error != OK:
 			return startup.message
-	if option in [GOOGLE_OPTION, "application/additional_plist_content"] and get_option(GOOGLE_OPTION):
+	if option in [GOOGLE_OPTION, ADDITIONAL_PLIST] and get_option(GOOGLE_OPTION):
 		var client: Variant = get_export_preset().get_project_setting("firebase/auth/google_ios_client_id")
 		var result := google_plist(client if client is String else "", additional_plist)
 		return "" if result.error == OK else result.message
 	match option:
 		PLIST_OPTION:
-			var plist: String = get_option(PLIST_OPTION)
-			if plist.get_file() != "GoogleService-Info.plist":
-				return "Firebase reads the bundle file named exactly GoogleService-Info.plist."
-			if not FileAccess.file_exists(plist):
-				return "Download GoogleService-Info.plist from the Firebase console."
+			var service := service_plist_checked(get_option(PLIST_OPTION), str(get_option(BUNDLE_ID_OPTION)))
+			if service.error != OK:
+				return service.message
 		"entitlements/additional":
 			if get_option(APPLE_OPTION) and not APPLE_ENTITLEMENT in str(get_option(option)):
 				return "Sign in with Apple needs <key>%s</key><array><string>Default</string></array>." % APPLE_ENTITLEMENT
@@ -78,7 +79,7 @@ func _export_begin(features: PackedStringArray, _is_debug: bool, _path: String, 
 		var client: Variant = get_export_preset().get_project_setting("firebase/auth/google_ios_client_id")
 		google_client = client if client is String else ""
 	var plist: String = get_option(PLIST_OPTION)
-	var config := export_configuration(_startup_options(), str(get_option("application/additional_plist_content")), google_client, plist)
+	var config := export_configuration(_startup_options(), str(get_option(ADDITIONAL_PLIST)), google_client, plist, str(get_option(BUNDLE_ID_OPTION)))
 	if config.error != OK:
 		get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_ERROR, "Firebase configuration", config.message)
 		push_error("Firebase iOS configuration error: " + config.message)
@@ -111,8 +112,8 @@ static func startup_plist(options: Dictionary) -> String:
 
 ## Everything the export adds, or the first configuration error. On error the
 ## export adds no Firebase content and FAIL_BUILD_CODE stops the Xcode build, so a
-## rejected consent default or a missing plist cannot ship silently.
-static func export_configuration(startup_options: Dictionary, additional_plist: String, google_client_id: Variant, plist_path: String) -> Dictionary:
+## rejected consent default or a missing or foreign plist cannot ship silently.
+static func export_configuration(startup_options: Dictionary, additional_plist: String, google_client_id: Variant, plist_path: String, bundle_id: String) -> Dictionary:
 	var startup := startup_plist_checked(startup_options, additional_plist)
 	if startup.error != OK:
 		return startup
@@ -122,9 +123,28 @@ static func export_configuration(startup_options: Dictionary, additional_plist: 
 		if google.error != OK:
 			return google
 		content += google.content
-	if not FileAccess.file_exists(plist_path):
-		return _plist_error("%s not found; download GoogleService-Info.plist from the Firebase console." % plist_path)
+	var service := service_plist_checked(plist_path, bundle_id)
+	if service.error != OK:
+		return service
 	return {"error": OK, "content": content}
+
+
+## Firebase finds the file by its exact name and configures the App from it, so it
+## must belong to this export's bundle like Android's package-name match.
+static func service_plist_checked(plist_path: String, bundle_id: String) -> Dictionary:
+	if plist_path.get_file() != PLIST_NAME:
+		return _plist_error("%s must be named exactly %s; Firebase reads the bundle file by that name." % [plist_path, PLIST_NAME])
+	if not FileAccess.file_exists(plist_path):
+		return _plist_error("%s not found; download %s from the Firebase console." % [plist_path, PLIST_NAME])
+	var parsed := _plist_values(FileAccess.get_file_as_string(plist_path), plist_path)
+	if parsed.error != OK:
+		return parsed
+	var bundle: Variant = parsed.values.get("BUNDLE_ID")
+	if bundle == null:
+		return _plist_error("%s has no BUNDLE_ID; download it again from the Firebase console." % plist_path)
+	if not _is_plist_string(bundle, bundle_id):
+		return _plist_error("BUNDLE_ID %s in %s does not match %s %s; download the plist of this iOS app." % [bundle.text, plist_path, BUNDLE_ID_OPTION, bundle_id])
+	return {"error": OK}
 
 
 static func startup_plist_checked(options: Dictionary, additional_plist: String) -> Dictionary:
@@ -147,7 +167,8 @@ static func startup_plist_checked(options: Dictionary, additional_plist: String)
 
 static func google_plist(client_id: String, additional_plist: String) -> Dictionary:
 	var pattern := RegEx.new()
-	pattern.compile("^[A-Za-z0-9_-]+\\.apps\\.googleusercontent\\.com$")
+	# \z, not $: PCRE2 $ also matches before a trailing newline.
+	pattern.compile("^[A-Za-z0-9_-]+\\.apps\\.googleusercontent\\.com\\z")
 	if pattern.search(client_id) == null:
 		return _plist_error("Set firebase/auth/google_ios_client_id to this game's iOS OAuth client ID.")
 	var parsed := _additional_plist_values(additional_plist)
@@ -176,7 +197,7 @@ static func _has_url_scheme(url_types: Dictionary, scheme: String) -> bool:
 	if url_types.tag != "array":
 		return false
 	for entry in url_types.children:
-		var parsed := _plist_dictionary(entry)
+		var parsed := _plist_dictionary(entry, ADDITIONAL_PLIST)
 		if parsed.error != OK:
 			return false
 		var schemes: Dictionary = parsed.values.get("CFBundleURLSchemes", {})
@@ -192,12 +213,16 @@ static func _is_plist_string(node: Dictionary, value: String) -> bool:
 	return node.tag == "string" and node.children.is_empty() and node.text == value
 
 
-## Parse a fragment with XMLParser so comments, entities and tag whitespace cannot
-## impersonate keys. Keep typed XML nodes; only owned configuration values are read.
 static func _additional_plist_values(fragment: String) -> Dictionary:
+	return _plist_values("<plist><dict>" + fragment + "</dict></plist>", ADDITIONAL_PLIST)
+
+
+## Parse a plist document with XMLParser so comments, entities and tag whitespace cannot
+## impersonate keys. Keep typed XML nodes; only owned configuration values are read.
+static func _plist_values(document: String, source: String) -> Dictionary:
 	var parser := XMLParser.new()
-	if parser.open_buffer(("<plist><dict>" + fragment + "</dict></plist>").to_utf8_buffer()) != OK:
-		return _plist_error("application/additional_plist_content must be a valid XML plist fragment.")
+	if parser.open_buffer(document.to_utf8_buffer()) != OK:
+		return _plist_error("%s must be a valid XML plist." % source)
 	var root := {"tag": "", "text": "", "children": []}
 	var stack: Array[Dictionary] = [root]
 	var result := parser.read()
@@ -210,7 +235,7 @@ static func _additional_plist_values(fragment: String) -> Dictionary:
 					stack.append(node)
 			XMLParser.NODE_ELEMENT_END:
 				if stack.size() <= 1 or stack.back().tag != parser.get_node_name().strip_edges():
-					return _plist_error("application/additional_plist_content has mismatched XML tags.")
+					return _plist_error("%s has mismatched XML tags." % source)
 				stack.pop_back()
 			XMLParser.NODE_TEXT:
 				stack.back().text += parser.get_node_data()
@@ -218,21 +243,21 @@ static func _additional_plist_values(fragment: String) -> Dictionary:
 				stack.back().text += parser.get_node_name()
 		result = parser.read()
 	if result != ERR_FILE_EOF or stack.size() != 1 or root.children.size() != 1:
-		return _plist_error("application/additional_plist_content must be a valid XML plist fragment.")
+		return _plist_error("%s must be a valid XML plist." % source)
 	var plist: Dictionary = root.children[0]
 	if plist.tag != "plist" or plist.children.size() != 1:
-		return _plist_error("application/additional_plist_content must contain dictionary entries only.")
-	return _plist_dictionary(plist.children[0])
+		return _plist_error("%s must contain dictionary entries only." % source)
+	return _plist_dictionary(plist.children[0], source)
 
 
-static func _plist_dictionary(node: Dictionary) -> Dictionary:
+static func _plist_dictionary(node: Dictionary, source: String) -> Dictionary:
 	if node.tag != "dict" or node.children.size() % 2 != 0 or not node.text.strip_edges().is_empty():
-		return _plist_error("application/additional_plist_content has an invalid plist dictionary.")
+		return _plist_error("%s has an invalid plist dictionary." % source)
 	var values := {}
 	for index in range(0, node.children.size(), 2):
 		var key: Dictionary = node.children[index]
 		if key.tag != "key" or not key.children.is_empty() or values.has(key.text):
-			return _plist_error("application/additional_plist_content contains an invalid or duplicate plist key: %s." % key.text)
+			return _plist_error("%s contains an invalid or duplicate plist key: %s." % [source, key.text])
 		values[key.text] = node.children[index + 1]
 	return {"error": OK, "values": values}
 
