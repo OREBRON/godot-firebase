@@ -4,11 +4,13 @@ use_frameworks! :linkage => :static
 install! 'cocoapods', :integrate_targets => false
 
 target 'GoogleSignInSDK' do
+  # Linked into the shipped library, so each is pinned to the commit its release tag
+  # pointed to: a moved tag cannot change the binary. Bump commit and comment together.
   # 10.1.0 accepts GTMSessionFetcher 5.x but is not published to CocoaPods trunk.
-  pod 'GoogleSignIn', :git => 'https://github.com/google/GoogleSignIn-iOS.git', :tag => '10.1.0'
-  pod 'AppAuth', '= 3.0.0'
-  pod 'GTMAppAuth', '= 6.0.0'
-  pod 'AppCheckCore', '= 11.0.0'
+  pod 'GoogleSignIn', :git => 'https://github.com/google/GoogleSignIn-iOS.git', :commit => 'bfaebbc04a4d13ed7a89b0fc1fb8ad66b362cc1c' # 10.1.0
+  pod 'AppAuth', :git => 'https://github.com/openid/AppAuth-iOS.git', :commit => 'a972daac82d449d58ab119e91c68153e29ddac33' # 3.0.0
+  pod 'GTMAppAuth', :git => 'https://github.com/google/GTMAppAuth.git', :commit => '57094cd46bc8700d3a887e2a429f42b6e8ea3f0b' # 6.0.0
+  pod 'AppCheckCore', :git => 'https://github.com/google/app-check.git', :commit => '69291442d60889d3cafefdb69983d1568d30800b' # CocoaPods-11.0.0
   # Match the iOS slice already supplied by pinned Firebase.zip. This archive
   # is used only to compile dependencies; it must not be linked/staged twice.
   pod 'GTMSessionFetcher/Core', '= 5.3.1'

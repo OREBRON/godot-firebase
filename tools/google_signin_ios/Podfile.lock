@@ -30,40 +30,55 @@ PODS:
   - PromisesObjC (2.4.1)
 
 DEPENDENCIES:
-  - AppAuth (= 3.0.0)
-  - AppCheckCore (= 11.0.0)
-  - GoogleSignIn (from `https://github.com/google/GoogleSignIn-iOS.git`, tag `10.1.0`)
-  - GTMAppAuth (= 6.0.0)
+  - AppAuth (from `https://github.com/openid/AppAuth-iOS.git`, commit `a972daac82d449d58ab119e91c68153e29ddac33`)
+  - AppCheckCore (from `https://github.com/google/app-check.git`, commit `69291442d60889d3cafefdb69983d1568d30800b`)
+  - GoogleSignIn (from `https://github.com/google/GoogleSignIn-iOS.git`, commit `bfaebbc04a4d13ed7a89b0fc1fb8ad66b362cc1c`)
+  - GTMAppAuth (from `https://github.com/google/GTMAppAuth.git`, commit `57094cd46bc8700d3a887e2a429f42b6e8ea3f0b`)
   - GTMSessionFetcher/Core (= 5.3.1)
 
 SPEC REPOS:
   trunk:
-    - AppAuth
-    - AppCheckCore
     - GoogleUtilities
-    - GTMAppAuth
     - GTMSessionFetcher
     - PromisesObjC
 
 EXTERNAL SOURCES:
+  AppAuth:
+    :commit: a972daac82d449d58ab119e91c68153e29ddac33
+    :git: https://github.com/openid/AppAuth-iOS.git
+  AppCheckCore:
+    :commit: 69291442d60889d3cafefdb69983d1568d30800b
+    :git: https://github.com/google/app-check.git
   GoogleSignIn:
+    :commit: bfaebbc04a4d13ed7a89b0fc1fb8ad66b362cc1c
     :git: https://github.com/google/GoogleSignIn-iOS.git
-    :tag: 10.1.0
+  GTMAppAuth:
+    :commit: 57094cd46bc8700d3a887e2a429f42b6e8ea3f0b
+    :git: https://github.com/google/GTMAppAuth.git
 
 CHECKOUT OPTIONS:
+  AppAuth:
+    :commit: a972daac82d449d58ab119e91c68153e29ddac33
+    :git: https://github.com/openid/AppAuth-iOS.git
+  AppCheckCore:
+    :commit: 69291442d60889d3cafefdb69983d1568d30800b
+    :git: https://github.com/google/app-check.git
   GoogleSignIn:
+    :commit: bfaebbc04a4d13ed7a89b0fc1fb8ad66b362cc1c
     :git: https://github.com/google/GoogleSignIn-iOS.git
-    :tag: 10.1.0
+  GTMAppAuth:
+    :commit: 57094cd46bc8700d3a887e2a429f42b6e8ea3f0b
+    :git: https://github.com/google/GTMAppAuth.git
 
 SPEC CHECKSUMS:
-  AppAuth: 5dec4b6a833eb0342b26bacbc5f3af694f71274a
-  AppCheckCore: e25aaaac234b333320b0bebb8fc21ed3576819ba
+  AppAuth: 00616fd460ddce3ab61106e695d8bd4ed840c111
+  AppCheckCore: 6e776d1bf9f43ddb19a6b2eda876fd5ae4abbb95
   GoogleSignIn: 31fc7f61dd7c10d21175e08ebad85d40dcbf89de
   GoogleUtilities: 7dc09b3fa9ecb5c2298b952313d14628b61b9da3
-  GTMAppAuth: 66e839a30bb63acb109b8986a0c3f642d56d48fd
+  GTMAppAuth: 8531185530b32e104d7a7b0a65f803afd2a56470
   GTMSessionFetcher: a6d2b2aa203485893d4511ff64642dc811f7c09f
   PromisesObjC: 752c3227f599e3467650e47ea36f433eeb10c273
 
-PODFILE CHECKSUM: 5f8a05cb9a481316e1c38f431083a713e3f7f5d7
+PODFILE CHECKSUM: 3066a363d6847db269c2b3b1106027c588d7535f
 
 COCOAPODS: 1.17.0

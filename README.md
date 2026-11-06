@@ -603,7 +603,8 @@ SCons imzalarıyla seçimler arasında yeniden kullanılır. Fork PR'ları
 self-hosted runner'larda çalışmaz.
 
 Firebase C++/iOS ve godot-cpp sürümleri `tools/versions.env` içindedir.
-GoogleSignIn kaynak sürümleri `tools/google_signin_ios/Podfile` ve lock dosyasında,
+GoogleSignIn kaynakları `tools/google_signin_ios/Podfile` ve lock dosyasında (kütüphaneye
+bağlanan GoogleSignIn/AppAuth/GTMAppAuth/AppCheckCore git commit'ine pinli),
 Android bridge bağımlılıkları `android/build.gradle` ve lock dosyasında,
 oyun Maven/Kotlin/R8 seçimleri `addons/firebase/export/firebase_android_gradle.gd`
 içinde sabitlenir. godot-cpp'nin 4.7 tag'i
