@@ -373,6 +373,10 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   `{__firebase__ = "timestamp", seconds, nanos}` sözlüğü olarak gelir.
   Zaman damgası 0001-01-01 ile 9999-12-31 arasında olmalı. `server_timestamp()`,
   `increment()` ve `delete_field()` dizi içinde ve sorgu değerinde kullanılamaz.
+  `__firebase__` anahtarlı her sözlük özel değer sayılır: Database, Functions
+  veya oyuncudan gelen bir sözlüğü kontrol etmeden `set_doc()`/`update_doc()`'a
+  verirsen `{__firebase__ = "delete"}` alanı siler, `"increment"` sayıyı artırır.
+  Böyle veriyi yazmadan önce beklediğin alanlara ayıkla.
 - Firestore sorgu alanları ve `update_doc()` anahtarları noktalı alan yoludur
   (`"profile.level"`): boş parça ve `~ * / [ ]` içeremez. Yazılan alan adları
   (ve `update_doc()` yol parçaları) `__` ile hem başlayıp hem bitemez (`__x__`). `limit` en fazla
