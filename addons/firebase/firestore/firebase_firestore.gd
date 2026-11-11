@@ -93,7 +93,8 @@ func listen_doc(path: String, callback: Callable, include_metadata_changes: bool
 		push_error("Firebase: cannot listen to %s" % path)
 		return 0
 	var id: int = _requests.backend.listen_doc(path, include_metadata_changes)
-	_listeners[id] = callback
+	if id != 0:
+		_listeners[id] = callback
 	return id
 
 
@@ -170,3 +171,5 @@ func _on_document_changed(listener_id: int, ok: bool, snapshot: Dictionary, erro
 	var callback: Callable = _listeners.get(listener_id, Callable())
 	if callback.is_valid():
 		callback.call(FirebaseResult.success(snapshot) if ok else FirebaseResult.failure(error_code, error_message))
+	else:
+		remove_listener(listener_id)  # Its object was freed without remove_listener().
