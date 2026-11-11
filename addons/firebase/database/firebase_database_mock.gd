@@ -210,6 +210,8 @@ func _keep_uncancelled(path: String, value: Variant, cancelled: String) -> void:
 func listen_value(path: String) -> int:
 	_use_reference()
 	var id := _take_id()
+	if _fail_listener_if_requested(value_changed, id):
+		return id
 	_listeners[id] = path
 	_notify(id)
 	return id

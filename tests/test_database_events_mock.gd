@@ -2,7 +2,8 @@ extends FirebaseTest
 
 
 func _run() -> void:
-	var db: FirebaseDatabase = mock_firebase({"database": FirebaseDatabaseMock.new()}).database
+	var backend := FirebaseDatabaseMock.new()
+	var db: FirebaseDatabase = mock_firebase({"database": backend}).database
 	var connected: Array = []
 	var connection := db.listen_value(".info/connected", func(result: FirebaseResult): connected.append(result.value.value))
 	var offset := await db.get_value(".info/serverTimeOffset").wait()
@@ -34,3 +35,13 @@ func _run() -> void:
 	db.remove_listener(score)
 	db.remove_listener(game)
 	check(scores == [null, 1, 2], "reconnecting without changes raises no value event")
+
+	var rejected: Array[FirebaseResult] = []
+	backend.fail_next(8, "permission denied")
+	var denied := db.listen_value("game/score", func(result: FirebaseResult): rejected.append(result))
+	await process_frame
+	check((await db.set_value("game/score", 3).wait()).ok, "a failed listener consumes fail_next()")
+	await process_frame
+	db.remove_listener(denied)
+	check(denied != 0 and rejected.size() == 1, "a failed listener gets one event, then stops")
+	check(rejected.size() == 1 and not rejected[0].ok and rejected[0].value == null and rejected[0].error_code == 8 and rejected[0].error_message == "permission denied", "listener failure has no snapshot")

@@ -350,7 +350,7 @@ if snapshot.exists:
 	print(snapshot.data.level)
 
 var top: FirebaseResult = await Firebase.firestore.query("scores", [["score", ">=", 100]], [["score", "desc"]], 10).wait()
-var id: int = Firebase.firestore.listen_doc(path, func(r: FirebaseResult): print(r.value.data))
+var id: int = Firebase.firestore.listen_doc(path, func(r: FirebaseResult): print(r.value.data if r.ok else r.error_message))
 Firebase.firestore.remove_listener(id)
 
 var file := "users/%s/avatar.png" % uid
@@ -359,7 +359,7 @@ var bytes: PackedByteArray = (await Firebase.storage.download_bytes(file).wait()
 
 await Firebase.database.set_value("rooms/r1/players/%s" % uid, {"ready": true, "joined": FirebaseDatabase.SERVER_TIMESTAMP}).wait()
 var key: String = (await Firebase.database.push_value("rooms/r1/chat", {"text": "selam"}).wait()).value
-var room: int = Firebase.database.listen_value("rooms/r1", func(r: FirebaseResult): print(r.value.value))
+var room: int = Firebase.database.listen_value("rooms/r1", func(r: FirebaseResult): print(r.value.value if r.ok else r.error_message))
 Firebase.database.remove_listener(room)
 
 var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyReward", {"day": 3}).wait()
@@ -368,6 +368,9 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 - Her istek `FirebaseTask` döner; `await task.wait()` bir `FirebaseResult`
   verir: `ok`, `value`, `error_code`, `error_message`. Negatif kodlar
   eklentiden gelir (`FirebaseResult.ERR_*`), pozitifler Firebase'den.
+- Dinleyici callback'i de `FirebaseResult` alır. Kural reddi veya oturum kapanması
+  gibi bir hatada `ok == false`, `value == null` olan tek sonuç gelir ve dinleyici
+  durur; `value` okumadan önce `ok`'u kontrol et.
 - Firestore özel değerleri: `FirebaseValue.timestamp()`, `server_timestamp()`,
   `increment()`, `delete_field()`. Zaman damgaları okunurken
   `{__firebase__ = "timestamp", seconds, nanos}` sözlüğü olarak gelir.
@@ -403,6 +406,8 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 - Mock'lar cihazdaki SDK davranışını izler, sunucuyu taklit etmez:
   - Güvenlik kuralları ve Firestore bileşik indeksleri uygulanmaz; editörde her
     okuma/yazma izinlidir. Kuralları Firebase Emulator Suite ile ayrıca test et.
+    Reddi `fail_next()` ile taklit et (`Firebase.backends.firestore.fail_next(7, "denied")`):
+    sonraki istek ya da sonra başlatılan Firestore/Database dinleyicisi bu hatayı alır.
   - Veri bellek içidir; her çalıştırma temiz kurulumdur (oturum, Firestore,
     Database, Storage ve Remote Config değerleri saklanmaz). Test verisini koddan
     `Firebase.backends.firestore.documents`, `database.root` veya `storage.files`

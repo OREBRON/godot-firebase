@@ -107,6 +107,16 @@ func _run() -> void:
 	check(snapshots.size() == 2 and snapshots[1].data.score == 11, "listener sees the change")
 	check(db.listen_doc("scores", func(_r): pass) == 0, "listening to a collection path is rejected")
 
+	var rejected: Array[FirebaseResult] = []
+	backend.fail_next(7, "permission denied")
+	var denied := db.listen_doc("scores/b", func(r: FirebaseResult): rejected.append(r))
+	await process_frame
+	check((await db.update_doc("scores/b", {"score": 13}).wait()).ok, "a failed listener consumes fail_next()")
+	await process_frame
+	db.remove_listener(denied)
+	check(denied != 0 and rejected.size() == 1, "a failed listener gets one event, then stops")
+	check(rejected.size() == 1 and not rejected[0].ok and rejected[0].value == null and rejected[0].error_code == 7 and rejected[0].error_message == "permission denied", "listener failure has no snapshot")
+
 	await _query_regressions(db, backend)
 
 
