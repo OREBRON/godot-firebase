@@ -210,7 +210,10 @@ Tekil yeni ürün adları `godot-firebase-analytics.zip`,
 Sekiz ürün birlikte seçilirse çıktı `godot-firebase.zip` olur; diğer her
 birleşim seçilen ürünlerin adını alır (örneğin `godot-firebase-auth-firestore.zip`). Paketleyici
 geçersiz/tekrarlı modül adlarını reddeder, seçilmeyen API/mock klasörlerini ve
-oyun JSON/plist dosyalarını dışlar. Native platform çıktılarının aynı seçimden
+oyun JSON/plist dosyalarını dışlar. Eklenti dosyası olmayan türler paketi
+başarısız kılar; eklenti içine konan `LICENSE`, `NOTICE` ve
+`THIRD_PARTY_NOTICES` (uzantısız, `.md` veya `.txt`) dosyaları pakete girer.
+Native platform çıktılarının aynı seçimden
 geldiğini build sahibi sağlamalıdır; stale/mixed build doğrulaması halen yoktur.
 
 Release workflow'u (`build.yml`) sekiz ürünün tümünü tek monolit olarak iOS,
