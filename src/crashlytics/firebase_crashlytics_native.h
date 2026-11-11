@@ -14,6 +14,7 @@ public:
 	static void shutdown_all();
 	int64_t log_message(const godot::String &p_message);
 	int64_t set_custom_key(const godot::String &p_key, const godot::Variant &p_value);
+	int64_t set_custom_keys(const godot::Dictionary &p_keys);
 	int64_t set_user_id(const godot::String &p_user_id);
 	int64_t clear_user_id();
 	int64_t record_error(const godot::String &p_name, const godot::String &p_message, const godot::TypedArray<godot::Dictionary> &p_stack = godot::TypedArray<godot::Dictionary>());

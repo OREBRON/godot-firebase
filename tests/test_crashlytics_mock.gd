@@ -18,6 +18,11 @@ func _run() -> void:
 		check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "invalid custom value rejected")
 	result = await api.set_custom_key("", "x").wait()
 	check(not result.ok, "empty custom key rejected")
+	result = await api.set_custom_keys({"level": 7, &"mode": "race", "ranked": false}).wait()
+	check(result.ok and backend.custom_keys == {"level": 7, "mode": "race", "ranked": false}, "custom keys set together")
+	for keys in [{"score": 1, "": 1}, {"score": 1, 2: "x"}, {"score": 1, "bad": NAN}, {"score": 1, "bad": []}]:
+		result = await api.set_custom_keys(keys).wait()
+		check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT and not backend.custom_keys.has("score"), "invalid custom keys set none")
 	result = await api.set_user_id("player-1").wait()
 	check(result.ok and backend.user_id == "player-1", "explicit user id")
 	result = await api.clear_user_id().wait()

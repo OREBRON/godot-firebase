@@ -28,6 +28,15 @@ String validate_key(const String &key, const Variant &value) {
 		default: return "custom values must be String, bool, int or finite float";
 	}
 }
+String validate_keys(const Dictionary &keys) {
+	const Array names = keys.keys();
+	for (int64_t i = 0; i < names.size(); i++) {
+		if (names[i].get_type() != Variant::STRING && names[i].get_type() != Variant::STRING_NAME) return "custom keys must be strings";
+		const String reason = validate_key(names[i], keys[names[i]]);
+		if (!reason.is_empty()) return reason;
+	}
+	return String();
+}
 String validate_error(const String &name, const Array &stack) {
 	if (name.is_empty()) return "error name must not be empty";
 	for (int64_t i = 0; i < stack.size(); i++) {
@@ -97,6 +106,7 @@ int64_t FirebaseCrashlyticsNative::set_custom_key(const String &key, const Varia
 	data["value"] = value;
 	return apply("set_custom_key", data, validate_key(key, value));
 }
+int64_t FirebaseCrashlyticsNative::set_custom_keys(const Dictionary &keys) { return apply("set_custom_keys", payload("keys", keys), validate_keys(keys)); }
 int64_t FirebaseCrashlyticsNative::set_user_id(const String &user_id) { return apply("set_user_id", payload("user_id", user_id)); }
 int64_t FirebaseCrashlyticsNative::clear_user_id() { return set_user_id(""); }
 int64_t FirebaseCrashlyticsNative::record_error(const String &name, const String &message, const godot::TypedArray<Dictionary> &stack) {
@@ -117,6 +127,7 @@ void FirebaseCrashlyticsNative::_bind_methods() {
 	godot::ClassDB::bind_method(D_METHOD("initialize"), &FirebaseCrashlyticsNative::initialize);
 	godot::ClassDB::bind_method(D_METHOD("log_message", "message"), &FirebaseCrashlyticsNative::log_message);
 	godot::ClassDB::bind_method(D_METHOD("set_custom_key", "key", "value"), &FirebaseCrashlyticsNative::set_custom_key);
+	godot::ClassDB::bind_method(D_METHOD("set_custom_keys", "keys"), &FirebaseCrashlyticsNative::set_custom_keys);
 	godot::ClassDB::bind_method(D_METHOD("set_user_id", "user_id"), &FirebaseCrashlyticsNative::set_user_id);
 	godot::ClassDB::bind_method(D_METHOD("clear_user_id"), &FirebaseCrashlyticsNative::clear_user_id);
 	godot::ClassDB::bind_method(D_METHOD("record_error", "name", "message", "stack"), &FirebaseCrashlyticsNative::record_error, DEFVAL(godot::TypedArray<Dictionary>()));

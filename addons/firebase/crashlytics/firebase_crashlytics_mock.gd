@@ -19,6 +19,11 @@ func log_message(message: String) -> int:
 func set_custom_key(key: String, value: Variant) -> int:
 	return _apply(func(): custom_keys[key] = value)
 
+func set_custom_keys(keys: Dictionary) -> int:
+	return _apply(func():
+		for key in keys:
+			custom_keys[String(key)] = keys[key])
+
 func set_user_id(value: String) -> int:
 	return _apply(func(): user_id = value)
 

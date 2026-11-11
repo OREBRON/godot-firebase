@@ -1,6 +1,7 @@
 package org.godotengine.godotfirebase;
 
 import com.google.firebase.crashlytics.FirebaseCrashlytics;
+import java.util.Iterator;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -25,13 +26,14 @@ public final class FirebaseCrashlyticsBridge {
                     crashlytics.log(data.getString("message"));
                     break;
                 case "set_custom_key":
-                    String key = data.getString("key");
-                    Object value = data.get("value");
-                    if (value instanceof String) crashlytics.setCustomKey(key, (String) value);
-                    else if (value instanceof Boolean) crashlytics.setCustomKey(key, (Boolean) value);
-                    else if (value instanceof Integer || value instanceof Long) crashlytics.setCustomKey(key, ((Number) value).longValue());
-                    else if (value instanceof Number && Double.isFinite(((Number) value).doubleValue())) crashlytics.setCustomKey(key, ((Number) value).doubleValue());
-                    else throw new IllegalArgumentException("Invalid custom key value");
+                    setCustomKey(crashlytics, data.getString("key"), data.get("value"));
+                    break;
+                case "set_custom_keys":
+                    JSONObject keys = data.getJSONObject("keys");
+                    for (Iterator<String> names = keys.keys(); names.hasNext(); ) {
+                        String name = names.next();
+                        setCustomKey(crashlytics, name, keys.get(name));
+                    }
                     break;
                 case "set_user_id":
                     crashlytics.setUserId(data.getString("user_id"));
@@ -80,6 +82,14 @@ public final class FirebaseCrashlyticsBridge {
         } catch (Exception error) {
             fail(requestId, "Crashlytics local call failed: " + error.getClass().getSimpleName());
         }
+    }
+
+    private static void setCustomKey(FirebaseCrashlytics crashlytics, String key, Object value) {
+        if (value instanceof String) crashlytics.setCustomKey(key, (String) value);
+        else if (value instanceof Boolean) crashlytics.setCustomKey(key, (Boolean) value);
+        else if (value instanceof Integer || value instanceof Long) crashlytics.setCustomKey(key, ((Number) value).longValue());
+        else if (value instanceof Number && Double.isFinite(((Number) value).doubleValue())) crashlytics.setCustomKey(key, ((Number) value).doubleValue());
+        else throw new IllegalArgumentException("Invalid custom key value");
     }
 
     private static void succeed(long id, boolean value) { nativeComplete(id, 0, "", true, value); }
