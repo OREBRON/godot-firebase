@@ -122,14 +122,16 @@ int64_t FirebaseStorageNative::download_bytes(const String &p_path, int64_t p_ma
 			done(Outcome::failure(kInvalidArgument, "max_size must be in 1.." + String::num_int64(kMaxDownload)));
 			return;
 		}
-		// GetBytes writes into the buffer until its future completes.
-		auto buffer = std::make_shared<std::vector<uint8_t>>(static_cast<size_t>(p_max_size));
-		complete_when_done(file.GetBytes(buffer->data(), buffer->size()), std::move(done), [buffer](const Future<size_t> &future) {
+		// GetBytes writes into the buffer until its future completes. It stays uninitialized so the
+		// main thread does not zero max_size bytes; only the received bytes are written and copied.
+		const size_t size = static_cast<size_t>(p_max_size);
+		std::shared_ptr<uint8_t[]> buffer(new uint8_t[size]);
+		complete_when_done(file.GetBytes(buffer.get(), size), std::move(done), [buffer, size](const Future<size_t> &future) {
 			PackedByteArray bytes;
-			bytes.resize(static_cast<int64_t>(std::min(*future.result(), buffer->size())));
+			bytes.resize(static_cast<int64_t>(std::min(*future.result(), size)));
 			// A failed resize leaves the array empty, so memcpy uses bytes.size().
 			if (!bytes.is_empty()) {
-				memcpy(bytes.ptrw(), buffer->data(), static_cast<size_t>(bytes.size()));
+				memcpy(bytes.ptrw(), buffer.get(), static_cast<size_t>(bytes.size()));
 			}
 			return Variant(bytes);
 		});
