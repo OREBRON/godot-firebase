@@ -12,6 +12,9 @@ const FORBIDDEN_KEY_CHARS := [".", "#", "$", "[", "]", "/"]
 const PERSISTENCE_SETTING := "firebase/database/persistence_enabled"
 const MAX_DEPTH := 32
 const INFO_PATHS := [".info/connected", ".info/serverTimeOffset"]
+const QUERY_BOUNDS := ["start_at", "end_at", "equal_to"]
+const QUERY_LIMITS := ["limit_to_first", "limit_to_last"]
+const MAX_QUERY_LIMIT := 2147483647
 
 var _requests: FirebaseRequests
 var _listeners: Dictionary[int, Callable] = {}
@@ -23,10 +26,21 @@ func _init(requests: FirebaseRequests) -> void:
 		_requests.backend.value_changed.connect(_on_value_changed)
 
 
-func get_value(path: String) -> FirebaseTask:
-	if not is_readable_path(path):
-		return _invalid("not a database read path: %s" % path)
-	return _requests.send(&"get_value", [path])
+## Write it as a value to add `by` to the stored number on the server atomically.
+## A missing or non-number value becomes `by`.
+static func increment(by: Variant) -> Dictionary:
+	return {".sv": {"increment": by}}
+
+
+## `query` sorts and filters the children of `path`:
+## {order_by = "$key" | "$value" | "child/path", start_at, end_at, equal_to,
+## limit_to_first, limit_to_last}. With a query, the snapshot value is a
+## Dictionary of the matching children in query order, or null when none match.
+func get_value(path: String, query: Dictionary = {}) -> FirebaseTask:
+	var reason := _read_reason(path, query)
+	if not reason.is_empty():
+		return _invalid(reason)
+	return _requests.send(&"get_value", [path, query])
 
 
 func set_value(path: String, value: Variant) -> FirebaseTask:
@@ -73,12 +87,14 @@ func on_disconnect_cancel(path: String) -> FirebaseTask:
 
 
 ## Calls `callback(result: FirebaseResult)` with a snapshot now and after every change.
-## Returns an id for remove_listener(), or 0 when the listener could not start.
-func listen_value(path: String, callback: Callable) -> int:
-	if _requests.backend == null or not is_readable_path(path) or not callback.is_valid():
-		push_error("Firebase: cannot listen to %s" % path)
+## `query` is the get_value() query. Returns an id for remove_listener(), or 0
+## when the listener could not start.
+func listen_value(path: String, callback: Callable, query: Dictionary = {}) -> int:
+	var reason := _read_reason(path, query)
+	if _requests.backend == null or not reason.is_empty() or not callback.is_valid():
+		push_error("Firebase: cannot listen to %s: %s" % [path, reason if reason else "no backend or invalid callback"])
 		return 0
-	var id: int = _requests.backend.listen_value(path)
+	var id: int = _requests.backend.listen_value(path, query)
 	if id != 0:
 		_listeners[id] = callback
 	return id
@@ -140,8 +156,12 @@ static func _validate_value(value: Variant, depth: int, ancestors: Array) -> Str
 			ancestors.pop_back()
 			return ""
 		TYPE_DICTIONARY:
-			if value.size() == 1 and value.get(".sv") is String and value.get(".sv") == "timestamp":
+			var server_value: Variant = value.get(".sv") if value.size() == 1 else null
+			if server_value is String and server_value == "timestamp":
 				return ""
+			if server_value is Dictionary and server_value.size() == 1 and server_value.has("increment"):
+				var by: Variant = server_value.increment
+				return "" if by is int or by is float and is_finite(by) else "increment() needs a finite number"
 			if ancestors.any(func(parent): return is_same(parent, value)):
 				return "cyclic database values are not supported"
 			ancestors.append(value)
@@ -156,6 +176,36 @@ static func _validate_value(value: Variant, depth: int, ancestors: Array) -> Str
 			ancestors.pop_back()
 			return ""
 	return "unsupported type %s" % type_string(typeof(value))
+
+
+## Returns an empty string when `path` can be read with `query`, otherwise the reason.
+## Invalid queries abort or throw in the SDKs.
+static func _read_reason(path: String, query: Dictionary) -> String:
+	if query.is_empty():
+		return "" if is_readable_path(path) else "not a database read path: %s" % path
+	if not is_valid_path(path):
+		return "not a database query path: %s" % path
+	for key in query:
+		if not key in ["order_by"] + QUERY_BOUNDS + QUERY_LIMITS:
+			return "unknown query key: %s" % str(key)
+	var order: Variant = query.get("order_by")
+	if not order is String or not (order in ["$key", "$value"] or not order.is_empty() and is_valid_path(order)):
+		return "order_by must be \"$key\", \"$value\" or a child path"
+	if query.has("equal_to") and (query.has("start_at") or query.has("end_at")):
+		return "equal_to cannot be combined with start_at or end_at"
+	if query.has("limit_to_first") and query.has("limit_to_last"):
+		return "use only one of limit_to_first and limit_to_last"
+	for key in QUERY_BOUNDS:
+		if query.has(key) and not _is_query_bound(query[key], order == "$key"):
+			return "%s must be a String with $key, otherwise a bool, finite number or String" % key
+	for key in QUERY_LIMITS:
+		if query.has(key) and not (query[key] is int and query[key] >= 1 and query[key] <= MAX_QUERY_LIMIT):
+			return "%s must be an int from 1 to %d" % [key, MAX_QUERY_LIMIT]
+	return ""
+
+
+static func _is_query_bound(bound: Variant, by_key: bool) -> bool:
+	return bound is String or not by_key and (bound is bool or bound is int or bound is float and is_finite(bound))
 
 
 func _request(path: String, method: StringName, args: Array) -> FirebaseTask:

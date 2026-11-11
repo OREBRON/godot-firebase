@@ -13,6 +13,7 @@
 using firebase::Future;
 using firebase::database::DatabaseReference;
 using firebase::database::DataSnapshot;
+using firebase::database::Query;
 using godot::Array;
 using godot::D_METHOD;
 using godot::Dictionary;
@@ -24,6 +25,7 @@ namespace godot_firebase {
 namespace {
 
 constexpr int kMaxDepth = 32;
+constexpr int64_t kMaxQueryLimit = 2147483647;
 firebase::database::Database *configured_database = nullptr;
 bool configured_persistence = false;
 std::unordered_set<FirebaseDatabaseNative *> active_modules;
@@ -98,9 +100,14 @@ String validate_value(const Variant &p_value, int p_depth) {
 		}
 		case Variant::DICTIONARY: {
 			const Dictionary entries = p_value;
-			const Variant marker = entries.get(".sv", Variant());
-			if (entries.size() == 1 && marker.get_type() == Variant::STRING && String(marker) == "timestamp") {
+			const Variant marker = entries.size() == 1 ? entries.get(".sv", Variant()) : Variant();
+			if (marker.get_type() == Variant::STRING && String(marker) == "timestamp") {
 				return String();
+			}
+			if (marker.get_type() == Variant::DICTIONARY && Dictionary(marker).size() == 1 && Dictionary(marker).has("increment")) {
+				const Variant by = Dictionary(marker)["increment"];
+				const bool number = by.get_type() == Variant::INT || (by.get_type() == Variant::FLOAT && std::isfinite(static_cast<double>(by)));
+				return number ? String() : String("increment() needs a finite number");
 			}
 			const Array keys = entries.keys();
 			for (int64_t i = 0; i < keys.size(); i++) {
@@ -150,16 +157,108 @@ String to_database_updates(const Dictionary &p_values, int p_depth, firebase::Va
 	return String();
 }
 
+bool is_query_bound(const Variant &p_bound, bool p_by_key) {
+	switch (p_bound.get_type()) {
+		case Variant::STRING:
+			return true;
+		case Variant::BOOL:
+		case Variant::INT:
+			return !p_by_key;
+		case Variant::FLOAT:
+			return !p_by_key && std::isfinite(static_cast<double>(p_bound));
+		default:
+			return false;
+	}
+}
+
+// Same rules as FirebaseDatabase._read_reason(). The SDKs abort or throw on other queries.
+String validate_query(const Dictionary &p_query) {
+	if (p_query.is_empty()) {
+		return String();
+	}
+	const Array keys = p_query.keys();
+	for (int64_t i = 0; i < keys.size(); i++) {
+		const Variant key = keys[i];
+		const bool known = (key.get_type() == Variant::STRING || key.get_type() == Variant::STRING_NAME) &&
+				(String(key) == "order_by" || String(key) == "start_at" || String(key) == "end_at" || String(key) == "equal_to" ||
+						String(key) == "limit_to_first" || String(key) == "limit_to_last");
+		if (!known) {
+			return "unknown query key";
+		}
+	}
+	const Variant order = p_query.get("order_by", Variant());
+	if (order.get_type() != Variant::STRING || !(String(order) == "$key" || String(order) == "$value" || (!String(order).is_empty() && is_valid_path(order)))) {
+		return "order_by must be \"$key\", \"$value\" or a child path";
+	}
+	if (p_query.has("equal_to") && (p_query.has("start_at") || p_query.has("end_at"))) {
+		return "equal_to cannot be combined with start_at or end_at";
+	}
+	if (p_query.has("limit_to_first") && p_query.has("limit_to_last")) {
+		return "use only one of limit_to_first and limit_to_last";
+	}
+	for (const char *bound : { "start_at", "end_at", "equal_to" }) {
+		if (p_query.has(bound) && !is_query_bound(p_query[bound], String(order) == "$key")) {
+			return String(bound) + " must be a String with $key, otherwise a bool, finite number or String";
+		}
+	}
+	for (const char *limit : { "limit_to_first", "limit_to_last" }) {
+		const Variant count = p_query.get(limit, 1);
+		if (count.get_type() != Variant::INT || int64_t(count) < 1 || int64_t(count) > kMaxQueryLimit) {
+			return String(limit) + " must be an int from 1 to 2147483647";
+		}
+	}
+	return String();
+}
+
+// Applies a query that passed validate_query(); an empty query reads the whole location.
+Query to_query(DatabaseReference p_reference, const Dictionary &p_query) {
+	if (p_query.is_empty()) {
+		return p_reference;
+	}
+	const String order = p_query["order_by"];
+	Query query = order == "$key" ? p_reference.OrderByKey() : order == "$value" ? p_reference.OrderByValue() : p_reference.OrderByChild(to_std(order));
+	// Validated bounds are bool, int, finite float or String, so conversion cannot fail.
+	firebase::Variant bound;
+	if (p_query.has("start_at")) {
+		to_firebase_variant(p_query["start_at"], bound);
+		query = query.StartAt(bound);
+	}
+	if (p_query.has("end_at")) {
+		to_firebase_variant(p_query["end_at"], bound);
+		query = query.EndAt(bound);
+	}
+	if (p_query.has("equal_to")) {
+		to_firebase_variant(p_query["equal_to"], bound);
+		query = query.EqualTo(bound);
+	}
+	if (p_query.has("limit_to_first")) {
+		query = query.LimitToFirst(static_cast<size_t>(int64_t(p_query["limit_to_first"])));
+	}
+	if (p_query.has("limit_to_last")) {
+		query = query.LimitToLast(static_cast<size_t>(int64_t(p_query["limit_to_last"])));
+	}
+	return query;
+}
+
 Outcome invalid(const String &p_reason) {
 	return Outcome::failure(kInvalidArgument, p_reason);
 }
 
-Dictionary to_snapshot(const DataSnapshot &p_snapshot) {
+// `p_ordered` lists children in query order; value() would sort them by key.
+Dictionary to_snapshot(const DataSnapshot &p_snapshot, bool p_ordered = false) {
 	const char *key = p_snapshot.key();
 	Dictionary snapshot;
 	snapshot["key"] = key ? String::utf8(key) : String();
 	snapshot["exists"] = p_snapshot.exists();
-	snapshot["value"] = to_godot_variant(p_snapshot.value());
+	if (p_ordered && p_snapshot.has_children()) {
+		Dictionary children;
+		for (const DataSnapshot &child : p_snapshot.children()) {
+			children[to_godot(child.key_string())] = to_godot_variant(child.value());
+		}
+		snapshot["value"] = children;
+	} else {
+		snapshot["value"] = to_godot_variant(p_snapshot.value());
+	}
 	return snapshot;
 }
 
@@ -168,8 +267,8 @@ Dictionary to_snapshot(const DataSnapshot &p_snapshot) {
 // Emits value_changed for one listen_value() call. Nested to reach emit_deferred_to().
 class FirebaseDatabaseNative::Listener : public firebase::database::ValueListener {
 public:
-	Listener(uint64_t p_object_id, int64_t p_id, DatabaseReference p_reference) :
-			object_id(p_object_id), id(p_id), target(std::move(p_reference)) {
+	Listener(uint64_t p_object_id, int64_t p_id, Query p_query, bool p_ordered) :
+			object_id(p_object_id), id(p_id), target(std::move(p_query)), ordered(p_ordered) {
 		target.AddValueListener(this);
 	}
 
@@ -178,7 +277,7 @@ public:
 	}
 
 	void OnValueChanged(const DataSnapshot &p_snapshot) override {
-		emit_deferred_to(object_id, "value_changed", Array::make(id, true, to_snapshot(p_snapshot), 0, String()));
+		emit_deferred_to(object_id, "value_changed", Array::make(id, true, to_snapshot(p_snapshot, ordered), 0, String()));
 	}
 
 	void OnCancelled(const firebase::database::Error &p_error, const char *p_message) override {
@@ -189,7 +288,8 @@ public:
 private:
 	uint64_t object_id;
 	int64_t id;
-	DatabaseReference target;
+	Query target;
+	bool ordered;
 };
 
 FirebaseDatabaseNative::FirebaseDatabaseNative() {
@@ -270,12 +370,23 @@ int64_t FirebaseDatabaseNative::start_with_reference(const String &p_path, const
 	});
 }
 
-int64_t FirebaseDatabaseNative::get_value(const String &p_path) {
-	return start_with_reference(p_path, [](DatabaseReference target, Completion done) {
-		complete_when_done(target.GetValue(), std::move(done), [](const Future<DataSnapshot> &future) {
-			return Variant(to_snapshot(*future.result()));
+int64_t FirebaseDatabaseNative::get_value(const String &p_path, const Dictionary &p_query) {
+	return start_with_reference(p_path, [&p_query](DatabaseReference target, Completion done) {
+		const String reason = validate_query(p_query);
+		if (!reason.is_empty()) {
+			done(invalid(reason));
+			return;
+		}
+		Query query = to_query(target, p_query);
+		if (!query.is_valid()) {
+			done(invalid("query is not supported"));
+			return;
+		}
+		const bool ordered = !p_query.is_empty();
+		complete_when_done(query.GetValue(), std::move(done), [ordered](const Future<DataSnapshot> &future) {
+			return Variant(to_snapshot(*future.result(), ordered));
 		});
-	}, true);
+	}, p_query.is_empty());
 }
 
 int64_t FirebaseDatabaseNative::set_value(const String &p_path, const Variant &p_value) {
@@ -359,12 +470,17 @@ int64_t FirebaseDatabaseNative::on_disconnect_cancel(const String &p_path) {
 	});
 }
 
-int64_t FirebaseDatabaseNative::listen_value(const String &p_path) {
-	if (db == nullptr || !is_readable_path(p_path)) {
+int64_t FirebaseDatabaseNative::listen_value(const String &p_path, const Dictionary &p_query) {
+	const bool path_ok = p_query.is_empty() ? is_readable_path(p_path) : is_valid_path(p_path);
+	if (db == nullptr || !path_ok || !validate_query(p_query).is_empty()) {
+		return 0;
+	}
+	Query query = to_query(reference(p_path), p_query);
+	if (!query.is_valid()) {
 		return 0;
 	}
 	const int64_t id = ++next_listener_id;
-	listeners[id] = std::make_unique<Listener>(get_instance_id(), id, reference(p_path));
+	listeners[id] = std::make_unique<Listener>(get_instance_id(), id, std::move(query), !p_query.is_empty());
 	return id;
 }
 
@@ -375,7 +491,7 @@ void FirebaseDatabaseNative::remove_listener(int64_t p_id) {
 void FirebaseDatabaseNative::_bind_methods() {
 	godot::ClassDB::bind_method(D_METHOD("initialize", "persistence_enabled"), &FirebaseDatabaseNative::initialize, DEFVAL(false));
 	godot::ClassDB::bind_method(D_METHOD("set_network_enabled", "enabled"), &FirebaseDatabaseNative::set_network_enabled);
-	godot::ClassDB::bind_method(D_METHOD("get_value", "path"), &FirebaseDatabaseNative::get_value);
+	godot::ClassDB::bind_method(D_METHOD("get_value", "path", "query"), &FirebaseDatabaseNative::get_value);
 	godot::ClassDB::bind_method(D_METHOD("set_value", "path", "value"), &FirebaseDatabaseNative::set_value);
 	godot::ClassDB::bind_method(D_METHOD("update_children", "path", "values"), &FirebaseDatabaseNative::update_children);
 	godot::ClassDB::bind_method(D_METHOD("remove_value", "path"), &FirebaseDatabaseNative::remove_value);
@@ -384,7 +500,7 @@ void FirebaseDatabaseNative::_bind_methods() {
 	godot::ClassDB::bind_method(D_METHOD("on_disconnect_update_children", "path", "values"), &FirebaseDatabaseNative::on_disconnect_update_children);
 	godot::ClassDB::bind_method(D_METHOD("on_disconnect_remove_value", "path"), &FirebaseDatabaseNative::on_disconnect_remove_value);
 	godot::ClassDB::bind_method(D_METHOD("on_disconnect_cancel", "path"), &FirebaseDatabaseNative::on_disconnect_cancel);
-	godot::ClassDB::bind_method(D_METHOD("listen_value", "path"), &FirebaseDatabaseNative::listen_value);
+	godot::ClassDB::bind_method(D_METHOD("listen_value", "path", "query"), &FirebaseDatabaseNative::listen_value);
 	godot::ClassDB::bind_method(D_METHOD("remove_listener", "id"), &FirebaseDatabaseNative::remove_listener);
 	ADD_SIGNAL(godot::MethodInfo("value_changed",
 			godot::PropertyInfo(Variant::INT, "listener_id"), godot::PropertyInfo(Variant::BOOL, "ok"),

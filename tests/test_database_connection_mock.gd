@@ -39,5 +39,5 @@ func _run() -> void:
 	await process_frame
 	check(not (await db.get_value(".info/connected").wait()).value.value, "going online cannot reach an unreachable server")
 	var late := FirebaseDatabaseMock.new()
-	late.get_value("")
+	late.get_value("", {})
 	check(late.call("initialize", true) == ERR_ALREADY_IN_USE, "persistence change after reference use is rejected")
