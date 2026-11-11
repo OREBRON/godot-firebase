@@ -495,6 +495,9 @@ await Firebase.remote_config.activate().wait()
 var welcome: FirebaseResult = await Firebase.remote_config.get_value("welcome").wait()
 print(welcome.value.value, welcome.value.source)
 
+# Anahtarlar boş olmayan String; değerler String, bool, int veya sonlu float.
+# Geçersiz tek anahtar ya da değer hiçbirini yazmaz.
+await Firebase.crashlytics.set_custom_keys({"level": 7, "mode": "puzzle"}).wait()
 # Explicit GDScript nonfatal; bütün Godot hataları otomatik raporlanmaz.
 await Firebase.crashlytics.record_error("SaveError", "Save file unavailable").wait()
 ```

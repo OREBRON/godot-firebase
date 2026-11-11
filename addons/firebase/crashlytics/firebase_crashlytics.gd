@@ -17,6 +17,10 @@ func log_message(message: String) -> FirebaseTask:
 func set_custom_key(key: String, value: Variant) -> FirebaseTask:
 	return _send(&"set_custom_key", [key, value], validate_custom_key(key, value))
 
+## Sets every key in one call; one invalid key or value sets none of them.
+func set_custom_keys(keys: Dictionary) -> FirebaseTask:
+	return _send(&"set_custom_keys", [keys], validate_custom_keys(keys))
+
 func set_user_id(user_id: String) -> FirebaseTask:
 	return _requests.send(&"set_user_id", [user_id])
 
@@ -58,6 +62,15 @@ static func validate_custom_key(key: String, value: Variant) -> String:
 		return "custom values must be String, bool, int or finite float"
 	if value is float and not is_finite(value):
 		return "custom numbers must be finite"
+	return ""
+
+static func validate_custom_keys(keys: Dictionary) -> String:
+	for key in keys:
+		if not (key is String or key is StringName):
+			return "custom keys must be strings"
+		var reason := validate_custom_key(key, keys[key])
+		if not reason.is_empty():
+			return reason
 	return ""
 
 static func validate_error(name: String, stack: Array) -> String:

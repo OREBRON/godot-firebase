@@ -26,6 +26,13 @@ void dispatch_crashlytics(const godot::String &operation, const godot::Dictionar
 		FIRCrashlytics *crashlytics = [FIRCrashlytics crashlytics];
 		if (operation == "log_message") [crashlytics log:text(data["message"])];
 		else if (operation == "set_custom_key") [crashlytics setCustomValue:scalar(data["value"]) forKey:text(data["key"])];
+		else if (operation == "set_custom_keys") {
+			const godot::Dictionary keys = data["keys"];
+			const godot::Array names = keys.keys();
+			NSMutableDictionary *values = [NSMutableDictionary dictionaryWithCapacity:names.size()];
+			for (int64_t i = 0; i < names.size(); i++) values[text(names[i])] = scalar(keys[names[i]]);
+			[crashlytics setCustomKeysAndValues:values];
+		}
 		else if (operation == "set_user_id") [crashlytics setUserID:text(data["user_id"])];
 		else if (operation == "record_error") {
 			FIRExceptionModel *model = [[FIRExceptionModel alloc] initWithName:text(data["name"]) reason:text(data["message"])];
