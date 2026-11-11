@@ -121,7 +121,7 @@ String add_filter(const Array &p_filter, Query &r_query) {
 		values.reserve(static_cast<size_t>(items.size()));
 		for (int64_t i = 0; i < items.size(); i++) {
 			FieldValue value;
-			const String reason = to_query_value(items[i], value);
+			const String reason = to_query_value(r_query.firestore(), items[i], value);
 			if (!reason.is_empty()) {
 				return reason;
 			}
@@ -134,7 +134,7 @@ String add_filter(const Array &p_filter, Query &r_query) {
 		return String();
 	}
 	FieldValue value;
-	const String reason = to_query_value(p_filter[2], value);
+	const String reason = to_query_value(r_query.firestore(), p_filter[2], value);
 	if (!reason.is_empty()) {
 		return reason;
 	}
@@ -210,7 +210,7 @@ String add_batch_op(firebase::firestore::Firestore *p_db, const Variant &p_op, W
 	}
 	MapFieldValue fields;
 	if (String(kind) == "update") {
-		const String reason = to_update_field_value(data, fields);
+		const String reason = to_update_field_value(p_db, data, fields);
 		if (!reason.is_empty()) {
 			return reason;
 		}
@@ -221,7 +221,7 @@ String add_batch_op(firebase::firestore::Firestore *p_db, const Variant &p_op, W
 	if (merge.get_type() != Variant::BOOL) {
 		return "batch merge must be a bool";
 	}
-	const String reason = to_map_field_value(data, merge, fields);
+	const String reason = to_map_field_value(p_db, data, merge, fields);
 	if (!reason.is_empty()) {
 		return reason;
 	}
@@ -304,7 +304,7 @@ int64_t FirebaseFirestoreNative::get_doc(const String &p_path, const String &p_s
 int64_t FirebaseFirestoreNative::set_doc(const String &p_path, const Dictionary &p_data, bool p_merge) {
 	return start_with_document(p_path, [&p_data, p_merge](DocumentReference document, Completion done) {
 		MapFieldValue fields;
-		const String reason = to_map_field_value(p_data, p_merge, fields);
+		const String reason = to_map_field_value(document.firestore(), p_data, p_merge, fields);
 		if (!reason.is_empty()) {
 			done(invalid(reason));
 			return;
@@ -316,7 +316,7 @@ int64_t FirebaseFirestoreNative::set_doc(const String &p_path, const Dictionary 
 int64_t FirebaseFirestoreNative::update_doc(const String &p_path, const Dictionary &p_data) {
 	return start_with_document(p_path, [&p_data](DocumentReference document, Completion done) {
 		MapFieldValue fields;
-		const String reason = to_update_field_value(p_data, fields);
+		const String reason = to_update_field_value(document.firestore(), p_data, fields);
 		if (!reason.is_empty()) {
 			done(invalid(reason));
 			return;

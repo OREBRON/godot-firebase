@@ -30,6 +30,13 @@ func _run() -> void:
 	check(not doc.data.has("level"), "delete_field removes the field")
 	check(FirebaseValue.tag_of(doc.data.at) == FirebaseValue.TIMESTAMP, "server timestamp reads as timestamp")
 
+	var places := {"home": FirebaseValue.geo_point(41.0, 29.0), "owner": FirebaseValue.document_reference("users/u1")}
+	await db.set_doc(path, places).wait()
+	doc = (await db.get_doc(path).wait()).value
+	doc.data["visits"] = 1
+	result = await db.set_doc(path, doc.data).wait()
+	check(result.ok and (await db.get_doc(path).wait()).value.data == {"home": places.home, "owner": places.owner, "visits": 1}, "read geo points and references write back unchanged")
+
 	await db.set_doc(path, {"only": true}).wait()
 	doc = (await db.get_doc(path).wait()).value
 	check(doc.data == {"only": true}, "set without merge replaces")
