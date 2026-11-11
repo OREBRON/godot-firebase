@@ -100,6 +100,8 @@ func _fail_source(id: int, source: String) -> bool:
 
 func listen_doc(path: String, include_metadata_changes: bool = false) -> int:
 	var id := _take_id()
+	if _fail_listener_if_requested(document_changed, id):
+		return id
 	_listeners[id] = {"path": path, "include_metadata_changes": include_metadata_changes, "last": {}}
 	_notify(id)
 	return id
