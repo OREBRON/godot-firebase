@@ -1,0 +1,50 @@
+{
+  "database_is_valid_key": {
+    "true": ["users", "user-1_x", "a b", "é", {"text": "x", "times": 768}, {"text": "é", "times": 384}],
+    "false": ["", "a.b", "a#b", "a$b", "a[b", "a]b", "a/b", "a\nb", "a\u001fb", "a\u007fb", {"text": "x", "times": 769}, {"text": "é", "times": 385}]
+  },
+  "database_is_valid_path": {
+    "true": ["", "users", "users/alice/score", "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a"],
+    "false": ["/users", "users/", "users//alice", "users/a.b", ".info/connected", "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a"]
+  },
+  "database_is_readable_path": {
+    "true": ["", "users/alice", ".info/connected", ".info/serverTimeOffset"],
+    "false": [".info", ".info/other", "users/.info/connected"]
+  },
+  "firestore_is_document_path": {
+    "true": ["users/alice", "users/alice/posts/p1"],
+    "false": ["", "users", "users/alice/posts", "/users/alice", "users/alice/", "users//alice"]
+  },
+  "firestore_is_collection_path": {
+    "true": ["users", "users/alice/posts"],
+    "false": ["", "users/alice", "/users", "users/", "users//alice/posts"]
+  },
+  "firestore_is_field_path": {
+    "true": ["score", "stats.level", "__name__", "a b", "é"],
+    "false": ["", ".a", "a.", "a..b", "a~b", "a*b", "a/b", "a[0]", "a]"]
+  },
+  "firestore_is_reserved_field_name": {
+    "true": ["__x__", "__", "__a.b__"],
+    "false": ["x", "__x", "x__", "a.__x__"]
+  },
+  "firestore_is_reserved_field_path": {
+    "true": ["__x__", "a.__x__", "__x__.b"],
+    "false": ["a.b", "a.__x", "x__.y"]
+  },
+  "firestore_is_document_id": {
+    "true": ["alice", "a b", "é"],
+    "false": ["", "a/b"]
+  },
+  "storage_is_file_path": {
+    "true": ["a", "avatars/alice.png", "a/b/c"],
+    "false": ["", "/a", "a/", "a//b"]
+  },
+  "analytics_validate_name_40": {
+    "true": ["level_up", "A1", "Score_2", {"text": "x", "times": 40}],
+    "false": ["", "1level", "_level", "level-up", "level up", "é", "lévél", {"text": "x", "times": 41}, "firebase_x", "google_x", "ga_x"]
+  },
+  "analytics_validate_property": {
+    "true": ["favorite_food", {"text": "x", "times": 24}],
+    "false": ["", "user_id", "first_open_time", "last_deep_link_referrer", {"text": "x", "times": 25}, "ga_x"]
+  }
+}
