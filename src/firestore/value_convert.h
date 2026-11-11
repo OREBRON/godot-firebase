@@ -14,13 +14,13 @@ namespace godot_firebase {
 // checks repeat the rules the Firestore SDK enforces by aborting the process,
 // so invalid input can never crash the game.
 
-// Returns an empty string on success, otherwise the reason.
+// Returns an empty string on success, otherwise the reason. `p_db` builds reference values.
 // `p_allow_delete` permits delete_field() at the top level (update, merge set).
-godot::String to_map_field_value(const godot::Dictionary &p_data, bool p_allow_delete, firebase::firestore::MapFieldValue &r_out);
+godot::String to_map_field_value(firebase::firestore::Firestore *p_db, const godot::Dictionary &p_data, bool p_allow_delete, firebase::firestore::MapFieldValue &r_out);
 // Update data: keys are field paths, delete_field() is allowed.
-godot::String to_update_field_value(const godot::Dictionary &p_data, firebase::firestore::MapFieldValue &r_out);
+godot::String to_update_field_value(firebase::firestore::Firestore *p_db, const godot::Dictionary &p_data, firebase::firestore::MapFieldValue &r_out);
 // A filter value: write-only special values are rejected.
-godot::String to_query_value(const godot::Variant &p_value, firebase::firestore::FieldValue &r_out);
+godot::String to_query_value(firebase::firestore::Firestore *p_db, const godot::Variant &p_value, firebase::firestore::FieldValue &r_out);
 
 // {id, path, exists, data, metadata}
 godot::Dictionary to_snapshot(const firebase::firestore::DocumentSnapshot &p_snapshot);

@@ -11,6 +11,7 @@
 
 using firebase::firestore::DocumentSnapshot;
 using firebase::firestore::FieldValue;
+using firebase::firestore::Firestore;
 using firebase::firestore::MapFieldValue;
 using godot::Array;
 using godot::Dictionary;
@@ -27,6 +28,8 @@ const char *const kTimestamp = "timestamp";
 const char *const kServerTimestamp = "server_timestamp";
 const char *const kIncrement = "increment";
 const char *const kDelete = "delete";
+const char *const kGeoPoint = "geo_point";
+const char *const kReference = "reference";
 
 // Reasons server_timestamp(), increment() and delete_field() are not allowed.
 const char *const kInArray = "cannot be inside an array";
@@ -39,6 +42,10 @@ constexpr int64_t kNanosPerSecond = 1000000000;
 
 bool is_string(const Variant &p_value) {
 	return p_value.get_type() == Variant::STRING || p_value.get_type() == Variant::STRING_NAME;
+}
+
+bool is_number(const Variant &p_value) {
+	return p_value.get_type() == Variant::INT || p_value.get_type() == Variant::FLOAT;
 }
 
 bool is_reserved_segment(const String &p_segment) {
@@ -104,14 +111,14 @@ String validate_structure(const Variant &p_value, std::vector<Variant> &p_ancest
 }
 
 // `p_sentinel_reason` is null when server_timestamp() and increment() are allowed.
-String convert(const Variant &p_value, bool p_in_array, const char *p_sentinel_reason, FieldValue &r_out);
+String convert(Firestore *p_db, const Variant &p_value, bool p_in_array, const char *p_sentinel_reason, FieldValue &r_out);
 
-String convert_array(const Array &p_items, const char *p_sentinel_reason, FieldValue &r_out) {
+String convert_array(Firestore *p_db, const Array &p_items, const char *p_sentinel_reason, FieldValue &r_out) {
 	std::vector<FieldValue> values;
 	values.reserve(static_cast<size_t>(p_items.size()));
 	for (int64_t i = 0; i < p_items.size(); i++) {
 		FieldValue item;
-		const String reason = convert(p_items[i], true, p_sentinel_reason ? p_sentinel_reason : kInArray, item);
+		const String reason = convert(p_db, p_items[i], true, p_sentinel_reason ? p_sentinel_reason : kInArray, item);
 		if (!reason.is_empty()) {
 			return reason;
 		}
@@ -136,7 +143,23 @@ String convert_timestamp(const Dictionary &p_value, FieldValue &r_out) {
 	return String();
 }
 
-String convert_tagged(const Dictionary &p_value, const char *p_sentinel_reason, FieldValue &r_out) {
+String convert_geo_point(const Dictionary &p_value, FieldValue &r_out) {
+	const Variant latitude = p_value.get("latitude", Variant());
+	const Variant longitude = p_value.get("longitude", Variant());
+	if (!is_number(latitude) || !is_number(longitude)) {
+		return "geo_point needs number latitude and longitude";
+	}
+	const double lat = latitude;
+	const double lng = longitude;
+	// firebase::firestore::GeoPoint aborts outside these ranges; NaN fails every comparison.
+	if (!(lat >= -90.0 && lat <= 90.0 && lng >= -180.0 && lng <= 180.0)) {
+		return "geo_point out of range";
+	}
+	r_out = FieldValue::GeoPoint(firebase::firestore::GeoPoint(lat, lng));
+	return String();
+}
+
+String convert_tagged(Firestore *p_db, const Dictionary &p_value, const char *p_sentinel_reason, FieldValue &r_out) {
 	const Variant tag_value = p_value[kTag];
 	if (!is_string(tag_value)) {
 		return "unknown tag of type " + Variant::get_type_name(tag_value.get_type());
@@ -144,6 +167,18 @@ String convert_tagged(const Dictionary &p_value, const char *p_sentinel_reason, 
 	const String tag = tag_value;
 	if (tag == kTimestamp) {
 		return convert_timestamp(p_value, r_out);
+	}
+	if (tag == kGeoPoint) {
+		return convert_geo_point(p_value, r_out);
+	}
+	if (tag == kReference) {
+		// Firestore::Document() aborts on a path that does not name a document.
+		const Variant path = p_value.get("path", Variant());
+		if (!is_string(path) || !is_document_path(path)) {
+			return "reference needs a document path";
+		}
+		r_out = FieldValue::Reference(p_db->Document(to_std(path)));
+		return String();
 	}
 	if (p_sentinel_reason && (tag == kServerTimestamp || tag == kIncrement || tag == kDelete)) {
 		return tag + String(" ") + p_sentinel_reason;
@@ -171,7 +206,7 @@ String convert_tagged(const Dictionary &p_value, const char *p_sentinel_reason, 
 }
 
 // Keys are literal field names unless `p_path_keys` (top-level update keys).
-String convert_map(const Dictionary &p_data, bool p_allow_delete, const char *p_sentinel_reason, bool p_path_keys, MapFieldValue &r_out) {
+String convert_map(Firestore *p_db, const Dictionary &p_data, bool p_allow_delete, const char *p_sentinel_reason, bool p_path_keys, MapFieldValue &r_out) {
 	const Array keys = p_data.keys();
 	for (int64_t i = 0; i < keys.size(); i++) {
 		const Variant key = keys[i];
@@ -191,7 +226,7 @@ String convert_map(const Dictionary &p_data, bool p_allow_delete, const char *p_
 		if (p_allow_delete && value.get_type() == Variant::DICTIONARY && String(Dictionary(value).get(kTag, "")) == kDelete) {
 			field = FieldValue::Delete();
 		} else {
-			const String reason = convert(value, false, p_sentinel_reason, field);
+			const String reason = convert(p_db, value, false, p_sentinel_reason, field);
 			if (!reason.is_empty()) {
 				return name + String(": ") + reason;
 			}
@@ -201,7 +236,7 @@ String convert_map(const Dictionary &p_data, bool p_allow_delete, const char *p_
 	return String();
 }
 
-String convert(const Variant &p_value, bool p_in_array, const char *p_sentinel_reason, FieldValue &r_out) {
+String convert(Firestore *p_db, const Variant &p_value, bool p_in_array, const char *p_sentinel_reason, FieldValue &r_out) {
 	switch (p_value.get_type()) {
 		case Variant::NIL:
 			r_out = FieldValue::Null();
@@ -233,14 +268,14 @@ String convert(const Variant &p_value, bool p_in_array, const char *p_sentinel_r
 			if (p_in_array) {
 				return "arrays cannot contain arrays";
 			}
-			return convert_array(p_value, p_sentinel_reason, r_out);
+			return convert_array(p_db, p_value, p_sentinel_reason, r_out);
 		case Variant::DICTIONARY: {
 			const Dictionary map = p_value;
 			if (map.has(kTag)) {
-				return convert_tagged(map, p_sentinel_reason, r_out);
+				return convert_tagged(p_db, map, p_sentinel_reason, r_out);
 			}
 			MapFieldValue fields;
-			const String reason = convert_map(map, false, p_sentinel_reason, false, fields);
+			const String reason = convert_map(p_db, map, false, p_sentinel_reason, false, fields);
 			if (reason.is_empty()) {
 				r_out = FieldValue::Map(std::move(fields));
 			}
@@ -260,10 +295,10 @@ int segment_count(const String &p_path) {
 }
 
 // `p_path_keys` is true when the top-level keys are dotted update paths.
-String to_document(const Dictionary &p_data, bool p_allow_delete, bool p_path_keys, MapFieldValue &r_out) {
+String to_document(Firestore *p_db, const Dictionary &p_data, bool p_allow_delete, bool p_path_keys, MapFieldValue &r_out) {
 	std::vector<Variant> ancestors;
 	const String reason = validate_structure(p_data, ancestors, 0, true);
-	return reason.is_empty() ? convert_map(p_data, p_allow_delete, nullptr, p_path_keys, r_out) : reason;
+	return reason.is_empty() ? convert_map(p_db, p_data, p_allow_delete, nullptr, p_path_keys, r_out) : reason;
 }
 
 // Containers nested deeper than kMaxIncomingDepth become null.
@@ -294,8 +329,19 @@ Variant to_variant(const FieldValue &p_value, int p_depth) {
 			}
 			return bytes;
 		}
-		case FieldValue::Type::kReference:
-			return to_godot(p_value.reference_value().path());
+		case FieldValue::Type::kReference: {
+			Dictionary reference;
+			reference[kTag] = kReference;
+			reference["path"] = to_godot(p_value.reference_value().path());
+			return reference;
+		}
+		case FieldValue::Type::kGeoPoint: {
+			Dictionary point;
+			point[kTag] = kGeoPoint;
+			point["latitude"] = p_value.geo_point_value().latitude();
+			point["longitude"] = p_value.geo_point_value().longitude();
+			return point;
+		}
 		case FieldValue::Type::kArray: {
 			if (p_depth >= kMaxIncomingDepth) {
 				return Variant();
@@ -320,31 +366,31 @@ Variant to_variant(const FieldValue &p_value, int p_depth) {
 			return map;
 		}
 		default:
-			// Null, GeoPoint (not used by this addon) and write-only sentinels.
+			// Null and write-only sentinels.
 			return Variant();
 	}
 }
 
 } // namespace
 
-String to_map_field_value(const Dictionary &p_data, bool p_allow_delete, MapFieldValue &r_out) {
-	return to_document(p_data, p_allow_delete, false, r_out);
+String to_map_field_value(Firestore *p_db, const Dictionary &p_data, bool p_allow_delete, MapFieldValue &r_out) {
+	return to_document(p_db, p_data, p_allow_delete, false, r_out);
 }
 
-String to_update_field_value(const Dictionary &p_data, MapFieldValue &r_out) {
+String to_update_field_value(Firestore *p_db, const Dictionary &p_data, MapFieldValue &r_out) {
 	const Array keys = p_data.keys();
 	for (int64_t i = 0; i < keys.size(); i++) {
 		if (!is_field_path(keys[i])) {
 			return "update keys must be field paths without ~*/[]: " + String(keys[i]);
 		}
 	}
-	return to_document(p_data, true, true, r_out);
+	return to_document(p_db, p_data, true, true, r_out);
 }
 
-String to_query_value(const Variant &p_value, FieldValue &r_out) {
+String to_query_value(Firestore *p_db, const Variant &p_value, FieldValue &r_out) {
 	std::vector<Variant> ancestors;
 	const String reason = validate_structure(p_value, ancestors, 1);
-	return reason.is_empty() ? convert(p_value, false, kInQuery, r_out) : reason;
+	return reason.is_empty() ? convert(p_db, p_value, false, kInQuery, r_out) : reason;
 }
 
 Dictionary to_snapshot(const DocumentSnapshot &p_snapshot) {

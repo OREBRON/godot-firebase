@@ -371,10 +371,14 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 - Dinleyici callback'i de `FirebaseResult` alır. Kural reddi veya oturum kapanması
   gibi bir hatada `ok == false`, `value == null` olan tek sonuç gelir ve dinleyici
   durur; `value` okumadan önce `ok`'u kontrol et.
-- Firestore özel değerleri: `FirebaseValue.timestamp()`, `server_timestamp()`,
-  `increment()`, `delete_field()`. Zaman damgaları okunurken
-  `{__firebase__ = "timestamp", seconds, nanos}` sözlüğü olarak gelir.
-  Zaman damgası 0001-01-01 ile 9999-12-31 arasında olmalı. `server_timestamp()`,
+- Firestore özel değerleri: `FirebaseValue.timestamp()`, `geo_point()`,
+  `document_reference()`, `server_timestamp()`, `increment()`, `delete_field()`. Okunan
+  değerler aynı sözlüklerle gelir ve geri yazılabilir: zaman damgası
+  `{__firebase__ = "timestamp", seconds, nanos}`, GeoPoint
+  `{__firebase__ = "geo_point", latitude, longitude}`, doküman referansı
+  `{__firebase__ = "reference", path}` (`path` aynı veritabanındaki doküman yolu).
+  Zaman damgası 0001-01-01 ile 9999-12-31 arasında, enlem -90..90, boylam
+  -180..180 olmalı. `server_timestamp()`,
   `increment()` ve `delete_field()` dizi içinde ve sorgu değerinde kullanılamaz.
   `__firebase__` anahtarlı her sözlük özel değer sayılır: Database, Functions
   veya oyuncudan gelen bir sözlüğü kontrol etmeden `set_doc()`/`update_doc()`'a
@@ -385,7 +389,7 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   (ve `update_doc()` yol parçaları) `__` ile hem başlayıp hem bitemez (`__x__`). `limit` en fazla
   2147483647; `limit <= 0` limitsiz demek.
 - Firestore tipleri: null, bool, int, float, String, PackedByteArray, Array
-  (iç içe dizi yok), Dictionary (String anahtarlı).
+  (iç içe dizi yok), Dictionary (String anahtarlı) ve yukarıdaki özel değerler.
 - Database ve Functions tipleri: null, bool, int, sonlu float (NaN/Inf yok), String, Array
   (packed diziler dahil), Dictionary (String anahtarlı). Database anahtarları
   `. # $ [ ] /` içeremez; `FirebaseDatabase.SERVER_TIMESTAMP` sunucu zamanını

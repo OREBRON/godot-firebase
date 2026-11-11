@@ -27,12 +27,14 @@ func _type_order_and_filters() -> void:
 		"i_time": {"v": _timestamp(10, 0)},
 		"j_text": {"v": "5"},
 		"k_bytes": {"v": PackedByteArray([1])},
+		"k_reference": {"v": FirebaseValue.document_reference("users/u1")},
+		"k_spot": {"v": FirebaseValue.geo_point(0, 0)},
 		"l_array": {"v": [3]},
 		"m_map": {"v": {"x": 3}},
 		"n_missing": {"other": 1},
 	})
-	var ascending := ["a_null", "b_false", "c_true", "d_nan", "e_neg", "f_three", "g_three_float", "h_float", "i_time", "j_text", "k_bytes", "l_array", "m_map"]
-	await _expect("mixed", [], [["v", "asc"]], ascending, "types order null, bool, NaN, number, timestamp, string, bytes, array, map; missing fields are excluded")
+	var ascending := ["a_null", "b_false", "c_true", "d_nan", "e_neg", "f_three", "g_three_float", "h_float", "i_time", "j_text", "k_bytes", "k_reference", "k_spot", "l_array", "m_map"]
+	await _expect("mixed", [], [["v", "asc"]], ascending, "types order null, bool, NaN, number, timestamp, string, bytes, reference, geo point, array, map; missing fields are excluded")
 	var descending := ascending.duplicate()
 	descending.reverse()
 	await _expect("mixed", [], [["v", "desc"]], descending, "descending order reverses values and document IDs")
@@ -46,7 +48,7 @@ func _type_order_and_filters() -> void:
 	await _expect("mixed", [["v", "==", null]], [], ["a_null"], "== null matches a stored null, not a missing field")
 	await _expect("mixed", [["v", "==", NAN]], [], ["d_nan"], "== NaN matches NaN")
 
-	var not_three := ["b_false", "c_true", "d_nan", "e_neg", "h_float", "i_time", "j_text", "k_bytes", "l_array", "m_map"]
+	var not_three := ["b_false", "c_true", "d_nan", "e_neg", "h_float", "i_time", "j_text", "k_bytes", "k_reference", "k_spot", "l_array", "m_map"]
 	await _expect("mixed", [["v", "!=", 3]], [], not_three, "!= matches every other type but never null or a missing field")
 	await _expect("mixed", [["v", "!=", null]], [], ascending.slice(1), "!= null matches every stored non-null value")
 	await _expect("mixed", [["v", "!=", NAN]], [], ascending.filter(func(id): return not id in ["a_null", "d_nan"]), "!= NaN excludes NaN and null")
@@ -100,6 +102,22 @@ func _values_within_a_type() -> void:
 	})
 	await _expect("maps", [], [["m", "asc"]], ["empty", "a1", "a1b2", "a2", "b0"], "maps order by sorted keys, then values, then size")
 	await _expect("maps", [["m", "==", {"a": 1.0, "b": 2}]], [], ["a1b2"], "map equality ignores key insertion order")
+
+	await _seed("refs", {
+		"short": {"r": FirebaseValue.document_reference("a/b")},
+		"slash": {"r": FirebaseValue.document_reference("a/b/c/d")},
+		"bang": {"r": FirebaseValue.document_reference("a/b!")},
+	})
+	await _expect("refs", [], [["r", "asc"]], ["short", "slash", "bang"], "references order by path segments, then segment count")
+	await _expect("refs", [["r", "==", FirebaseValue.document_reference("a/b")]], [], ["short"], "reference equality compares paths")
+
+	await _seed("spots", {
+		"south": {"p": FirebaseValue.geo_point(-10, 50)},
+		"west": {"p": FirebaseValue.geo_point(5, -20)},
+		"east": {"p": FirebaseValue.geo_point(5, 20)},
+	})
+	await _expect("spots", [], [["p", "asc"]], ["south", "west", "east"], "geo points order by latitude, then longitude")
+	await _expect("spots", [["p", ">", FirebaseValue.geo_point(5, 0)]], [], ["east"], "geo point ranges compare latitude, then longitude")
 
 
 func _normalized_order() -> void:

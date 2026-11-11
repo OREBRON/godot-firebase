@@ -9,7 +9,7 @@ signal document_changed(listener_id: int, ok: bool, snapshot: Dictionary, error_
 ## Firestore error code for a missing document on update.
 const NOT_FOUND := 5
 ## Values.typeOrder() ranks of the value types this addon reads and writes.
-enum TypeOrder { NULL_VALUE = 0, BOOLEAN = 2, NAN_VALUE = 3, NUMBER = 4, TIMESTAMP = 5, STRING = 8, BYTES = 9, ARRAY = 14, MAP = 16 }
+enum TypeOrder { NULL_VALUE = 0, BOOLEAN = 2, NAN_VALUE = 3, NUMBER = 4, TIMESTAMP = 5, STRING = 8, BYTES = 9, REFERENCE = 11, GEO_POINT = 13, ARRAY = 14, MAP = 16 }
 const KEY_FIELD := "__name__"
 const INEQUALITY_OPS: Array[String] = ["<", "<=", ">", ">=", "!="]
 # 2^63: the smallest double above every int64 value.
@@ -373,7 +373,12 @@ func _type_order(value: Variant) -> TypeOrder:
 		TYPE_FLOAT: return TypeOrder.NAN_VALUE if is_nan(value) else TypeOrder.NUMBER
 		TYPE_STRING, TYPE_STRING_NAME: return TypeOrder.STRING
 		TYPE_PACKED_BYTE_ARRAY: return TypeOrder.BYTES
-		TYPE_DICTIONARY: return TypeOrder.TIMESTAMP if FirebaseValue.tag_of(value) == FirebaseValue.TIMESTAMP else TypeOrder.MAP
+		TYPE_DICTIONARY:
+			match FirebaseValue.tag_of(value):
+				FirebaseValue.TIMESTAMP: return TypeOrder.TIMESTAMP
+				FirebaseValue.REFERENCE: return TypeOrder.REFERENCE
+				FirebaseValue.GEO_POINT: return TypeOrder.GEO_POINT
+			return TypeOrder.MAP
 	# Array and every packed array except PackedByteArray.
 	return TypeOrder.ARRAY
 
@@ -390,6 +395,9 @@ func _compare(a: Variant, b: Variant) -> int:
 		# Godot compares Strings by code point, which is UTF-8 byte order.
 		TypeOrder.STRING: return _compare_scalars(String(a), String(b))
 		TypeOrder.BYTES, TypeOrder.ARRAY: return _compare_sequences(a, b)
+		# Values.compareReferences(): path segments, then the segment count.
+		TypeOrder.REFERENCE: return _compare_sequences(String(a.path).split("/"), String(b.path).split("/"))
+		TypeOrder.GEO_POINT: return _compare_geo_points(a, b)
 		TypeOrder.MAP: return _compare_maps(a, b)
 	# Every null equals null and every NaN equals NaN.
 	return 0
@@ -424,6 +432,12 @@ func _compare_float_with_int(value: float, integer: int) -> int:
 func _compare_timestamps(a: Dictionary, b: Dictionary) -> int:
 	var result := _compare_scalars(a.get("seconds", 0), b.get("seconds", 0))
 	return result if result != 0 else _compare_scalars(a.get("nanos", 0), b.get("nanos", 0))
+
+
+## Values.compareGeoPoints(): latitude, then longitude.
+func _compare_geo_points(a: Dictionary, b: Dictionary) -> int:
+	var result := _compare_numbers(a.latitude, b.latitude)
+	return result if result != 0 else _compare_numbers(a.longitude, b.longitude)
 
 
 ## Values.compareArrays() and compareBinaries() (unsigned bytes): elements, then length.

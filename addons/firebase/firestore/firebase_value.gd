@@ -10,6 +10,8 @@ const TIMESTAMP := "timestamp"
 const SERVER_TIMESTAMP := "server_timestamp"
 const INCREMENT := "increment"
 const DELETE := "delete"
+const GEO_POINT := "geo_point"
+const REFERENCE := "reference"
 const MAX_IN_VALUES := 30
 # Firestore maps/arrays add at most 20 field levels (document root is level 0).
 const MAX_FIELD_DEPTH := 20
@@ -39,6 +41,15 @@ static func increment(by: Variant) -> Dictionary:
 
 static func delete_field() -> Dictionary:
 	return {TAG: DELETE}
+
+
+static func geo_point(latitude: float, longitude: float) -> Dictionary:
+	return {TAG: GEO_POINT, "latitude": latitude, "longitude": longitude}
+
+
+## A reference to the document at `path` in this database, like "users/u1".
+static func document_reference(path: String) -> Dictionary:
+	return {TAG: REFERENCE, "path": path}
 
 
 ## Returns "" for untagged values and the type name for a tag that is not a string.
@@ -187,6 +198,16 @@ static func _validate_dictionary(value: Dictionary, sentinel_reason: String) -> 
 			if seconds is int and nanos is int and seconds >= MIN_TIMESTAMP_SECONDS and seconds <= MAX_TIMESTAMP_SECONDS and nanos >= 0 and nanos < 1000000000:
 				return ""
 			return "timestamp needs int seconds in %d..%d and nanos in 0..999999999" % [MIN_TIMESTAMP_SECONDS, MAX_TIMESTAMP_SECONDS]
+		GEO_POINT:
+			# The SDK's GeoPoint aborts outside these ranges; NaN fails every comparison.
+			var latitude: Variant = value.get("latitude")
+			var longitude: Variant = value.get("longitude")
+			if (latitude is int or latitude is float) and (longitude is int or longitude is float) and absf(latitude) <= 90 and absf(longitude) <= 180:
+				return ""
+			return "geo_point needs latitude in -90..90 and longitude in -180..180"
+		REFERENCE:
+			var path: Variant = value.get("path")
+			return "" if (path is String or path is StringName) and is_document_path(path) else "reference needs a document path"
 		SERVER_TIMESTAMP:
 			return "" if sentinel_reason.is_empty() else "server_timestamp() " + sentinel_reason
 		INCREMENT:

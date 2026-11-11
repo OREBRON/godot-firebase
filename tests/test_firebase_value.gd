@@ -78,6 +78,17 @@ func _run() -> void:
 	check(not FirebaseValue.validate_filter_value(">", {FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": 253402300800}).is_empty(), "out of range timestamp is rejected in a query")
 	check(not FirebaseValue.validate_data({"t": {FirebaseValue.TAG: FirebaseValue.TIMESTAMP, "seconds": 0, "nanos": 1000000000}}, false).is_empty(), "nanos out of range is rejected")
 
+	var spot := FirebaseValue.geo_point(41.0, 29.0)
+	check(spot == {FirebaseValue.TAG: FirebaseValue.GEO_POINT, "latitude": 41.0, "longitude": 29.0}, "geo_point builds the tagged dictionary")
+	check(FirebaseValue.document_reference("users/u1") == {FirebaseValue.TAG: FirebaseValue.REFERENCE, "path": "users/u1"}, "document_reference builds the tagged dictionary")
+	var places := {"corner": FirebaseValue.geo_point(-90, 180), "ints": {FirebaseValue.TAG: FirebaseValue.GEO_POINT, "latitude": 1, "longitude": 2}, "home": spot, "owner": FirebaseValue.document_reference("users/u1"), "list": [spot, FirebaseValue.document_reference("a/b/c/d")]}
+	check(FirebaseValue.validate_data(places, false).is_empty(), "geo points and references are valid, also inside arrays")
+	check(FirebaseValue.validate_filter_value("in", [spot, FirebaseValue.document_reference("users/u1")]).is_empty(), "geo points and references are valid in a query")
+	for bad in [FirebaseValue.geo_point(90.5, 0), FirebaseValue.geo_point(0, -180.5), FirebaseValue.geo_point(NAN, 0), {FirebaseValue.TAG: FirebaseValue.GEO_POINT, "latitude": "1", "longitude": 0}, {FirebaseValue.TAG: FirebaseValue.GEO_POINT, "latitude": 1}]:
+		check(not FirebaseValue.validate_data({"p": bad}, false).is_empty(), "invalid geo_point is rejected: %s" % str(bad))
+	for bad in [FirebaseValue.document_reference("users"), FirebaseValue.document_reference("users//u1"), FirebaseValue.document_reference(""), {FirebaseValue.TAG: FirebaseValue.REFERENCE, "path": 3}]:
+		check(not FirebaseValue.validate_data({"r": bad}, false).is_empty(), "invalid reference is rejected: %s" % str(bad))
+
 	var shared := {"level": 3}
 	check(FirebaseValue.validate_data({"a": shared, "b": shared}, false).is_empty(), "shared non-cyclic subtrees are valid")
 	var nested: Variant = 1
