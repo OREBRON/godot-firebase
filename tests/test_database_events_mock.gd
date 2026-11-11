@@ -1,6 +1,12 @@
 extends FirebaseTest
 
 
+## A scene object that listens with its own method and is freed without remove_listener().
+class ListenerOwner extends Object:
+	func on_result(_result: FirebaseResult) -> void:
+		pass
+
+
 func _run() -> void:
 	var backend := FirebaseDatabaseMock.new()
 	var db: FirebaseDatabase = mock_firebase({"database": backend}).database
@@ -45,3 +51,9 @@ func _run() -> void:
 	db.remove_listener(denied)
 	check(denied != 0 and rejected.size() == 1, "a failed listener gets one event, then stops")
 	check(rejected.size() == 1 and not rejected[0].ok and rejected[0].value == null and rejected[0].error_code == 8 and rejected[0].error_message == "permission denied", "listener failure has no snapshot")
+
+	var owner := ListenerOwner.new()
+	var orphan := db.listen_value("game/score", owner.on_result)
+	owner.free()
+	await process_frame
+	check(orphan != 0 and not backend._listeners.has(orphan), "a listener whose callback object was freed is removed from the backend")

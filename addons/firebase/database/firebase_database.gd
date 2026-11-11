@@ -248,3 +248,5 @@ func _on_value_changed(listener_id: int, ok: bool, snapshot: Dictionary, error_c
 	var callback: Callable = _listeners.get(listener_id, Callable())
 	if callback.is_valid():
 		callback.call(FirebaseResult.success(snapshot) if ok else FirebaseResult.failure(error_code, error_message))
+	else:
+		remove_listener(listener_id)  # Its object was freed without remove_listener().
