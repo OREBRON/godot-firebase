@@ -50,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           source tools/versions.env
-          export GODOT_VERSION
+          export GODOT_VERSION GODOT_LINUX_SHA512 GODOT_WINDOWS_SHA512 GODOT_MACOS_SHA512
           python - <<'PY'
           import hashlib
           import os
@@ -72,9 +72,9 @@ jobs:
           directory.mkdir(parents=True, exist_ok=True)
           archive = directory / asset
           urllib.request.urlretrieve(base + asset, archive)
-          with urllib.request.urlopen(base + 'SHA512-SUMS.txt', timeout=60) as response:
-              sums = dict((line.split()[1].lstrip('*'), line.split()[0]) for line in response.read().decode().splitlines() if line.strip())
-          assert hashlib.sha512(archive.read_bytes()).hexdigest() == sums[asset], 'Godot SHA-512 mismatch'
+          actual_sha512 = hashlib.sha512(archive.read_bytes()).hexdigest()
+          pin = f'GODOT_{target.upper()}_SHA512'
+          assert actual_sha512 == os.environ[pin], f'Godot SHA-512 mismatch for {asset} (got {actual_sha512}); update {pin} in tools/versions.env'
           with zipfile.ZipFile(archive) as source:
               source.extractall(directory)
           if target == 'macos':

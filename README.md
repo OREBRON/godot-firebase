@@ -687,8 +687,8 @@ stub'da açıkça skipped raporlar; native parity sonucu sayılmaz.
 
 `.github/workflows/desktop.yml`, GitHub-hosted Linux x86_64, Windows x86_64,
 macOS arm64 ve Intel macOS runner'larında çalışır. Her job `tools/versions.env`
-içindeki aynı Godot 4.7.2 editörünü resmi release'den indirir ve yayımlanan
-SHA-512 ile doğrular. İlk kontroller doğrudan checkout'ta LFS ile gelen
+içindeki aynı Godot 4.7.2 editörünü resmi release'den indirir ve aynı dosyada
+sabitlenen SHA-512 ile doğrular. İlk kontroller doğrudan checkout'ta LFS ile gelen
 kütüphanelere uygulanır: editör importu, Firebase mock başlangıcı ve stok
 testleri. Sonra kaynak yeniden derlenir ve aynı kontroller yeni kütüphaneyle
 tekrarlanır. Build öncesi test, bozuk hazır binary'nin CI'da gizlenmesini
