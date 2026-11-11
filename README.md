@@ -591,7 +591,11 @@ Yerel snapshot disk fsync veya sunucu ACK'i değildir.
 Realtime Database persistence başlangıç proje ayarı
 `firebase/database/persistence_enabled=false` ile belirlenir; ilk referanstan
 önce uygulanır, runtime setter yoktur. `set_network_enabled()` komut başarısı
-internet bağlantısı değildir. Yalnız `.info/connected` ve `.info/serverTimeOffset`
+internet bağlantısı değildir. Bağlantı yokken `get_value()` hata vermez: değer yerel
+önbellekte değilse bağlantıyı bekler. Önbellek bekleyen yazmaları ve etkin dinleyicilerin
+yüklediği değerleri tutar; persistence açıksa daha önce okunan ya da yazılan değerler de
+diskte kalır (eski olabilir). Açılış gibi akışlarda beklemeyi `wait(10.0)` ile sınırla;
+mock aynı kuralı izler. Yalnız `.info/connected` ve `.info/serverTimeOffset`
 özel read/listen yollarıdır. `on_disconnect_set_value`, `on_disconnect_update_children`,
 `on_disconnect_remove_value` ve `on_disconnect_cancel` task'ları kayıt/cancel ACK'i
 döndürür. Oyun her bağlantıda yeniden kayıt yapar; ACK'ten sonra online yazan

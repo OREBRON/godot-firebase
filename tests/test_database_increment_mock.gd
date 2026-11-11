@@ -21,10 +21,10 @@ func _run() -> void:
 	await db.set_value("room/players", 2).wait()
 	await db.on_disconnect_set_value("room/players", FirebaseDatabase.increment(-1)).wait()
 	backend.simulate_connection(false)
-	check((await db.get_value("room/players").wait()).value.value == 1, "a disconnect increment applies to the value at disconnect")
 	var offline_write := db.set_value("offline", FirebaseDatabase.increment(1))
 	check((await db.get_value("offline").wait()).value.value == 1, "an offline increment shows locally at once")
 	backend.simulate_connection(true)
+	check((await db.get_value("room/players").wait()).value.value == 1, "a disconnect increment applies to the value at disconnect")
 	check((await offline_write.wait()).ok, "the queued increment is acknowledged on reconnect")
 	check((await db.get_value("offline").wait()).value.value == 1, "the queued increment applies once")
 

@@ -24,9 +24,12 @@ func _run() -> void:
 	await db.set_value("presence/session", true).wait()
 	var registration: FirebaseResult = await db.call("on_disconnect_remove_value", "presence/session").wait()
 	check(registration.ok and (await db.get_value("presence/session").wait()).value.exists, "registration ACK does not execute disconnect action")
+	# An active listener keeps the value in the local cache, so it can be read offline.
+	var session := db.listen_value("presence/session", func(_result: FirebaseResult): pass)
 	await db.call("set_network_enabled", false).wait()
 	check(not (await db.get_value(".info/connected").wait()).value.value, "offline command closes the mock connection")
 	check(not (await db.get_value("presence/session").wait()).value.exists, "closing the connection runs disconnect actions in the local cache")
+	db.remove_listener(session)
 	await db.call("set_network_enabled", true).wait()
 	check(not (await db.get_value(".info/connected").wait()).value.value, "online command success is not connection confirmation")
 	await process_frame
