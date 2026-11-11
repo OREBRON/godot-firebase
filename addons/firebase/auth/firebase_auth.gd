@@ -2,7 +2,9 @@ class_name FirebaseAuth
 extends RefCounted
 ## Firebase Authentication API.
 ##
-## Users are dictionaries: {uid, email, display_name, is_anonymous}.
+## Users are dictionaries: {uid, email, display_name, photo_url, is_anonymous,
+## providers}. `providers` lists Firebase provider IDs such as "google.com",
+## "apple.com", "gc.apple.com", "playgames.google.com" and "password".
 ## An empty dictionary means nobody is signed in.
 
 signal state_changed(user: Dictionary)
@@ -73,13 +75,65 @@ func link_with_play_games(server_auth_code: String) -> FirebaseTask:
 	return _sign_in(PLAY_GAMES, true, server_auth_code)
 
 
+## Pass a token minted by the game's server with the Firebase Admin SDK.
+func sign_in_with_custom_token(token: String) -> FirebaseTask:
+	return _send(&"sign_in_with_custom_token", [token], "custom token is required" if token.is_empty() else "")
+
+
+## Signs in to an existing email/password account.
+func sign_in_with_email(email: String, password: String) -> FirebaseTask:
+	return _send(&"sign_in_with_email", [email, password], validate_email(email, password))
+
+
+## Proves again that the player owns the signed-in account, for example before
+## delete_account(). Fails when the credential belongs to another account.
+func reauthenticate_with_google() -> FirebaseTask:
+	return _reauthenticate(&"reauthenticate", [GOOGLE])
+
+
+func reauthenticate_with_apple() -> FirebaseTask:
+	return _reauthenticate(&"reauthenticate", [APPLE])
+
+
+func reauthenticate_with_game_center() -> FirebaseTask:
+	return _reauthenticate(&"reauthenticate", [GAME_CENTER])
+
+
+func reauthenticate_with_play_games_platform() -> FirebaseTask:
+	return _reauthenticate(&"reauthenticate", [PLAY_GAMES_PLATFORM])
+
+
+func reauthenticate_with_email(email: String, password: String) -> FirebaseTask:
+	return _reauthenticate(&"reauthenticate_with_email", [email, password], validate_email(email, password))
+
+
+## Pass a Firebase provider ID from current_user().providers, e.g. "google.com".
+## Read current_user() afterwards for the remaining providers.
+func unlink_provider(provider_id: String) -> FirebaseTask:
+	return _send(&"unlink_provider", [provider_id], "provider ID is required" if provider_id.is_empty() else "")
+
+
+## Keys: display_name and photo_url (Strings). A key left out keeps its value;
+## "" clears it. Read current_user() afterwards; state_changed is not emitted.
+func update_profile(profile: Dictionary) -> FirebaseTask:
+	return _send(&"update_profile", [profile], validate_profile(profile))
+
+
+## Fetches the account again, e.g. after it changed on another device or the
+## server. Read current_user() afterwards.
+func reload_user() -> FirebaseTask:
+	return _requests.send(&"reload_user")
+
+
 func sign_out() -> void:
 	if _requests.backend:
 		_requests.backend.sign_out()
 
 
-## Deletes the account. Firebase may answer "requires recent login";
-## sign in again with the same provider and retry.
+## Deletes the account. Firebase may answer "requires recent login"
+## (error_code 9): reauthenticate with one of the account's providers and retry.
+## Custom token and Play Games server-code accounts sign in again with a fresh
+## token or code instead.
 func delete_account() -> FirebaseTask:
 	return _requests.send(&"delete_user")
 
@@ -101,6 +155,29 @@ func current_user() -> Dictionary:
 
 func is_signed_in() -> bool:
 	return not current_user().is_empty()
+
+
+static func validate_email(email: String, password: String) -> String:
+	return "email and password are required" if email.is_empty() or password.is_empty() else ""
+
+
+static func validate_profile(profile: Dictionary) -> String:
+	for key: Variant in profile:
+		if not key is String or key not in ["display_name", "photo_url"] or not profile[key] is String:
+			return "profile keys are display_name and photo_url with String values"
+	return ""
+
+
+func _send(method: StringName, args: Array, reason: String) -> FirebaseTask:
+	if not reason.is_empty():
+		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, reason)
+	return _requests.send(method, args)
+
+
+func _reauthenticate(method: StringName, args: Array, reason := "") -> FirebaseTask:
+	if not is_signed_in():
+		return _requests.failed(FirebaseResult.ERR_NO_USER, "reauthentication needs a signed-in user")
+	return _send(method, args, reason)
 
 
 func _sign_in(provider: String, link: bool, server_auth_code := "") -> FirebaseTask:

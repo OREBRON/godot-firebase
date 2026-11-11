@@ -15,6 +15,10 @@ const CASES := {
 	"link_with_play_games_platform": {"ios": "play_games_platform sign-in is not supported on iOS"},
 	"sign_in_with_play_games": {"ios": "Play Games sign-in requires Android"},
 	"link_with_play_games": {"ios": "Play Games sign-in requires Android"},
+	"reauthenticate_with_google": {},
+	"reauthenticate_with_apple": {"android": "apple sign-in is not supported on Android"},
+	"reauthenticate_with_game_center": {"android": "game_center sign-in is not supported on Android"},
+	"reauthenticate_with_play_games_platform": {"ios": "play_games_platform sign-in is not supported on iOS"},
 }
 
 var _errors := ErrorLog.new()
@@ -54,8 +58,11 @@ func _check_platform(firebase: Node, platform: String) -> void:
 	for method: String in CASES:
 		firebase.setup({"auth": FirebaseAuthMock.new()})
 		var auth: FirebaseAuth = firebase.auth
-		if method.begins_with("link_"):
+		if not method.begins_with("sign_in_"):
 			await auth.sign_in_anonymously().wait()
+		if method.begins_with("reauthenticate_"):
+			# Links where the platform allows it, so only the platform can fail reauthentication.
+			await auth.call(method.replace("reauthenticate_", "link_")).wait()
 		var arguments := ["server-code"] if method.ends_with("_play_games") else []
 		var result: FirebaseResult = await auth.callv(method, arguments).wait()
 		var error: String = CASES[method].get(platform, "")
