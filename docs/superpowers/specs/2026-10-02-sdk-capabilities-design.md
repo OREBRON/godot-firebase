@@ -171,7 +171,7 @@ send_unsent_reports() -> FirebaseTask
 delete_unsent_reports() -> FirebaseTask
 ```
 
-Stack frame `{function: String, file: String, line: int}`; custom key String/bool/int/finite float.
+Stack frame `{function: String, file: String, line: int}` (`get_stack()` karelerinin `source` anahtarı `file` sayılır); custom key String/bool/int/finite float.
 Açık GDScript nonfatal raporları ve platform native crash yakalama desteklenir; bütün Godot hataları otomatik yakalanmış sayılmaz.
 Yerel log/nonfatal/send/delete sonucu server ACK değildir. Collection açıkken unsent kontrolü false ile tamamlanır; platform callback farkları public task'ı asılı bırakmaz.
 Startup collection seçeneği verilmemişse pinned platform varsayılanı korunur; explicit false taze kurulumda App/otomatik başlangıçtan önce export metadata'sıyla uygulanır. Runtime override'ın etki zamanı/platform kalıcılığı belgelenir.

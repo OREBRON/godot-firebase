@@ -32,7 +32,12 @@ func _run() -> void:
 	check(result.ok and backend.errors.size() == 1, "nonfatal recorded locally")
 	stack[0].line = 99
 	check(backend.errors[0].stack[0].line == 42, "nonfatal snapshots supplied stack")
-	for frame in [{}, {"function": "f", "file": "x", "line": "3"}, {"function": "f", "file": "x", "line": -1}, {"function": "f", "file": "x", "line": 2147483648}, {"function": "f", "file": "x", "line": 1, "extra": true}]:
+	var engine_stack := get_stack()
+	result = await api.record_error("ScriptError", "engine stack", engine_stack).wait()
+	var recorded: Array = backend.errors[-1].stack if result.ok else []
+	check(not recorded.is_empty() and recorded[0] == {"function": "_run", "file": "res://tests/test_crashlytics_mock.gd", "line": engine_stack[0].line}, "get_stack() frames recorded with file key")
+	check(engine_stack[0].has("source"), "caller's get_stack() frames left unchanged")
+	for frame in [{}, {"function": "f", "file": "x", "line": "3"}, {"function": "f", "file": "x", "line": -1}, {"function": "f", "file": "x", "line": 2147483648}, {"function": "f", "file": "x", "line": 1, "extra": true}, {"function": "f", "file": "x", "source": "x", "line": 1}]:
 		var invalid_stack: Array[Dictionary] = [frame]
 		result = await api.record_error("Error", "message", invalid_stack).wait()
 		check(not result.ok, "malformed frame rejected")
