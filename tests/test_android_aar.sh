@@ -18,4 +18,10 @@ for bridge in FirebaseBridge FirebaseAuthBridge FirebaseCrashlyticsBridge; do
 	jar tf "$stage/classes.jar" | grep -q "org/godotengine/godotfirebase/$bridge.class"
 done
 javap -cp "$stage/classes.jar" org.godotengine.godotfirebase.FirebaseBridge | grep -q 'initialize(android.app.Activity, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)'
+# Activity-scoped Task listeners are dropped at onStop, so Play Games sign-in would never complete.
+games=$(javap -c -p -cp "$stage/classes.jar" 'org.godotengine.godotfirebase.FirebaseAuthBridge$GamesProvider')
+if grep -q 'addOnCompleteListener:(Landroid/app/Activity;' <<<"$games" || [[ $(grep -c 'addOnCompleteListener:(Lcom/google/android/gms/tasks/OnCompleteListener;)' <<<"$games") -ne 3 ]]; then
+	echo "Play Games sign-in listeners must not be Activity-scoped" >&2
+	exit 1
+fi
 echo "test_android_aar.sh: ok"
