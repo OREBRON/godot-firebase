@@ -1,11 +1,23 @@
 class_name FirebaseAuthMock
 extends FirebaseMockModule
-## In-memory auth accounts live for this backend instance only.
+## In-memory auth accounts live for this backend instance only. The first email
+## sign-in creates its account; the same custom token string returns the same account.
 
 signal auth_state_changed(user: Dictionary)
 
-# firebase::auth::kAuthErrorCredentialAlreadyInUse (pinned C++ SDK).
+# firebase::auth::AuthError values (pinned C++ SDK).
 const CREDENTIAL_ALREADY_IN_USE := 10
+const NO_SUCH_PROVIDER := 16
+const USER_MISMATCH := 22
+
+# What an operation does with its credential; also used in error messages.
+const SIGN_IN := "sign_in"
+const LINK := "link"
+const REAUTHENTICATE := "reauthenticate"
+# Providers sign_in() accepts; email and custom token name their account instead.
+const PLATFORM_PROVIDERS := ["anonymous", "apple", "game_center", "google", "play_games", "play_games_platform"]
+# UserInfo::provider_id() of each provider; custom token users have none.
+const PROVIDER_IDS := {"apple": "apple.com", "game_center": "gc.apple.com", "google": "google.com", "play_games": "playgames.google.com", "password": "password"}
 
 ## Project setting read at creation: "" (default) allows every provider;
 ## "android" or "ios" fails sign-in like the native addon on that platform.
@@ -34,22 +46,54 @@ func _init() -> void:
 
 
 func sign_in(provider: String, link: bool) -> int:
+	return _start(provider, LINK if link else SIGN_IN)
+
+
+func reauthenticate(provider: String) -> int:
+	return _start(provider, REAUTHENTICATE)
+
+
+func sign_in_with_custom_token(token: String) -> int:
+	if token.is_empty():
+		return _fail(FirebaseResult.ERR_INVALID_ARGUMENT, "custom token is required")
+	return _start("custom", SIGN_IN, token)
+
+
+func sign_in_with_email(email: String, password: String) -> int:
+	return _start_email(email, password, SIGN_IN)
+
+
+func reauthenticate_with_email(email: String, password: String) -> int:
+	return _start_email(email, password, REAUTHENTICATE)
+
+
+func _start_email(email: String, password: String, mode: String) -> int:
+	var reason := FirebaseAuth.validate_email(email, password)
+	if not reason.is_empty():
+		return _fail(FirebaseResult.ERR_INVALID_ARGUMENT, reason)
+	return _start("password", mode, email)
+
+
+# An empty `account` lets the platform UI pick the account set_provider_account() selected.
+func _start(provider: String, mode: String, account := "") -> int:
 	var id := _take_id()
 	if _closed:
 		_finish_error(id, FirebaseResult.ERR_UNAVAILABLE, "auth backend is shut down")
 	elif not _pending.is_empty():
 		_finish_error(id, FirebaseResult.ERR_BUSY, "another auth operation is running")
-	elif link and _user.is_empty():
-		_finish_error(id, FirebaseResult.ERR_NO_USER, "link needs a signed-in user")
-	elif provider not in ["anonymous", "apple", "game_center", "google", "play_games", "play_games_platform"]:
+	elif mode != SIGN_IN and _user.is_empty():
+		_finish_error(id, FirebaseResult.ERR_NO_USER, "%s needs a signed-in user" % mode)
+	elif account.is_empty() and provider not in PLATFORM_PROVIDERS:
 		_finish_error(id, FirebaseResult.ERR_UNSUPPORTED, "unknown auth provider")
-	elif link and provider == "anonymous":
-		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "cannot link an anonymous account")
+	elif mode != SIGN_IN and provider == "anonymous":
+		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "cannot %s an anonymous account" % mode)
 	elif provider in UNSUPPORTED_PROVIDERS.get(_platform, []):
 		_finish_error(id, FirebaseResult.ERR_UNSUPPORTED, "%s sign-in is not supported on %s" % [provider, PLATFORM_NAMES[_platform]])
 	elif not _fail_if_requested(id):
 		var canonical := "play_games" if provider == "play_games_platform" else provider
-		_pending = {"id": id, "provider": canonical, "link": link, "uid": _user.get("uid", ""), "generation": _generation, "account": _selected_accounts.get(canonical, "default")}
+		if account.is_empty():
+			account = _selected_accounts.get(canonical, "default")
+		_pending = {"id": id, "provider": canonical, "mode": mode, "uid": _user.get("uid", ""), "generation": _generation, "account": account}
 		var operation := _pending.duplicate()
 		if _delay_next:
 			_delay_next = false
@@ -91,24 +135,31 @@ func _complete_sign_in(operation: Dictionary) -> void:
 	if operation.provider == "anonymous" and _user.get("is_anonymous", false):
 		# The SDK returns the signed-in anonymous user; its uid stays, so no
 		# auth state change. Any other user is replaced by a new anonymous one.
-		_finish(operation.id, _user.duplicate())
+		_finish(operation.id, current_user())
 		return
 	var key: String = operation.provider + ":" + operation.account
 	var existing_uid: String = _provider_accounts.get(key, "")
-	if operation.link and not existing_uid.is_empty() and existing_uid != operation.uid:
+	if operation.mode == REAUTHENTICATE:
+		if existing_uid == operation.uid:
+			_finish(operation.id)
+		else:
+			_finish_error(operation.id, USER_MISMATCH, "credential belongs to another account")
+		return
+	if operation.mode == LINK and not existing_uid.is_empty() and existing_uid != operation.uid:
 		_finish_error(operation.id, CREDENTIAL_ALREADY_IN_USE, "credential belongs to another account")
 		return
-	if operation.link:
+	if operation.mode == LINK:
 		_user.is_anonymous = false
 	elif not existing_uid.is_empty():
 		_user = _accounts[existing_uid].duplicate()
 	else:
-		_user = {"uid": "mock-%s-%d" % [operation.provider, operation.id], "email": "", "display_name": "", "is_anonymous": operation.provider == "anonymous"}
+		var email: String = operation.account if operation.provider == "password" else ""
+		_user = {"uid": "mock-%s-%d" % [operation.provider, operation.id], "email": email, "display_name": "", "photo_url": "", "is_anonymous": operation.provider == "anonymous"}
 	_accounts[_user.uid] = _user.duplicate()
 	if operation.provider != "anonymous":
 		_provider_accounts[key] = _user.uid
-	_finish(operation.id, _user.duplicate())
-	auth_state_changed.emit.call_deferred(_user.duplicate())
+	_finish(operation.id, current_user())
+	auth_state_changed.emit.call_deferred(current_user())
 
 
 func _cancel_pending() -> void:
@@ -154,10 +205,55 @@ func revoke_apple_token() -> int:
 
 
 func _has_provider(provider: String) -> bool:
+	return PROVIDER_IDS[provider] in _providers(_user.get("uid", ""))
+
+
+func _providers(uid: String) -> Array:
+	var providers := []
 	for key: String in _provider_accounts:
-		if key.begins_with(provider + ":") and _provider_accounts[key] == _user.get("uid", ""):
-			return true
-	return false
+		var provider := key.get_slice(":", 0)
+		if _provider_accounts[key] == uid and PROVIDER_IDS.has(provider):
+			providers.append(PROVIDER_IDS[provider])
+	return providers
+
+
+func unlink_provider(provider_id: String) -> int:
+	var id := _take_id()
+	if _user.is_empty():
+		_finish_error(id, FirebaseResult.ERR_NO_USER, "no signed-in user")
+	elif provider_id.is_empty():
+		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "provider ID is required")
+	elif provider_id not in _providers(_user.uid):
+		_finish_error(id, NO_SUCH_PROVIDER, "user is not linked to this provider")
+	elif not _fail_if_requested(id):
+		for key: String in _provider_accounts.keys():
+			if _provider_accounts[key] == _user.uid and PROVIDER_IDS.get(key.get_slice(":", 0)) == provider_id:
+				_provider_accounts.erase(key)
+		_finish(id)
+	return id
+
+
+func update_profile(profile: Dictionary) -> int:
+	var id := _take_id()
+	var reason := FirebaseAuth.validate_profile(profile)
+	if _user.is_empty():
+		_finish_error(id, FirebaseResult.ERR_NO_USER, "no signed-in user")
+	elif not reason.is_empty():
+		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, reason)
+	elif not _fail_if_requested(id):
+		_user.merge(profile, true)
+		_accounts[_user.uid] = _user.duplicate()
+		_finish(id)
+	return id
+
+
+func reload_user() -> int:
+	var id := _take_id()
+	if _user.is_empty():
+		_finish_error(id, FirebaseResult.ERR_NO_USER, "no signed-in user")
+	elif not _fail_if_requested(id):
+		_finish(id)
+	return id
 
 
 func get_id_token(_force_refresh: bool) -> int:
@@ -170,7 +266,10 @@ func get_id_token(_force_refresh: bool) -> int:
 
 
 func current_user() -> Dictionary:
-	return _user.duplicate()
+	var user := _user.duplicate()
+	if not user.is_empty():
+		user.providers = _providers(user.uid)
+	return user
 
 
 # Test controls, deliberately excluded from the native/public SDK contract.

@@ -7,7 +7,7 @@ ayrılmıştır; mevcut native build seçilen modülleri tek kütüphaneye bağl
 | Modül | Klasör | Native sınıf | İçerik |
 |---|---|---|---|
 | core (zorunlu) | `core/` | `FirebaseAppNative` | App başlatma, görev ve sonuç tipleri |
-| auth | `auth/` | `FirebaseAuthNative` | Anonim, Google, Play Games, Game Center, Apple, hesap bağlama, silme |
+| auth | `auth/` | `FirebaseAuthNative` | Anonim, Google, Play Games, Game Center, Apple, custom token, e-posta/parola, hesap bağlama, yeniden doğrulama, sağlayıcı kaldırma, profil, silme |
 | firestore | `firestore/` | `FirebaseFirestoreNative` | Doküman, sorgu, batch, dinleyici, cache/pending-write gözlemi |
 | storage | `storage/` | `FirebaseStorageNative` | Dosya yükleme/indirme (bayt), indirme URL'si, metadata, silme |
 | database | `database/` | `FirebaseDatabaseNative` | Realtime Database, başlangıç persistence seçimi, bağlantı/presence |
@@ -421,6 +421,16 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
     float görür; tam sayı sonuçlar int, packed diziler Array döner, anahtarlar sıralanır.
   - Storage indirme URL'leri (`https://storage.mock/...`) indirilemez; içerik tipi
     verilmeyen yükleme `application/octet-stream` olur.
+- Auth kullanıcısı `{uid, email, display_name, photo_url, is_anonymous, providers}`
+  sözlüğüdür; `providers` Firebase sağlayıcı kimlikleridir (`"google.com"`,
+  `"apple.com"`, `"gc.apple.com"`, `"playgames.google.com"`, `"password"`).
+  `sign_in_with_custom_token(token)` oyun sunucusunun Admin SDK ile ürettiği
+  token'la, `sign_in_with_email(email, password)` var olan e-posta hesabıyla giriş
+  yapar (hesap açma API'si yoktur). `unlink_provider("google.com")`,
+  `update_profile({"display_name": "Ada"})` (verilmeyen anahtar korunur, `""`
+  temizler) ve `reload_user()` değer döndürmez ve `state_changed` vermez; sonucu
+  `current_user()` ile oku. Mock ilk e-posta girişinde hesabı açar; aynı custom
+  token aynı mock hesabı döndürür.
 - Auth açılışta `state_changed` sinyalini bir kez verir (oturum yoksa `{}`).
   Anonim kullanıcı tekrar anonim giriş yaparsa aynı uid döner ve sinyal gelmez.
   `firebase/auth/mock_platform` proje ayarı (`""` varsayılan, `"android"`, `"ios"`)
@@ -440,6 +450,11 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   `Firebase.auth.revoke_apple_token()` çağrılır: Apple sayfası bir kez açılır ve
   Apple belirteçleri iptal edilir (değer `true`); Apple bağlı olmayan hesapta arayüz
   açılmaz, değer `false` olur. Mock'ta `fail_next()` iptal/başarısızlığı taklit eder.
+  Silme "requires recent login" (`error_code` 9) dönerse hesabın bir sağlayıcısıyla
+  `reauthenticate_with_google()` / `_apple()` / `_game_center()` /
+  `_play_games_platform()` / `_email(email, password)` çağrılıp silme tekrarlanır.
+  Başka hesabın kimliğiyle oturum o hesaba geçmez, hata döner. Custom token ve Play Games
+  server code hesapları taze token/code ile yeniden giriş yapar.
 
 ## Geliştirme
 
