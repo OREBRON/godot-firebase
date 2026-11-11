@@ -686,6 +686,11 @@ Auth içeren iOS build, `tools/build_google_signin_ios.sh` ile pinned kaynaklard
 GoogleSignIn bağımlılıklarını hazırlar; kurulu CocoaPods/Xcode gerekir, global araç
 kurulmaz. Testler mock'larla çalışır. Native ClassDB signature gate'i editor
 stub'da açıkça skipped raporlar; native parity sonucu sayılmaz.
+`tests/test_native_guards.py` native anahtar, yol ve ad korumalarını `src/`
+içinden kopyalayıp host C++ derleyicisiyle `tests/fixtures/guard_cases.json`
+tablosunda çalıştırır; `tests/test_guard_cases.gd` aynı tabloyu GDScript
+doğrulayıcılarında çalıştırır. Değer dönüşümü, sorgu doğrulaması ve SDK
+davranışı bu kapsamın dışındadır.
 
 ### CI
 
