@@ -24,7 +24,8 @@ public:
 	// Called by the extension registry before the shared App is destroyed.
 	static void shutdown_all();
 
-	godot::Error initialize();
+	// A non-empty `p_emulator_host` ("host:port") uses the Authentication emulator.
+	godot::Error initialize(const godot::String &p_emulator_host = "");
 	// Providers: anonymous, game_center, apple, google, play_games_platform.
 	// `p_link` keeps the User captured before platform UI starts.
 	int64_t sign_in(const godot::String &p_provider, bool p_link);

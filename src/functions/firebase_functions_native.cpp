@@ -42,9 +42,14 @@ void FirebaseFunctionsNative::shutdown_all() {
 	}
 }
 
-godot::Error FirebaseFunctionsNative::initialize() {
+godot::Error FirebaseFunctionsNative::initialize(const String &p_emulator_host) {
 	if (functions) {
 		return godot::ERR_ALREADY_IN_USE;
+	}
+	std::string emulator_host;
+	int emulator_port = 0;
+	if (!parse_emulator_host(p_emulator_host, emulator_host, emulator_port)) {
+		return godot::ERR_INVALID_PARAMETER;
 	}
 	firebase::App *app = FirebaseAppNative::get_app();
 	if (app == nullptr) {
@@ -56,6 +61,11 @@ godot::Error FirebaseFunctionsNative::initialize() {
 	if (functions == nullptr || result != firebase::kInitResultSuccess) {
 		functions = nullptr;
 		return godot::ERR_CANT_CREATE;
+	}
+	// Android uses the origin as the URL prefix; iOS takes the host and port from it.
+	// Repeating it for a later wrapper of the shared instance only sets the same origin.
+	if (!emulator_host.empty()) {
+		functions->UseFunctionsEmulator(("http://" + to_std(p_emulator_host)).c_str());
 	}
 	return godot::OK;
 }
@@ -84,7 +94,7 @@ int64_t FirebaseFunctionsNative::call_function(const String &p_name, const Varia
 }
 
 void FirebaseFunctionsNative::_bind_methods() {
-	godot::ClassDB::bind_method(D_METHOD("initialize"), &FirebaseFunctionsNative::initialize);
+	godot::ClassDB::bind_method(D_METHOD("initialize", "emulator_host"), &FirebaseFunctionsNative::initialize, DEFVAL(""));
 	godot::ClassDB::bind_method(D_METHOD("call_function", "name", "data"), &FirebaseFunctionsNative::call_function);
 }
 

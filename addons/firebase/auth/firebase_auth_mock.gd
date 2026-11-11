@@ -36,6 +36,8 @@ var _delay_next := false
 var _generation := 0
 var _closed := false
 var _platform := ""
+## Test-observable startup option; the mock never connects to an emulator.
+var emulator_host := ""
 
 
 func _init() -> void:
@@ -43,6 +45,11 @@ func _init() -> void:
 	# Native reports the restored user (or {}) once its SDK listener is
 	# registered; deferred so the API created right after this can receive it.
 	auth_state_changed.emit.call_deferred(current_user())
+
+
+func initialize(emulator_host: String = "") -> int:
+	self.emulator_host = emulator_host
+	return OK
 
 
 func sign_in(provider: String, link: bool) -> int:

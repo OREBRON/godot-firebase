@@ -197,6 +197,47 @@ edindiği code için mevcut `sign_in_with_play_games(code)` / `link_with_play_ga
 API'leri korunur. İkinci eşzamanlı credential UI isteği `ERR_BUSY`, iptal
 `ERR_CANCELLED` döner. Hesaplar veya oyun verisi otomatik birleştirilmez.
 
+### Firebase Emulator Suite
+
+Auth, Firestore, Storage, Realtime Database ve Functions, iOS/Android native
+modüllerinde yerel [Firebase Emulator Suite](https://firebase.google.com/docs/emulator-suite)'e
+yönlendirilebilir. Varsayılan kapalıdır. Açmak için ürünün proje ayarına şema ve
+yol olmadan `"host:port"` yaz; boş değer Firebase projesini kullanır.
+
+| Proje ayarı | Emulator'ün varsayılan portu |
+| --- | --- |
+| `firebase/auth/emulator_host` | 9099 |
+| `firebase/firestore/emulator_host` | 8080 |
+| `firebase/storage/emulator_host` | 9199 |
+| `firebase/database/emulator_host` | 9000 |
+| `firebase/functions/emulator_host` | 5001 |
+
+- Ayar uygulama açılışında, ürünün ilk kullanımından önce uygulanır; çalışırken
+  değiştirilemez. Debug build'de geçersiz değer (`http://` öneki, port yok, 1..65535
+  dışı port) o ürünü kullanılamaz yapar ve hata loglar; üretime sessizce geçilmez.
+- **Release export'ları bu ayarları yok sayar** ve uyarı loglar; unutulan ayar
+  oyuncuları geliştirici makinesine yönlendirmez. Debug export'lar ve editörden
+  cihaza çalıştırma ayarı uygular: emulator ayarı açık debug build'i dağıtma.
+- Editörde ve masaüstünde mock çalışır ve emulator'e bağlanmaz. Kuralları
+  emulator'de denemek için iOS simülatörü, Android emulator'ü veya cihaz kullan.
+- Android emulator'ü bilgisayara `10.0.2.2`, iOS simülatörü `127.0.0.1` ile ulaşır.
+  Platforma göre değer için ayarın yanına Godot'nun özellik etiketli override'ını
+  ekle: `firebase/auth/emulator_host="127.0.0.1:9099"` ve
+  `firebase/auth/emulator_host.android="10.0.2.2:9099"`. Override yalnız temel
+  ayar (boş da olabilir) tanımlıyken okunur. Fiziksel cihazda
+  bilgisayarın LAN IP'sini yaz ve emulator'ü `firebase.json` içinde
+  `"host": "0.0.0.0"` ile başlat.
+- Realtime Database emulator namespace'i olarak uygulama config'indeki database
+  URL'sinin adını (yoksa `<project_id>-default-rtdb`) kullanır. Functions bölgesi
+  yine `firebase/functions/region` ayarından gelir.
+- Emulator'ler TLS kullanmaz. Android 9+ şifresiz HTTP'yi varsayılan olarak
+  engeller; Godot'da bunun export seçeneği yoktur ve eklenti export güvenlik
+  ayarlarını değiştirmez. Gradle build'de yalnız debug build için emulator host'una
+  (`10.0.2.2` ya da LAN IP) `cleartextTrafficPermitted="true"` veren bir
+  [network security config](https://developer.android.com/privacy-and-security/security-config)
+  ekle; release'e koyma. iOS'ta App Transport Security host adıyla şifresiz
+  bağlantıyı engelleyebilir; gerekirse istisnayı yalnız debug build'e ekle.
+
 ## Yeni ürünlerin geliştirme paketleri
 
 ```bash
@@ -482,7 +523,8 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   başlatılamazsa mock'a düşülmez; istekler `ERR_UNAVAILABLE` döner.
 - Mock'lar cihazdaki SDK davranışını izler, sunucuyu taklit etmez:
   - Güvenlik kuralları ve Firestore bileşik indeksleri uygulanmaz; editörde her
-    okuma/yazma izinlidir. Kuralları Firebase Emulator Suite ile ayrıca test et.
+    okuma/yazma izinlidir. Kuralları cihazda veya simülatörde
+    [Firebase Emulator Suite](#firebase-emulator-suite) ile ayrıca test et.
     Reddi `fail_next()` ile taklit et (`Firebase.backends.firestore.fail_next(7, "denied")`):
     sonraki istek ya da sonra başlatılan Firestore/Database dinleyicisi bu hatayı alır.
   - Veri bellek içidir; her çalıştırma temiz kurulumdur (oturum, Firestore,
@@ -735,6 +777,8 @@ kontrol edilecekler:
   İmzalı IPA/App Store thinning ve hedef altı ZIP'in boyutları doğrulanmadı.
 - Android: JNI, AAR, bağımlılıklar ve arm64-v8a build'i eklendi; Android
   cihazda export, Firebase başlatma ve modül istekleri henüz doğrulanmadı.
+- Emulator Suite bağlantısı beş üründe derlendi ve mock testleriyle ayar akışı
+  doğrulandı; cihaz/simülatörde gerçek emulator'e istek henüz denenmedi.
 - Birleşebilir paketlerin path/hash, import sırası, tekrar import, Core-only,
   kaldırma ve mixed-build testleri #67'de; nihai platform kararı #90'da bekliyor.
   Cihaz ve release/minification kabulü #55/#59'da açık. Güncel kanıt ayrımı

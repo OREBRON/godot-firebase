@@ -23,7 +23,8 @@ public:
 	// Registry calls this before deleting the shared Firebase App.
 	static void shutdown_all();
 
-	godot::Error initialize(bool p_persistence_enabled = false);
+	// A non-empty `p_emulator_host` ("host:port") uses the Realtime Database emulator.
+	godot::Error initialize(bool p_persistence_enabled = false, const godot::String &p_emulator_host = "");
 	int64_t set_network_enabled(bool p_enabled);
 	// A non-empty `p_query` delivers the matching children in query order.
 	int64_t get_value(const godot::String &p_path, const godot::Dictionary &p_query);

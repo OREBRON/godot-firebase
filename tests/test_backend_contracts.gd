@@ -19,8 +19,8 @@ func _run() -> void:
 	var database_mock_path := "res://addons/firebase/database/firebase_database_mock.gd"
 	if ResourceLoader.exists(database_mock_path):
 		var methods := _script_entries(load(database_mock_path), false)
-		check(methods.initialize.args.size() == 1, "derived initialize overrides inherited reflection entry")
-		check(methods.initialize.default_args == [false], "derived initialize keeps persistence default")
+		check(methods.initialize.args.size() == 2, "derived initialize overrides inherited reflection entry")
+		check(methods.initialize.default_args == [false, ""], "derived initialize keeps persistence and emulator defaults")
 	for module in FirebaseNode.MODULES:
 		var path := "res://addons/firebase/%s/firebase_%s_mock.gd" % [module, module]
 		if not ResourceLoader.exists(path):

@@ -218,9 +218,14 @@ void FirebaseAuthNative::shutdown_all() {
 	clear_platform_credential_state();
 }
 
-godot::Error FirebaseAuthNative::initialize() {
+godot::Error FirebaseAuthNative::initialize(const String &p_emulator_host) {
 	if (auth || !auth_session_owner.expired()) {
 		return godot::ERR_ALREADY_IN_USE;
+	}
+	std::string emulator_host;
+	int emulator_port = 0;
+	if (!parse_emulator_host(p_emulator_host, emulator_host, emulator_port)) {
+		return godot::ERR_INVALID_PARAMETER;
 	}
 	firebase::App *app = FirebaseAppNative::get_app();
 	if (app == nullptr) {
@@ -231,6 +236,10 @@ godot::Error FirebaseAuthNative::initialize() {
 	if (auth == nullptr || result != firebase::kInitResultSuccess) {
 		auth = nullptr;
 		return godot::ERR_CANT_CREATE;
+	}
+	// Repeating it for a later wrapper of the shared Auth only sets the same endpoint again.
+	if (!emulator_host.empty()) {
+		auth->UseEmulator(emulator_host, static_cast<uint32_t>(emulator_port));
 	}
 	session->auth = auth;
 	auth_session_owner = session;
@@ -447,7 +456,7 @@ void FirebaseAuthNative::OnAuthStateChanged(firebase::auth::Auth *p_auth) {
 }
 
 void FirebaseAuthNative::_bind_methods() {
-	godot::ClassDB::bind_method(D_METHOD("initialize"), &FirebaseAuthNative::initialize);
+	godot::ClassDB::bind_method(D_METHOD("initialize", "emulator_host"), &FirebaseAuthNative::initialize, DEFVAL(""));
 	godot::ClassDB::bind_method(D_METHOD("sign_in", "provider", "link"), &FirebaseAuthNative::sign_in);
 	godot::ClassDB::bind_method(D_METHOD("sign_in_play_games", "server_auth_code", "link"), &FirebaseAuthNative::sign_in_play_games);
 	godot::ClassDB::bind_method(D_METHOD("sign_in_with_custom_token", "token"), &FirebaseAuthNative::sign_in_with_custom_token);
