@@ -60,9 +60,13 @@ collect_android_symbols() { # target
 	local host=linux-x86_64
 	[ "$(uname -s)" != Darwin ] || host=darwin-x86_64
 	local readelf="${LLVM_READELF:-$ndk/toolchains/llvm/prebuilt/$host/bin/llvm-readelf}"
-	test -x "$readelf" || { echo "Set LLVM_READELF to the build NDK's llvm-readelf" >&2; return 1; }
+	local strip
+	strip="$(dirname "$readelf")/llvm-strip"
+	test -x "$readelf" && test -x "$strip" || { echo "Set LLVM_READELF to the build NDK's llvm-readelf (with llvm-strip beside it)" >&2; return 1; }
 	mkdir -p "$directory"
 	cp "build/android/$stem" "$directory/$stem"
+	# The addon ships a stripped library like builds without debug_symbols; DWARF stays in the symbols copy.
+	"$strip" --strip-all "$BIN/android/$stem"
 	python3 tools/verify_crashlytics_symbols.py android --binary "$BIN/android/$stem" --symbols "$directory/$stem" --readelf "$readelf" --output "$directory/identity.json" >/dev/null
 }
 

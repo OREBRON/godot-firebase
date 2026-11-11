@@ -1,5 +1,6 @@
 """Development selection ZIP checks; these do not claim composable native artifacts."""
 import configparser
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -191,13 +192,17 @@ class SymbolIdentityTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("no DWARF", result.stderr)
 
-    def test_android_build_id_and_unstripped_symbols(self):
+    def android_ndk(self):
         sdk = os.environ.get("ANDROID_HOME", os.environ.get("ANDROID_SDK_ROOT", ""))
         host = "darwin-x86_64" if sys.platform == "darwin" else "linux-x86_64"
         ndk = Path(sdk) / "ndk" / os.environ.get("NDK_VERSION", "28.1.13356709") / "toolchains/llvm/prebuilt" / host / "bin"
-        compiler = ndk / "aarch64-linux-android24-clang++"
-        if not compiler.is_file():
+        if not (ndk / "aarch64-linux-android24-clang++").is_file():
             self.skipTest("Set ANDROID_HOME and NDK_VERSION for real Android ELF fixtures")
+        return ndk
+
+    def test_android_build_id_and_unstripped_symbols(self):
+        ndk = self.android_ndk()
+        compiler = ndk / "aarch64-linux-android24-clang++"
         source = self.root / "fixture.cpp"
         for name, number in [("one", 7), ("two", 8)]:
             source.write_text('extern "C" int symbol_fixture() { return %d; }\n' % number)
@@ -215,6 +220,32 @@ class SymbolIdentityTests(unittest.TestCase):
         result = self.verify("android", binary, binary, *options)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("DWARF", result.stderr)
+
+    def test_crashlytics_build_ships_stripped_android_library(self):
+        ndk = self.android_ndk()
+        (self.root / "tools").mkdir()
+        for name in ["build.sh", "versions.env", "verify_crashlytics_symbols.py"]:
+            shutil.copy2(ROOT / "tools" / name, self.root / "tools" / name)
+        (self.root / "tools/build_android_aar.sh").write_text("")
+        # Stands in for SCons: links the requested target with DWARF and a build ID.
+        scons = self.root / "scons.sh"
+        scons.write_text(f'''for arg; do [[ $arg != target=* ]] || target=${{arg#target=}}; done
+mkdir -p build/android
+echo 'extern "C" int fixture() {{ return 7; }}' > build/fixture.cpp
+"{ndk}/aarch64-linux-android24-clang++" -g -shared -Wl,--build-id=sha1 build/fixture.cpp -o "build/android/libgodot_firebase.android.$target.so"
+''')
+        result = subprocess.run(["bash", "tools/build.sh", "--platforms", "android", "--modules", "crashlytics"],
+            cwd=self.root, env={**os.environ, "SCONS": f"bash {scons}"}, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for target in ["template_debug", "template_release"]:
+            stem = f"libgodot_firebase.android.{target}.so"
+            shipped = self.root / "addons/firebase/bin/android" / stem
+            symbols = self.root / "build/symbols/crashlytics/android" / target / "arm64-v8a"
+            sections = [subprocess.check_output([str(ndk / "llvm-readelf"), "--sections", str(path)], text=True) for path in [shipped, symbols / stem]]
+            self.assertNotIn(".debug_info", sections[0])
+            self.assertIn(".debug_info", sections[1])
+            identity = json.loads((symbols / "identity.json").read_text())
+            self.assertEqual(identity["binary"]["sha256"], hashlib.sha256(shipped.read_bytes()).hexdigest())
 
 
 class NativePackageImportTests(unittest.TestCase):
