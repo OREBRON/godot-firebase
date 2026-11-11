@@ -89,15 +89,18 @@ public final class FirebaseAuthBridge {
 
     // Keep references to optional PGS types out of the Google provider's class
     // verification. This class is loaded only after export metadata opts in.
+    // Listeners are not Activity-scoped: those are dropped at onStop (Home, lock,
+    // a covering sign-in UI) and the request never completes. Unscoped ones still
+    // run on the main thread, which `pending` requires.
     private static final class GamesProvider {
         static void request(Activity activity, String webClientId, long id) {
             PlayGamesSdk.initialize(activity);
-            PlayGames.getGamesSignInClient(activity).isAuthenticated().addOnCompleteListener(activity, check -> {
+            PlayGames.getGamesSignInClient(activity).isAuthenticated().addOnCompleteListener(check -> {
                 if (!pending.containsKey(id)) return;
                 if (check.isSuccessful() && check.getResult().isAuthenticated()) {
                     code(activity, webClientId, id);
                 } else {
-                    PlayGames.getGamesSignInClient(activity).signIn().addOnCompleteListener(activity, signIn -> {
+                    PlayGames.getGamesSignInClient(activity).signIn().addOnCompleteListener(signIn -> {
                         if (!pending.containsKey(id)) return;
                         if (signIn.isSuccessful() && signIn.getResult().isAuthenticated()) code(activity, webClientId, id);
                         else if (signIn.getException() != null) fail(id, "play_games_platform", signIn.getException());
@@ -109,7 +112,7 @@ public final class FirebaseAuthBridge {
 
         private static void code(Activity activity, String webClientId, long id) {
             PlayGames.getGamesSignInClient(activity).requestServerSideAccess(webClientId, false)
-                    .addOnCompleteListener(activity, result -> {
+                    .addOnCompleteListener(result -> {
                         if (result.isSuccessful()) complete(id, "play_games_platform", result.getResult(), 0, "");
                         else fail(id, "play_games_platform", result.getException());
                     });
