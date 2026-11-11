@@ -25,9 +25,12 @@ var _connected := false
 ## Unknown until the first connection, like .info/serverTimeOffset on devices.
 var _server_time_offset: Variant = null
 var _server_root: Variant = null
+var _pending_reads: Array[Dictionary] = []
 var _pending_writes: Array[Dictionary] = []
 var _pending_registrations: Array[Dictionary] = []
 var _disconnect_actions: Dictionary[String, Variant] = {}
+## With persistence, the [path, query] pairs this client loaded or wrote; the SDKs keep them on disk.
+var _disk_cache: Array = []
 
 
 func initialize(persistence_enabled: bool = false, emulator_host: String = "") -> int:
@@ -39,12 +42,42 @@ func initialize(persistence_enabled: bool = false, emulator_host: String = "") -
 	return OK
 
 
+## Like the SDKs' single value listener: without a connection, a read waits for one
+## unless the local cache holds the value.
 func get_value(path: String, query: Dictionary) -> int:
 	_use_reference()
 	var id := _take_id()
-	if not _fail_if_requested(id):
-		_finish(id, _snapshot(path, query))
+	if _fail_if_requested(id):
+		return id
+	if _connected or path in FirebaseDatabase.INFO_PATHS or _is_cached(path, query):
+		_read(id, path, query)
+	else:
+		_pending_reads.append({"id": id, "path": path, "query": query.duplicate(true)})
 	return id
+
+
+func _read(id: int, path: String, query: Dictionary) -> void:
+	_keep_on_disk([path], query)
+	_finish(id, _snapshot(path, query))
+
+
+## Pending writes and active listeners hold values locally; with persistence the disk cache too.
+func _is_cached(path: String, query: Dictionary) -> bool:
+	var held := _disk_cache.duplicate()
+	for id in _listeners:
+		held.append([_listeners[id], _queries[id]])
+	for write in _pending_writes:
+		for change in write.changes:
+			held.append([change.path, {}])
+	return held.any(func(entry: Array) -> bool: return entry == [path, query] or entry[1].is_empty() and _within(path, entry[0]))
+
+
+func _keep_on_disk(paths: Array, query: Dictionary = {}) -> void:
+	if not persistence_enabled:
+		return
+	for path in paths:
+		if not [path, query] in _disk_cache:
+			_disk_cache.append([path, query.duplicate(true)])
 
 
 func set_value(path: String, value: Variant) -> int:
@@ -125,8 +158,11 @@ func _update_connection() -> void:
 		_run_disconnect_actions()
 
 
-## Like the SDKs' restoreState(): queued writes, then queued registrations, in order.
+## Like the SDKs' restoreState(): queued reads, writes, then registrations, in order.
 func _flush_offline_work() -> void:
+	for read in _pending_reads:
+		_read(read.id, read.path, read.query)
+	_pending_reads.clear()
 	for write in _pending_writes:
 		_server_root = _apply_changes(_server_root, write.changes)
 		_finish(write.id, write.result)
@@ -146,7 +182,9 @@ func _run_disconnect_actions() -> void:
 	_disconnect_actions.clear()
 	_server_root = _apply_changes(_server_root, actions)
 	root = _copy(_server_root)
-	_notify_changed(actions.map(func(action): return action.path))
+	var paths := actions.map(func(action): return action.path)
+	_keep_on_disk(paths)
+	_notify_changed(paths)
 
 
 func _register_disconnect(registration: Dictionary) -> int:
@@ -218,6 +256,7 @@ func listen_value(path: String, query: Dictionary) -> int:
 		return id
 	_listeners[id] = path
 	_queries[id] = query.duplicate(true)
+	_keep_on_disk([path], query)
 	_notify(id)
 	return id
 
@@ -240,7 +279,9 @@ func _write(changes: Array, result: Variant = null) -> int:
 		_finish(id, result)
 	else:
 		_pending_writes.append({"id": id, "changes": changes, "result": result})
-	_notify_changed(changes.map(func(change): return change.path))
+	var paths := changes.map(func(change): return change.path)
+	_keep_on_disk(paths)
+	_notify_changed(paths)
 	return id
 
 
@@ -484,7 +525,12 @@ func _deliver_snapshot(listener_id: int, snapshot: Dictionary) -> void:
 
 ## A change at `changed` is visible to a listener on `listened` when one contains the other.
 static func _related(listened: String, changed: String) -> bool:
-	return listened.is_empty() or changed.is_empty() or (listened + "/").begins_with(changed + "/") or (changed + "/").begins_with(listened + "/")
+	return _within(listened, changed) or _within(changed, listened)
+
+
+## Whether `path` is `ancestor` or below it.
+static func _within(path: String, ancestor: String) -> bool:
+	return ancestor.is_empty() or (path + "/").begins_with(ancestor + "/")
 
 
 static func _join(path: String, child: String) -> String:

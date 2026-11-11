@@ -36,6 +36,8 @@ static func increment(by: Variant) -> Dictionary:
 ## {order_by = "$key" | "$value" | "child/path", start_at, end_at, equal_to,
 ## limit_to_first, limit_to_last}. With a query, the snapshot value is a
 ## Dictionary of the matching children in query order, or null when none match.
+## Without a connection the read does not fail: unless the local cache holds the
+## value, it waits for the connection. Bound that wait with wait(timeout_seconds).
 func get_value(path: String, query: Dictionary = {}) -> FirebaseTask:
 	var reason := _read_reason(path, query)
 	if not reason.is_empty():
