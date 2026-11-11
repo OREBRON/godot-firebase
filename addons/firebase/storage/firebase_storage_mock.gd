@@ -15,6 +15,13 @@ const DEFAULT_CONTENT_TYPE := "application/octet-stream"
 var files: Dictionary[String, Dictionary] = {}
 ## Request id -> {bytes_transferred, total_bytes} of an unfinished upload or download.
 var _transfers: Dictionary[int, Dictionary] = {}
+## Test-observable startup option; the mock never connects to an emulator.
+var emulator_host := ""
+
+
+func initialize(emulator_host: String = "") -> int:
+	self.emulator_host = emulator_host
+	return OK
 
 
 func upload_bytes(path: String, data: PackedByteArray, content_type: String) -> int:

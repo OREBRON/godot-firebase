@@ -11,8 +11,10 @@ var _queries: Dictionary[int, Dictionary] = {}
 ## Last snapshot sent to each listener; the SDKs raise value events only on change.
 var _sent: Dictionary[int, Dictionary] = {}
 var _push_count := 0
-## Test-observable startup option. The mock does not persist to disk.
+## Test-observable startup options. The mock does not persist to disk or
+## connect to an emulator.
 var persistence_enabled := false
+var emulator_host := ""
 var network_enabled := true
 var _initialized := false
 var _reference_used := false
@@ -28,10 +30,11 @@ var _pending_registrations: Array[Dictionary] = []
 var _disconnect_actions: Dictionary[String, Variant] = {}
 
 
-func initialize(persistence_enabled: bool = false) -> int:
+func initialize(persistence_enabled: bool = false, emulator_host: String = "") -> int:
 	if _initialized or _reference_used:
 		return ERR_ALREADY_IN_USE
 	self.persistence_enabled = persistence_enabled
+	self.emulator_host = emulator_host
 	_initialized = true
 	return OK
 

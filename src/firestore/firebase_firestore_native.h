@@ -22,7 +22,8 @@ public:
 	// Registry calls this before deleting the shared Firebase App.
 	static void shutdown_all();
 
-	godot::Error initialize();
+	// A non-empty `p_emulator_host` ("host:port") uses the Firestore emulator.
+	godot::Error initialize(const godot::String &p_emulator_host = "");
 	int64_t get_doc(const godot::String &p_path, const godot::String &p_source = "default");
 	int64_t set_doc(const godot::String &p_path, const godot::Dictionary &p_data, bool p_merge);
 	int64_t update_doc(const godot::String &p_path, const godot::Dictionary &p_data);

@@ -13,6 +13,9 @@ extends Node
 
 const ROOT := "res://addons/firebase/"
 const MODULES: Array[String] = ["auth", "firestore", "storage", "database", "functions", "analytics", "remote_config", "crashlytics"]
+## Modules whose SDK can use the local Firebase Emulator Suite. Each reads the
+## project setting firebase/<module>/emulator_host: "host:port", "" (default) is off.
+const EMULATOR_MODULES: Array[String] = ["auth", "firestore", "storage", "database", "functions"]
 
 ## Each is the module API (FirebaseAuth, FirebaseFirestore, ...) or null
 ## when the module folder is missing.
@@ -28,6 +31,8 @@ var crashlytics: RefCounted
 var backends: Dictionary[String, Object] = {}
 ## True in exported games, where a mock would silently replace Firebase.
 var _exported := OS.has_feature("template")
+## True in release exports, which ignore the emulator settings.
+var _release := not OS.is_debug_build()
 
 
 func _enter_tree() -> void:
@@ -75,6 +80,11 @@ func _create_backend(module: String, native_app: bool) -> Object:
 			push_error("Firebase: firebase/database/persistence_enabled must be a bool; Database unavailable")
 			return null
 		arguments.append(persistence)
+	if module in EMULATOR_MODULES:
+		var emulator: Variant = _emulator_host(module)
+		if emulator == null:
+			return null
+		arguments.append(emulator)
 	var native_class := native_class_name(module)
 	if native_app and ClassDB.class_exists(native_class):
 		var native: Object = ClassDB.instantiate(native_class)
@@ -88,9 +98,41 @@ func _create_backend(module: String, native_app: bool) -> Object:
 	if _exported:
 		push_warning("Firebase: %s uses the in-memory mock; data never reaches Firebase and is lost on exit" % module)
 	var mock: Object = load(_api_path(module).replace(".gd", "_mock.gd")).new()
-	if module == "database":
-		mock.callv("initialize", arguments)
+	mock.callv("initialize", arguments)
 	return mock
+
+
+## The emulator "host:port" of `module`; "" when unset or in a release export;
+## null when the setting is invalid, which leaves the module unavailable.
+func _emulator_host(module: String) -> Variant:
+	var setting := "firebase/%s/emulator_host" % module
+	if not ProjectSettings.has_setting(setting):
+		return ""
+	# Applies feature overrides such as emulator_host.android ("10.0.2.2:...").
+	var value: Variant = ProjectSettings.get_setting_with_override(setting)
+	if value is String and value.is_empty():
+		return ""
+	if _release:
+		# A forgotten development setting must not send players to a developer machine.
+		push_warning("Firebase: release builds ignore %s; %s uses the Firebase project" % [setting, module])
+		return ""
+	if not _is_valid_emulator_host(value):
+		push_error("Firebase: %s must be \"host:port\" without a scheme, for example \"10.0.2.2:9099\"; %s unavailable" % [setting, module])
+		return null
+	return value
+
+
+## FirebaseModuleNative::parse_emulator_host() repeats this rule.
+static func _is_valid_emulator_host(value: Variant) -> bool:
+	if not value is String:
+		return false
+	var colon: int = value.rfind(":")
+	var port: String = value.substr(colon + 1)
+	if colon <= 0 or value.left(colon).contains("/") or port.length() > 5:
+		return false
+	var number := port.to_int()
+	# Plain decimal 1..65535: no sign, leading zero or other characters.
+	return port == str(number) and number >= 1 and number <= 65535
 
 
 func _start_native_app() -> bool:

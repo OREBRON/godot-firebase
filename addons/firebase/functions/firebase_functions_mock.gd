@@ -16,6 +16,13 @@ const _INT64_LIMIT := 9223372036854775808.0
 
 ## Function name -> Callable(data) returning the result data.
 var handlers: Dictionary[String, Callable] = {}
+## Test-observable startup option; the mock never connects to an emulator.
+var emulator_host := ""
+
+
+func initialize(emulator_host: String = "") -> int:
+	self.emulator_host = emulator_host
+	return OK
 
 
 func call_function(name: String, data: Variant) -> int:

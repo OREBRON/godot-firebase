@@ -262,6 +262,18 @@ Dictionary to_snapshot(const DataSnapshot &p_snapshot, bool p_ordered = false) {
 	return snapshot;
 }
 
+// The database name the SDKs use for this App: the first label of its database URL,
+// or "<project_id>-default-rtdb" when the config has none.
+std::string database_namespace(const firebase::AppOptions &p_options) {
+	std::string url = p_options.database_url();
+	const size_t scheme = url.find("://");
+	if (scheme != std::string::npos) {
+		url.erase(0, scheme + 3);
+	}
+	const std::string name = url.substr(0, url.find_first_of(".:/?"));
+	return name.empty() ? std::string(p_options.project_id()) + "-default-rtdb" : name;
+}
+
 } // namespace
 
 // Emits value_changed for one listen_value() call. Nested to reach emit_deferred_to().
@@ -310,24 +322,36 @@ void FirebaseDatabaseNative::shutdown_all() {
 	configured_persistence = false;
 }
 
-godot::Error FirebaseDatabaseNative::initialize(bool p_persistence_enabled) {
+godot::Error FirebaseDatabaseNative::initialize(bool p_persistence_enabled, const String &p_emulator_host) {
 	if (db) {
 		return godot::ERR_ALREADY_IN_USE;
+	}
+	std::string emulator_host;
+	int emulator_port = 0;
+	if (!parse_emulator_host(p_emulator_host, emulator_host, emulator_port)) {
+		return godot::ERR_INVALID_PARAMETER;
 	}
 	firebase::App *app = FirebaseAppNative::get_app();
 	if (app == nullptr) {
 		return godot::ERR_UNCONFIGURED;
 	}
 	firebase::InitResult result = firebase::kInitResultSuccess;
-	db = firebase::database::Database::GetInstance(app, &result);
+	if (emulator_host.empty()) {
+		db = firebase::database::Database::GetInstance(app, &result);
+	} else {
+		// The C++ SDK has no UseEmulator; an emulator URL keeps the project's namespace.
+		const std::string url = "http://" + to_std(p_emulator_host) + "?ns=" + database_namespace(app->options());
+		db = firebase::database::Database::GetInstance(app, url.c_str(), &result);
+	}
 	if (db == nullptr || result != firebase::kInitResultSuccess) {
 		db = nullptr;
 		return godot::ERR_CANT_CREATE;
 	}
 	// Database is shared by all wrappers. Never repeat this SDK setting after
-	// another wrapper has created a reference. Core owns the App for this process.
-	if (configured_database == db) {
-		if (configured_persistence != p_persistence_enabled) {
+	// another wrapper has created a reference, nor switch to another instance.
+	// Core owns the App for this process.
+	if (configured_database != nullptr) {
+		if (configured_database != db || configured_persistence != p_persistence_enabled) {
 			db = nullptr;
 			return godot::ERR_ALREADY_IN_USE;
 		}
@@ -489,7 +513,7 @@ void FirebaseDatabaseNative::remove_listener(int64_t p_id) {
 }
 
 void FirebaseDatabaseNative::_bind_methods() {
-	godot::ClassDB::bind_method(D_METHOD("initialize", "persistence_enabled"), &FirebaseDatabaseNative::initialize, DEFVAL(false));
+	godot::ClassDB::bind_method(D_METHOD("initialize", "persistence_enabled", "emulator_host"), &FirebaseDatabaseNative::initialize, DEFVAL(false), DEFVAL(""));
 	godot::ClassDB::bind_method(D_METHOD("set_network_enabled", "enabled"), &FirebaseDatabaseNative::set_network_enabled);
 	godot::ClassDB::bind_method(D_METHOD("get_value", "path", "query"), &FirebaseDatabaseNative::get_value);
 	godot::ClassDB::bind_method(D_METHOD("set_value", "path", "value"), &FirebaseDatabaseNative::set_value);

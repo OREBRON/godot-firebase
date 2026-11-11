@@ -25,6 +25,13 @@ var _barriers: Dictionary[int, Array] = {}
 var _network_enabled := true
 var _auto_acknowledge := true
 var _user_id := ""
+## Test-observable startup option; the mock never connects to an emulator.
+var emulator_host := ""
+
+
+func initialize(emulator_host: String = "") -> int:
+	self.emulator_host = emulator_host
+	return OK
 
 
 func get_doc(path: String, source: String = "default") -> int:

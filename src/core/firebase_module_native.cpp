@@ -1,5 +1,7 @@
 #include "firebase_module_native.h"
 
+#include <cstdlib>
+
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/object.hpp>
 #include <godot_cpp/variant/callable_method_pointer.hpp>
@@ -39,6 +41,31 @@ void FirebaseModuleNative::emit_deferred_checked_to(uint64_t p_object_id, const 
 }
 
 bool FirebaseModuleNative::accepts_deferred_event([[maybe_unused]] const StringName &p_signal, [[maybe_unused]] int64_t p_generation) const {
+	return true;
+}
+
+bool FirebaseModuleNative::parse_emulator_host(const godot::String &p_value, std::string &r_host, int &r_port) {
+	r_host.clear();
+	r_port = 0;
+	const std::string value = to_std(p_value);
+	if (value.empty()) {
+		return true;
+	}
+	// The iOS SDKs stop the process on an empty host.
+	const size_t colon = value.rfind(':');
+	if (colon == std::string::npos || colon == 0 || value.find('/') < colon || value.find('\0') != std::string::npos) {
+		return false;
+	}
+	const std::string port = value.substr(colon + 1);
+	if (port.empty() || port.size() > 5 || port[0] == '0' || port.find_first_not_of("0123456789") != std::string::npos) {
+		return false;
+	}
+	const int number = std::atoi(port.c_str());
+	if (number > 65535) {
+		return false;
+	}
+	r_host = value.substr(0, colon);
+	r_port = number;
 	return true;
 }
 

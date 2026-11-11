@@ -146,6 +146,10 @@ Variant list_of(const Future<StorageListResult> &p_future) {
 
 namespace {
 std::unordered_set<FirebaseStorageNative *> active_modules;
+// Every wrapper shares one Storage; iOS stops the process when the emulator is
+// set after its first use.
+firebase::storage::Storage *configured_storage = nullptr;
+std::string configured_emulator;
 }
 
 FirebaseStorageNative::FirebaseStorageNative() {
@@ -165,11 +169,18 @@ void FirebaseStorageNative::shutdown_all() {
 		module->transfers.clear();
 		module->storage = nullptr;
 	}
+	configured_storage = nullptr;
+	configured_emulator.clear();
 }
 
-godot::Error FirebaseStorageNative::initialize() {
+godot::Error FirebaseStorageNative::initialize(const String &p_emulator_host) {
 	if (storage) {
 		return godot::ERR_ALREADY_IN_USE;
+	}
+	std::string emulator_host;
+	int emulator_port = 0;
+	if (!parse_emulator_host(p_emulator_host, emulator_host, emulator_port)) {
+		return godot::ERR_INVALID_PARAMETER;
 	}
 	firebase::App *app = FirebaseAppNative::get_app();
 	if (app == nullptr) {
@@ -181,6 +192,19 @@ godot::Error FirebaseStorageNative::initialize() {
 		storage = nullptr;
 		return godot::ERR_CANT_CREATE;
 	}
+	const std::string emulator = to_std(p_emulator_host);
+	if (configured_storage == storage) {
+		if (configured_emulator != emulator) {
+			storage = nullptr;
+			return godot::ERR_ALREADY_IN_USE;
+		}
+		return godot::OK;
+	}
+	if (!emulator_host.empty()) {
+		storage->UseEmulator(emulator_host.c_str(), emulator_port);
+	}
+	configured_storage = storage;
+	configured_emulator = emulator;
 	return godot::OK;
 }
 
@@ -333,7 +357,7 @@ int64_t FirebaseStorageNative::list_files(const String &p_path, int64_t p_max_re
 }
 
 void FirebaseStorageNative::_bind_methods() {
-	godot::ClassDB::bind_method(D_METHOD("initialize"), &FirebaseStorageNative::initialize);
+	godot::ClassDB::bind_method(D_METHOD("initialize", "emulator_host"), &FirebaseStorageNative::initialize, DEFVAL(""));
 	godot::ClassDB::bind_method(D_METHOD("upload_bytes", "path", "data", "content_type"), &FirebaseStorageNative::upload_bytes);
 	godot::ClassDB::bind_method(D_METHOD("upload_file", "path", "local_path", "content_type"), &FirebaseStorageNative::upload_file);
 	godot::ClassDB::bind_method(D_METHOD("download_bytes", "path", "max_size"), &FirebaseStorageNative::download_bytes);

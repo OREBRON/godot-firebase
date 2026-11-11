@@ -23,7 +23,8 @@ public:
 	// Registry calls this before deleting the shared Firebase App.
 	static void shutdown_all();
 
-	godot::Error initialize();
+	// A non-empty `p_emulator_host` ("host:port") uses the Cloud Storage emulator.
+	godot::Error initialize(const godot::String &p_emulator_host = "");
 	int64_t upload_bytes(const godot::String &p_path, const godot::PackedByteArray &p_data, const godot::String &p_content_type);
 	int64_t upload_file(const godot::String &p_path, const godot::String &p_local_path, const godot::String &p_content_type);
 	int64_t download_bytes(const godot::String &p_path, int64_t p_max_size);

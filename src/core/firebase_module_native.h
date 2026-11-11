@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <string>
 
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -29,6 +30,9 @@ protected:
 	// Listener generation is checked on delivery, so stop/restart cancels already queued events.
 	static void emit_deferred_checked_to(uint64_t p_object_id, const godot::StringName &p_signal, const godot::Array &p_args, int64_t p_generation);
 	virtual bool accepts_deferred_event(const godot::StringName &p_signal, int64_t p_generation) const;
+	// Splits the "host:port" of project setting firebase/<module>/emulator_host with the
+	// rule of Firebase._is_valid_emulator_host(); "" gives an empty host. False when invalid.
+	static bool parse_emulator_host(const godot::String &p_value, std::string &r_host, int &r_port);
 
 
 private:

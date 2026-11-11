@@ -322,6 +322,10 @@ String add_batch_op(firebase::firestore::Firestore *p_db, const Variant &p_op, W
 
 namespace {
 std::unordered_set<FirebaseFirestoreNative *> active_modules;
+// Every wrapper shares one Firestore, whose settings the SDK accepts only before
+// its first use; changing them later stops the process.
+firebase::firestore::Firestore *configured_firestore = nullptr;
+std::string configured_emulator;
 }
 
 FirebaseFirestoreNative::FirebaseFirestoreNative() {
@@ -339,6 +343,8 @@ void FirebaseFirestoreNative::shutdown_all() {
 		module->remove_all_listeners();
 		module->db = nullptr;
 	}
+	configured_firestore = nullptr;
+	configured_emulator.clear();
 }
 
 void FirebaseFirestoreNative::remove_all_listeners() {
@@ -348,9 +354,14 @@ void FirebaseFirestoreNative::remove_all_listeners() {
 	listeners.clear();
 }
 
-godot::Error FirebaseFirestoreNative::initialize() {
+godot::Error FirebaseFirestoreNative::initialize(const String &p_emulator_host) {
 	if (db) {
 		return godot::ERR_ALREADY_IN_USE;
+	}
+	std::string emulator_host;
+	int emulator_port = 0;
+	if (!parse_emulator_host(p_emulator_host, emulator_host, emulator_port)) {
+		return godot::ERR_INVALID_PARAMETER;
 	}
 	firebase::App *app = FirebaseAppNative::get_app();
 	if (app == nullptr) {
@@ -362,6 +373,22 @@ godot::Error FirebaseFirestoreNative::initialize() {
 		db = nullptr;
 		return godot::ERR_CANT_CREATE;
 	}
+	const std::string emulator = to_std(p_emulator_host);
+	if (configured_firestore == db) {
+		if (configured_emulator != emulator) {
+			db = nullptr;
+			return godot::ERR_ALREADY_IN_USE;
+		}
+		return godot::OK;
+	}
+	if (!emulator.empty()) {
+		firebase::firestore::Settings settings = db->settings();
+		settings.set_host(emulator);
+		settings.set_ssl_enabled(false);
+		db->set_settings(settings);
+	}
+	configured_firestore = db;
+	configured_emulator = emulator;
 	return godot::OK;
 }
 
@@ -551,7 +578,7 @@ void FirebaseFirestoreNative::remove_listener(int64_t p_id) {
 }
 
 void FirebaseFirestoreNative::_bind_methods() {
-	godot::ClassDB::bind_method(D_METHOD("initialize"), &FirebaseFirestoreNative::initialize);
+	godot::ClassDB::bind_method(D_METHOD("initialize", "emulator_host"), &FirebaseFirestoreNative::initialize, DEFVAL(""));
 	godot::ClassDB::bind_method(D_METHOD("get_doc", "path", "source"), &FirebaseFirestoreNative::get_doc, DEFVAL("default"));
 	godot::ClassDB::bind_method(D_METHOD("set_doc", "path", "data", "merge"), &FirebaseFirestoreNative::set_doc);
 	godot::ClassDB::bind_method(D_METHOD("update_doc", "path", "data"), &FirebaseFirestoreNative::update_doc);
