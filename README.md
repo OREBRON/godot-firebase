@@ -8,7 +8,7 @@ ayrılmıştır; mevcut native build seçilen modülleri tek kütüphaneye bağl
 |---|---|---|---|
 | core (zorunlu) | `core/` | `FirebaseAppNative` | App başlatma, görev ve sonuç tipleri |
 | auth | `auth/` | `FirebaseAuthNative` | Anonim, Google, Play Games, Game Center, Apple, custom token, e-posta/parola, hesap bağlama, yeniden doğrulama, sağlayıcı kaldırma, profil, silme |
-| firestore | `firestore/` | `FirebaseFirestoreNative` | Doküman, sorgu, batch, dinleyici, cache/pending-write gözlemi |
+| firestore | `firestore/` | `FirebaseFirestoreNative` | Doküman, sorgu (sayfalama imleci, count), batch, doküman/sorgu dinleyicisi, dizi union/remove, cache/pending-write gözlemi |
 | storage | `storage/` | `FirebaseStorageNative` | Dosya yükleme/indirme (bayt veya yerel dosya; ilerleme, iptal), klasör listeleme, indirme URL'si, metadata okuma/güncelleme, silme |
 | database | `database/` | `FirebaseDatabaseNative` | Realtime Database, başlangıç persistence seçimi, bağlantı/presence |
 | functions | `functions/` | `FirebaseFunctionsNative` | Callable HTTPS fonksiyon çağrısı |
@@ -356,6 +356,16 @@ var top: FirebaseResult = await Firebase.firestore.query("scores", [["score", ">
 var id: int = Firebase.firestore.listen_doc(path, func(r: FirebaseResult): print(r.value.data if r.ok else r.error_message))
 Firebase.firestore.remove_listener(id)
 
+# 2. sayfa 1. sayfayı yeniden okumaz: son dokümanın order_by değerlerinden sonra başlar.
+var by_score := [["score", "desc"], ["__name__", "desc"]]
+var scores: Array = (await Firebase.firestore.query("scores", [], by_score, 10).wait()).value
+var last: Dictionary = scores[-1]
+scores = (await Firebase.firestore.query("scores", [], by_score, 10, "default", {start_after = [last.data.score, last.id]}).wait()).value
+var players: int = (await Firebase.firestore.count("scores", [["score", ">=", 100]]).wait()).value
+await Firebase.firestore.update_doc(path, {"badges": FirebaseValue.array_union(["gold"])}).wait()
+var chat: int = Firebase.firestore.listen_query("rooms/r1/chat", func(r: FirebaseResult): print(r.value.documents if r.ok else r.error_message), [], [["at", "desc"]], 50)
+Firebase.firestore.remove_listener(chat)
+
 var file := "users/%s/avatar.png" % uid
 await Firebase.storage.upload_bytes(file, png_bytes, "image/png").wait()
 var bytes: PackedByteArray = (await Firebase.storage.download_bytes(file).wait()).value
@@ -388,14 +398,18 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   `remove_listener()` çağrılmadan serbest bırakılırsa dinleyici bir sonraki
   olayında kaldırılır; o olaya kadar abone kalır.
 - Firestore özel değerleri: `FirebaseValue.timestamp()`, `geo_point()`,
-  `document_reference()`, `server_timestamp()`, `increment()`, `delete_field()`. Okunan
+  `document_reference()`, `server_timestamp()`, `increment()`, `delete_field()`,
+  `array_union(elements)`, `array_remove(elements)`. Okunan
   değerler aynı sözlüklerle gelir ve geri yazılabilir: zaman damgası
   `{__firebase__ = "timestamp", seconds, nanos}`, GeoPoint
   `{__firebase__ = "geo_point", latitude, longitude}`, doküman referansı
   `{__firebase__ = "reference", path}` (`path` aynı veritabanındaki doküman yolu).
   Zaman damgası 0001-01-01 ile 9999-12-31 arasında, enlem -90..90, boylam
-  -180..180 olmalı. `server_timestamp()`,
-  `increment()` ve `delete_field()` dizi içinde ve sorgu değerinde kullanılamaz.
+  -180..180 olmalı. `server_timestamp()`, `increment()`, `delete_field()`,
+  `array_union()` ve `array_remove()` dizi içinde ve sorgu değerinde kullanılamaz.
+  `array_union()` dizide olmayan öğeleri sona ekler, `array_remove()` her öğenin bütün
+  kopyalarını siler; alan yoksa ya da dizi değilse sonuç sırasıyla öğeler ve `[]` olur.
+  Öğeler dizi veya özel yazma değeri olamaz; eşitlik değere göredir (`1 == 1.0`).
   `__firebase__` anahtarlı her sözlük özel değer sayılır: Database, Functions
   veya oyuncudan gelen bir sözlüğü kontrol etmeden `set_doc()`/`update_doc()`'a
   verirsen `{__firebase__ = "delete"}` alanı siler, `"increment"` sayıyı artırır.
@@ -404,6 +418,20 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   (`"profile.level"`): boş parça ve `~ * / [ ]` içeremez. Yazılan alan adları
   (ve `update_doc()` yol parçaları) `__` ile hem başlayıp hem bitemez (`__x__`). `limit` en fazla
   2147483647; `limit <= 0` limitsiz demek.
+- Firestore filtre operatörleri: `==`, `!=`, `<`, `<=`, `>`, `>=`, `array-contains`,
+  `array-contains-any`, `in`, `not-in`. `in` ve `array-contains-any` 1-30, `not-in` 1-10
+  değerli dizi alır; dizideki değerler dizi olamaz. Sorguda en fazla bir `!=` ve bir `not-in`
+  olur; `not-in`, `!=`, `in` veya `array-contains-any` ile birleşmez. `not-in` null değeri ve
+  alanı olmayan dokümanı eşleştirmez. `"__name__"` alanı doküman kimliğidir.
+- Sayfalama imleci `query()`/`query_snapshot()` (`source`'tan sonra) ve `listen_query()`
+  argümanıdır: `{start_at | start_after, end_at | end_before}`, her biri `order_by`'ın baştaki
+  alanları için değer dizisi (`"__name__"` sırasına doküman kimliği). `*_at` o konumu dahil eder.
+  Eşit değerlerde doküman atlamamak için `order_by` sonuna `["__name__", yön]` ekle.
+- `count(collection, filters)` eşleşen dokümanları indirmeden sunucuda sayar; ağ ister,
+  sunucuya ulaşmamış yerel yazmaları saymaz.
+- `listen_query(collection, callback, filters, order_by, limit, cursor, include_metadata_changes)`
+  her sonuçta `query_snapshot()` biçimini (`{documents, metadata}`) verir: ilk sonuç hemen,
+  sonrakiler sonuçtaki dokümanlar değişince gelir. Firestore transaction'ı yoktur.
 - Firestore tipleri: null, bool, int, float, String, PackedByteArray, Array
   (iç içe dizi yok), Dictionary (String anahtarlı) ve yukarıdaki özel değerler.
 - Database ve Functions tipleri: null, bool, int, sonlu float (NaN/Inf yok), String, Array

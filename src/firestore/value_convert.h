@@ -1,6 +1,9 @@
 #pragma once
 
+#include <vector>
+
 #include <firebase/firestore.h>
+#include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/variant.hpp>
@@ -19,8 +22,10 @@ namespace godot_firebase {
 godot::String to_map_field_value(firebase::firestore::Firestore *p_db, const godot::Dictionary &p_data, bool p_allow_delete, firebase::firestore::MapFieldValue &r_out);
 // Update data: keys are field paths, delete_field() is allowed.
 godot::String to_update_field_value(firebase::firestore::Firestore *p_db, const godot::Dictionary &p_data, firebase::firestore::MapFieldValue &r_out);
-// A filter value: write-only special values are rejected.
+// A filter or cursor value: write-only special values are rejected.
 godot::String to_query_value(firebase::firestore::Firestore *p_db, const godot::Variant &p_value, firebase::firestore::FieldValue &r_out);
+// The list of an "in", "not-in" or "array-contains-any" filter: items cannot be arrays.
+godot::String to_query_values(firebase::firestore::Firestore *p_db, const godot::Array &p_items, std::vector<firebase::firestore::FieldValue> &r_out);
 
 // {id, path, exists, data, metadata}
 godot::Dictionary to_snapshot(const firebase::firestore::DocumentSnapshot &p_snapshot);

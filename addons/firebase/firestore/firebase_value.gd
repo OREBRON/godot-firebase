@@ -12,7 +12,12 @@ const INCREMENT := "increment"
 const DELETE := "delete"
 const GEO_POINT := "geo_point"
 const REFERENCE := "reference"
+const ARRAY_UNION := "array_union"
+const ARRAY_REMOVE := "array_remove"
+## Filter operators whose value is a list of alternatives.
+const LIST_OPS: Array[String] = ["in", "not-in", "array-contains-any"]
 const MAX_IN_VALUES := 30
+const MAX_NOT_IN_VALUES := 10
 # Firestore maps/arrays add at most 20 field levels (document root is level 0).
 const MAX_FIELD_DEPTH := 20
 # firebase::Timestamp only holds 0001-01-01 .. 9999-12-31.
@@ -41,6 +46,16 @@ static func increment(by: Variant) -> Dictionary:
 
 static func delete_field() -> Dictionary:
 	return {TAG: DELETE}
+
+
+## Appends each element the array field lacks; a missing or non-array field becomes the elements.
+static func array_union(elements: Array) -> Dictionary:
+	return {TAG: ARRAY_UNION, "elements": elements}
+
+
+## Removes every copy of each element; a missing or non-array field becomes [].
+static func array_remove(elements: Array) -> Dictionary:
+	return {TAG: ARRAY_REMOVE, "elements": elements}
 
 
 static func geo_point(latitude: float, longitude: float) -> Dictionary:
@@ -131,9 +146,10 @@ static func is_reserved_field_name(name: String, path := false) -> bool:
 
 
 static func validate_filter_value(op: String, value: Variant) -> String:
-	if op == "in":
-		if not value is Array or value.is_empty() or value.size() > MAX_IN_VALUES:
-			return "'in' needs an array with 1-%d values" % MAX_IN_VALUES
+	if LIST_OPS.has(op):
+		var max_values := MAX_NOT_IN_VALUES if op == "not-in" else MAX_IN_VALUES
+		if not value is Array or value.is_empty() or value.size() > max_values:
+			return "'%s' needs an array with 1-%d values" % [op, max_values]
 		for item in value:
 			var item_reason := _validate_structure(item, [], 1)
 			if item_reason.is_empty():
@@ -152,7 +168,9 @@ static func _validate_structure(value: Variant, ancestors: Array, depth: int, do
 			return "data exceeds 20 map/array field levels"
 		return ""
 	if value is Dictionary and value.has(TAG) and not document_root:
-		return ""
+		# Array transform elements sit at the level of the field they change.
+		var transform: bool = tag_of(value) in [ARRAY_UNION, ARRAY_REMOVE] and value.get("elements") is Array
+		return _validate_structure(value.elements, ancestors, depth) if transform else ""
 	if depth > MAX_FIELD_DEPTH:
 		return "data exceeds 20 map/array field levels"
 	for ancestor in ancestors:
@@ -216,6 +234,13 @@ static func _validate_dictionary(value: Dictionary, sentinel_reason: String) -> 
 			return "" if value.get("by") is int or value.get("by") is float else "increment() needs a number"
 		DELETE:
 			return "delete_field() " + (sentinel_reason if not sentinel_reason.is_empty() else "must be a top-level field")
+		ARRAY_UNION, ARRAY_REMOVE:
+			if not sentinel_reason.is_empty():
+				return "%s() %s" % [tag_of(value), sentinel_reason]
+			if not value.get("elements") is Array:
+				return "%s() needs an Array of elements" % tag_of(value)
+			# The elements are array items: no arrays and no special write values.
+			return _validate_value(value.elements, false, IN_ARRAY)
 	return "unknown %s tag: %s" % [TAG, tag_of(value)]
 
 

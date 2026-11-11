@@ -30,6 +30,8 @@ const char *const kIncrement = "increment";
 const char *const kDelete = "delete";
 const char *const kGeoPoint = "geo_point";
 const char *const kReference = "reference";
+const char *const kArrayUnion = "array_union";
+const char *const kArrayRemove = "array_remove";
 
 // Reasons server_timestamp(), increment() and delete_field() are not allowed.
 const char *const kInArray = "cannot be inside an array";
@@ -46,6 +48,11 @@ bool is_string(const Variant &p_value) {
 
 bool is_number(const Variant &p_value) {
 	return p_value.get_type() == Variant::INT || p_value.get_type() == Variant::FLOAT;
+}
+
+bool is_array_transform(const Dictionary &p_value) {
+	const Variant tag = p_value.get(kTag, Variant());
+	return is_string(tag) && (String(tag) == kArrayUnion || String(tag) == kArrayRemove);
 }
 
 bool is_reserved_segment(const String &p_segment) {
@@ -76,7 +83,9 @@ String validate_structure(const Variant &p_value, std::vector<Variant> &p_ancest
 		return type >= Variant::PACKED_INT32_ARRAY && type <= Variant::PACKED_STRING_ARRAY && p_depth > 20 ? String("data exceeds 20 map/array field levels") : String();
 	}
 	if (type == Variant::DICTIONARY && Dictionary(p_value).has(kTag) && !p_document_root) {
-		return String();
+		// Array transform elements sit at the level of the field they change.
+		const Variant elements = Dictionary(p_value).get("elements", Variant());
+		return is_array_transform(p_value) && elements.get_type() == Variant::ARRAY ? validate_structure(elements, p_ancestors, p_depth) : String();
 	}
 	if (p_depth > 20) {
 		return "data exceeds 20 map/array field levels";
@@ -113,19 +122,41 @@ String validate_structure(const Variant &p_value, std::vector<Variant> &p_ancest
 // `p_sentinel_reason` is null when server_timestamp() and increment() are allowed.
 String convert(Firestore *p_db, const Variant &p_value, bool p_in_array, const char *p_sentinel_reason, FieldValue &r_out);
 
-String convert_array(Firestore *p_db, const Array &p_items, const char *p_sentinel_reason, FieldValue &r_out) {
-	std::vector<FieldValue> values;
-	values.reserve(static_cast<size_t>(p_items.size()));
+// Array items: no nested arrays, and no sentinels.
+String convert_items(Firestore *p_db, const Array &p_items, const char *p_sentinel_reason, std::vector<FieldValue> &r_out) {
+	r_out.reserve(static_cast<size_t>(p_items.size()));
 	for (int64_t i = 0; i < p_items.size(); i++) {
 		FieldValue item;
 		const String reason = convert(p_db, p_items[i], true, p_sentinel_reason ? p_sentinel_reason : kInArray, item);
 		if (!reason.is_empty()) {
 			return reason;
 		}
-		values.push_back(item);
+		r_out.push_back(item);
 	}
-	r_out = FieldValue::Array(std::move(values));
 	return String();
+}
+
+String convert_array(Firestore *p_db, const Array &p_items, const char *p_sentinel_reason, FieldValue &r_out) {
+	std::vector<FieldValue> values;
+	const String reason = convert_items(p_db, p_items, p_sentinel_reason, values);
+	if (reason.is_empty()) {
+		r_out = FieldValue::Array(std::move(values));
+	}
+	return reason;
+}
+
+// Elements follow the array item rules; the SDK aborts on a sentinel or nested array among them.
+String convert_array_transform(Firestore *p_db, const Dictionary &p_value, const String &p_tag, FieldValue &r_out) {
+	const Variant elements = p_value.get("elements", Variant());
+	if (elements.get_type() != Variant::ARRAY) {
+		return p_tag + String(" needs an Array of elements");
+	}
+	std::vector<FieldValue> values;
+	const String reason = convert_items(p_db, elements, nullptr, values);
+	if (reason.is_empty()) {
+		r_out = p_tag == kArrayUnion ? FieldValue::ArrayUnion(std::move(values)) : FieldValue::ArrayRemove(std::move(values));
+	}
+	return reason;
 }
 
 String convert_timestamp(const Dictionary &p_value, FieldValue &r_out) {
@@ -180,8 +211,11 @@ String convert_tagged(Firestore *p_db, const Dictionary &p_value, const char *p_
 		r_out = FieldValue::Reference(p_db->Document(to_std(path)));
 		return String();
 	}
-	if (p_sentinel_reason && (tag == kServerTimestamp || tag == kIncrement || tag == kDelete)) {
+	if (p_sentinel_reason && (tag == kServerTimestamp || tag == kIncrement || tag == kDelete || is_array_transform(p_value))) {
 		return tag + String(" ") + p_sentinel_reason;
+	}
+	if (is_array_transform(p_value)) {
+		return convert_array_transform(p_db, p_value, tag, r_out);
 	}
 	if (tag == kServerTimestamp) {
 		r_out = FieldValue::ServerTimestamp();
@@ -391,6 +425,17 @@ String to_query_value(Firestore *p_db, const Variant &p_value, FieldValue &r_out
 	std::vector<Variant> ancestors;
 	const String reason = validate_structure(p_value, ancestors, 1);
 	return reason.is_empty() ? convert(p_db, p_value, false, kInQuery, r_out) : reason;
+}
+
+String to_query_values(Firestore *p_db, const Array &p_items, std::vector<FieldValue> &r_out) {
+	for (int64_t i = 0; i < p_items.size(); i++) {
+		std::vector<Variant> ancestors;
+		const String reason = validate_structure(p_items[i], ancestors, 1);
+		if (!reason.is_empty()) {
+			return reason;
+		}
+	}
+	return convert_items(p_db, p_items, kInQuery, r_out);
 }
 
 Dictionary to_snapshot(const DocumentSnapshot &p_snapshot) {

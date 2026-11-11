@@ -2,16 +2,17 @@ class_name FirebaseFirestoreMock
 extends FirebaseMockModule
 ## In-memory FirebaseFirestoreNative. Nothing is persisted.
 ## Queries follow the SDK's local matching and ordering (firebase-android-sdk
-## core/Query.java, core/FieldFilter.java and model/Values.kt).
+## core/Query.java, core/FieldFilter.java, core/Bound.java and model/Values.kt).
 
 signal document_changed(listener_id: int, ok: bool, snapshot: Dictionary, error_code: int, error_message: String)
+signal query_changed(listener_id: int, ok: bool, snapshot: Dictionary, error_code: int, error_message: String)
 
 ## Firestore error code for a missing document on update.
 const NOT_FOUND := 5
 ## Values.typeOrder() ranks of the value types this addon reads and writes.
 enum TypeOrder { NULL_VALUE = 0, BOOLEAN = 2, NAN_VALUE = 3, NUMBER = 4, TIMESTAMP = 5, STRING = 8, BYTES = 9, REFERENCE = 11, GEO_POINT = 13, ARRAY = 14, MAP = 16 }
 const KEY_FIELD := "__name__"
-const INEQUALITY_OPS: Array[String] = ["<", "<=", ">", ">=", "!="]
+const INEQUALITY_OPS: Array[String] = ["<", "<=", ">", ">=", "!=", "not-in"]
 # 2^63: the smallest double above every int64 value.
 const INT64_BOUND := 9223372036854775808.0
 
@@ -55,37 +56,52 @@ func commit_batch(ops: Array) -> int:
 	return _commit(ops)
 
 
-func run_query(collection_path: String, filters: Array, order_by: Array, limit: int, source: String = "default") -> int:
-	return _query(collection_path, filters, order_by, limit, source, false)
+func run_query(collection_path: String, filters: Array, order_by: Array, limit: int, source: String = "default", cursor: Dictionary = {}) -> int:
+	return _query(collection_path, filters, order_by, limit, source, cursor, false)
 
 
-func run_query_snapshot(collection_path: String, filters: Array, order_by: Array, limit: int, source: String = "default") -> int:
-	return _query(collection_path, filters, order_by, limit, source, true)
+func run_query_snapshot(collection_path: String, filters: Array, order_by: Array, limit: int, source: String = "default", cursor: Dictionary = {}) -> int:
+	return _query(collection_path, filters, order_by, limit, source, cursor, true)
 
 
-func _query(collection_path: String, filters: Array, order_by: Array, limit: int, source: String, with_metadata: bool) -> int:
+## Counts on the server, like AggregateSource::kServer: acknowledged writes only.
+func run_count(collection_path: String, filters: Array) -> int:
 	var id := _take_id()
-	if _fail_if_requested(id) or _fail_source(id, source):
+	if _fail_if_requested(id) or _fail_source(id, "server") or _fail_query(id, collection_path, filters):
 		return id
-	if not FirebaseValue.is_collection_path(collection_path) or limit > FirebaseFirestore.MAX_LIMIT:
-		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "invalid collection path or query limit")
+	var ordering := _normalized_order_by(filters, [])
+	var matching := _server_documents.keys().filter(func(path: String): return path.get_base_dir() == collection_path and _matches(path, _server_documents[path], filters, ordering, {}))
+	_finish(id, matching.size())
+	return id
+
+
+func _query(collection_path: String, filters: Array, order_by: Array, limit: int, source: String, cursor: Dictionary, with_metadata: bool) -> int:
+	var id := _take_id()
+	if _fail_if_requested(id) or _fail_source(id, source) or _fail_query(id, collection_path, filters, order_by, limit, cursor):
 		return id
-	var reason := FirebaseFirestore._validate_query(filters, order_by)
+	var result := _query_result(collection_path, filters, order_by, limit, cursor, source == "cache" or not _network_enabled)
+	_finish(id, result if with_metadata else result.documents)
+	return id
+
+
+func _fail_query(id: int, collection_path: String, filters: Array, order_by: Array = [], limit: int = 0, cursor: Dictionary = {}) -> bool:
+	var reason := FirebaseFirestore._validate_query(collection_path, filters, order_by, limit, cursor)
 	if not reason.is_empty():
 		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, reason)
-		return id
-	var from_cache := source == "cache" or not _network_enabled
+	return not reason.is_empty()
+
+
+## {documents, metadata} of a valid query over the local documents.
+func _query_result(collection_path: String, filters: Array, order_by: Array, limit: int, cursor: Dictionary, from_cache: bool) -> Dictionary:
 	var ordering := _normalized_order_by(filters, order_by)
 	var matches: Array = []
 	for path in documents:
-		if path.get_base_dir() == collection_path and _matches(path, documents[path], filters, ordering):
+		if path.get_base_dir() == collection_path and _matches(path, documents[path], filters, ordering, cursor):
 			matches.append(_snapshot(path, from_cache))
 	matches.sort_custom(func(a, b): return _compare_documents(a, b, ordering) < 0)
 	if limit > 0:
 		matches = matches.slice(0, limit)
-	var metadata := {"is_from_cache": from_cache, "has_pending_writes": matches.any(func(doc): return doc.metadata.has_pending_writes)}
-	_finish(id, {"documents": matches, "metadata": metadata} if with_metadata else matches)
-	return id
+	return {"documents": matches, "metadata": {"is_from_cache": from_cache, "has_pending_writes": matches.any(func(doc): return doc.metadata.has_pending_writes)}}
 
 
 func _fail_source(id: int, source: String) -> bool:
@@ -99,10 +115,26 @@ func _fail_source(id: int, source: String) -> bool:
 
 
 func listen_doc(path: String, include_metadata_changes: bool = false) -> int:
+	return _listen(document_changed, include_metadata_changes, func(from_cache: bool) -> Dictionary: return _snapshot(path, from_cache))
+
+
+## Returns 0 for an invalid query, like the native backend.
+func listen_query(collection_path: String, filters: Array, order_by: Array, limit: int, cursor: Dictionary = {}, include_metadata_changes: bool = false) -> int:
+	if not FirebaseFirestore._validate_query(collection_path, filters, order_by, limit, cursor).is_empty():
+		return 0
+	# The SDK copies the query when the listener starts.
+	filters = filters.duplicate(true)
+	order_by = order_by.duplicate(true)
+	cursor = cursor.duplicate(true)
+	return _listen(query_changed, include_metadata_changes, func(from_cache: bool) -> Dictionary: return _query_result(collection_path, filters, order_by, limit, cursor, from_cache))
+
+
+## `read(from_cache)` returns the listener's current result.
+func _listen(changed: Signal, include_metadata_changes: bool, read: Callable) -> int:
 	var id := _take_id()
-	if _fail_listener_if_requested(document_changed, id):
+	if _fail_listener_if_requested(changed, id):
 		return id
-	_listeners[id] = {"path": path, "include_metadata_changes": include_metadata_changes, "last": {}}
+	_listeners[id] = {"changed": changed, "read": read, "include_metadata_changes": include_metadata_changes, "last": {}}
 	_notify(id)
 	return id
 
@@ -113,8 +145,7 @@ func set_network_enabled(enabled: bool) -> int:
 		return id
 	if _network_enabled != enabled:
 		_network_enabled = enabled
-		for listener_id in _listeners:
-			_notify(listener_id)
+		_notify_all()
 	_finish(id)
 	if enabled and _auto_acknowledge:
 		acknowledge_pending_writes.call_deferred()
@@ -152,9 +183,7 @@ func acknowledge_pending_writes(count: int = -1) -> void:
 				_server_documents[path] = write.values[path].duplicate(true)
 		_finish(write.id)
 		acknowledged += 1
-		for listener_id in _listeners:
-			if write.values.has(_listeners[listener_id].path):
-				_notify(listener_id)
+		_notify_all()
 	_finish_barriers()
 
 
@@ -174,8 +203,7 @@ func simulate_user_change(user_id: String) -> void:
 					documents.erase(path)
 				else:
 					documents[path] = write.values[path].duplicate(true)
-	for listener_id in _listeners:
-		_notify(listener_id)
+	_notify_all()
 	if _network_enabled and _auto_acknowledge:
 		acknowledge_pending_writes.call_deferred()
 
@@ -211,9 +239,7 @@ func _commit(ops: Array) -> int:
 	for path in values:
 		_cache_known[path] = true
 	_pending_writes.append({"id": id, "user_id": _user_id, "values": values})
-	for listener_id in _listeners:
-		if values.has(_listeners[listener_id].path):
-			_notify(listener_id)
+	_notify_all()
 	if _network_enabled and _auto_acknowledge:
 		acknowledge_pending_writes.call_deferred()
 	return id
@@ -257,6 +283,16 @@ func _write_field(parent: Dictionary, field: String, value: Variant, merge_maps:
 			parent[field] = FirebaseValue.timestamp(Time.get_unix_time_from_system())
 		FirebaseValue.INCREMENT:
 			parent[field] = (previous if previous is int or previous is float else 0) + value.by
+		# ArrayTransformOperation: a missing or non-array previous value counts as [].
+		FirebaseValue.ARRAY_UNION:
+			var union: Array = previous.duplicate(true) if previous is Array else []
+			for element in value.elements:
+				if not _contains(union, element):
+					union.append(_copy(element))
+			parent[field] = union
+		FirebaseValue.ARRAY_REMOVE:
+			var kept: Array = previous if previous is Array else []
+			parent[field] = kept.filter(func(item): return not _contains(value.elements, item)).map(_copy)
 		"":
 			if value is Dictionary:
 				var nested: Dictionary = parent[field] if merge_maps and parent.get(field) is Dictionary else {}
@@ -318,27 +354,62 @@ func _normalized_order_by(filters: Array, order_by: Array) -> Array:
 	return ordering
 
 
-## Query.matches(): every ordered field exists (null counts) and every filter matches.
-func _matches(path: String, data: Dictionary, filters: Array, ordering: Array) -> bool:
+## Query.matches(): every ordered field exists (null counts), every filter matches
+## and the document lies within the cursor.
+func _matches(path: String, data: Dictionary, filters: Array, ordering: Array, cursor: Dictionary) -> bool:
 	for order in ordering:
 		if not _field(path, data, order[0]).found:
 			return false
 	for filter in filters:
 		if not _matches_filter(_field(path, data, filter[0]), String(filter[1]), filter[2]):
 			return false
+	return _within_cursor(path, data, ordering, cursor)
+
+
+## Bound.sortsBeforeDocument() and sortsAfterDocument(): *_at includes the position.
+func _within_cursor(path: String, data: Dictionary, ordering: Array, cursor: Dictionary) -> bool:
+	for key in cursor:
+		var comparison := _compare_to_position(path, data, ordering, cursor[key])
+		var inside: bool
+		match String(key):
+			"start_at": inside = comparison >= 0
+			"start_after": inside = comparison > 0
+			"end_at": inside = comparison <= 0
+			_: inside = comparison < 0
+		if not inside:
+			return false
 	return true
 
 
-## FieldFilter.matches() with the ArrayContainsFilter and InFilter overrides.
+## Compares a document with cursor values for the leading order fields, in query order.
+func _compare_to_position(path: String, data: Dictionary, ordering: Array, position: Array) -> int:
+	for index in position.size():
+		var result := _compare(_field(path, data, ordering[index][0]).value, position[index])
+		if result != 0:
+			return result if ordering[index][1] == "asc" else -result
+	return 0
+
+
+## Values.contains(), with the value equality this mock uses for "in".
+func _contains(values: Array, value: Variant) -> bool:
+	return values.any(func(item): return _compare(item, value) == 0)
+
+
+## FieldFilter.matches() with the ArrayContains(Any)Filter and (Not)InFilter overrides.
 func _matches_filter(field: Dictionary, op: String, expected: Variant) -> bool:
 	if not field.found:
 		return false
 	var value: Variant = field.value
 	match op:
 		"array-contains":
-			return _type_order(value) == TypeOrder.ARRAY and Array(value).any(func(item): return _compare(item, expected) == 0)
+			return _type_order(value) == TypeOrder.ARRAY and _contains(Array(value), expected)
+		"array-contains-any":
+			return _type_order(value) == TypeOrder.ARRAY and Array(value).any(func(item): return _contains(expected, item))
 		"in":
-			return expected.any(func(item): return _compare(value, item) == 0)
+			return _contains(expected, value)
+		"not-in":
+			# Neither a stored null nor a null in the list ever matches.
+			return value != null and not expected.has(null) and not _contains(expected, value)
 		"!=":
 			# Types need not match, but a stored null never matches.
 			return value != null and _compare(value, expected) != 0
@@ -464,19 +535,29 @@ func _compare_maps(a: Dictionary, b: Dictionary) -> int:
 	return signi(a_keys.size() - b_keys.size())
 
 
+func _notify_all() -> void:
+	for listener_id in _listeners:
+		_notify(listener_id)
+
+
+## Unchanged results are not sent again; metadata-only changes only with include_metadata_changes.
 func _notify(listener_id: int) -> void:
-	if not _listeners.has(listener_id):
-		return
 	var listener: Dictionary = _listeners[listener_id]
-	var snapshot := _snapshot(listener.path, not _network_enabled)
+	var snapshot: Dictionary = listener.read.call(not _network_enabled)
 	var previous: Dictionary = listener.last
 	listener.last = snapshot
-	if not previous.is_empty() and previous.exists == snapshot.exists and previous.data == snapshot.data:
-		if not listener.include_metadata_changes or previous.metadata == snapshot.metadata:
+	if not previous.is_empty() and _without_metadata(previous) == _without_metadata(snapshot):
+		if not listener.include_metadata_changes or previous == snapshot:
 			return
 	_deliver_snapshot.call_deferred(listener_id, snapshot)
 
 
+static func _without_metadata(snapshot: Dictionary) -> Array:
+	if snapshot.has("documents"):
+		return snapshot.documents.map(func(doc): return [doc.path, doc.data])
+	return [snapshot.exists, snapshot.data]
+
+
 func _deliver_snapshot(listener_id: int, snapshot: Dictionary) -> void:
 	if _listeners.has(listener_id):
-		document_changed.emit(listener_id, true, snapshot, 0, "")
+		_listeners[listener_id].changed.emit(listener_id, true, snapshot, 0, "")
