@@ -361,6 +361,8 @@ await Firebase.database.set_value("rooms/r1/players/%s" % uid, {"ready": true, "
 var key: String = (await Firebase.database.push_value("rooms/r1/chat", {"text": "selam"}).wait()).value
 var room: int = Firebase.database.listen_value("rooms/r1", func(r: FirebaseResult): print(r.value.value if r.ok else r.error_message))
 Firebase.database.remove_listener(room)
+await Firebase.database.set_value("rooms/r1/visits", FirebaseDatabase.increment(1)).wait()
+var leaders: Dictionary = (await Firebase.database.get_value("leaderboard", {order_by = "score", limit_to_last = 10}).wait()).value
 
 var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyReward", {"day": 3}).wait()
 ```
@@ -393,7 +395,14 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 - Database ve Functions tipleri: null, bool, int, sonlu float (NaN/Inf yok), String, Array
   (packed diziler dahil), Dictionary (String anahtarlı). Database anahtarları
   `. # $ [ ] /` içeremez; `FirebaseDatabase.SERVER_TIMESTAMP` sunucu zamanını
-  Unix milisaniye olarak yazar.
+  Unix milisaniye olarak yazar. `FirebaseDatabase.increment(by)` sayıyı sunucuda
+  atomik artırır; değer yoksa ya da sayı değilse `by` olur.
+- Database `get_value(path, query)` ve `listen_value(path, callback, query)` alt
+  düğümleri sıralar ve süzer: `order_by` (`"$key"`, `"$value"` ya da alt yol, zorunlu),
+  `start_at`, `end_at`, `equal_to` (bool, sayı, String; `"$key"` ile yalnız String),
+  `limit_to_first` veya `limit_to_last` (1..2147483647). Sonuç `value` eşleşen alt
+  düğümlerin sorgu sırasındaki sözlüğüdür (Array'e dönmez); eşleşme yoksa `null`.
+  Child olayları ve transaction yoktur.
 - Storage metadata sonucu `{path, name, size, content_type, updated}`;
   `updated` Unix milisaniye. `download_bytes` varsayılan olarak en fazla 10 MB okur;
   `max_size` tamponu baştan ayrıldığı için en fazla 100 MB (`FirebaseStorage.MAX_DOWNLOAD`) olabilir.

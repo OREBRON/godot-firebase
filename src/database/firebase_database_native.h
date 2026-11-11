@@ -25,7 +25,8 @@ public:
 
 	godot::Error initialize(bool p_persistence_enabled = false);
 	int64_t set_network_enabled(bool p_enabled);
-	int64_t get_value(const godot::String &p_path);
+	// A non-empty `p_query` delivers the matching children in query order.
+	int64_t get_value(const godot::String &p_path, const godot::Dictionary &p_query);
 	int64_t set_value(const godot::String &p_path, const godot::Variant &p_value);
 	// Keys of `p_values` may be child paths like "stats/level".
 	int64_t update_children(const godot::String &p_path, const godot::Dictionary &p_values);
@@ -38,7 +39,7 @@ public:
 	int64_t on_disconnect_remove_value(const godot::String &p_path);
 	int64_t on_disconnect_cancel(const godot::String &p_path);
 	// Emits value_changed(listener_id, ok, snapshot, error_code, error_message).
-	int64_t listen_value(const godot::String &p_path);
+	int64_t listen_value(const godot::String &p_path, const godot::Dictionary &p_query);
 	void remove_listener(int64_t p_id);
 
 protected:

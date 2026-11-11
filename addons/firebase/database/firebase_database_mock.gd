@@ -7,6 +7,7 @@ signal value_changed(listener_id: int, ok: bool, snapshot: Dictionary, error_cod
 ## The whole database value. Empty containers and null descendants are absent.
 var root: Variant = null
 var _listeners: Dictionary[int, String] = {}
+var _queries: Dictionary[int, Dictionary] = {}
 ## Last snapshot sent to each listener; the SDKs raise value events only on change.
 var _sent: Dictionary[int, Dictionary] = {}
 var _push_count := 0
@@ -35,11 +36,11 @@ func initialize(persistence_enabled: bool = false) -> int:
 	return OK
 
 
-func get_value(path: String) -> int:
+func get_value(path: String, query: Dictionary) -> int:
 	_use_reference()
 	var id := _take_id()
 	if not _fail_if_requested(id):
-		_finish(id, _snapshot(path))
+		_finish(id, _snapshot(path, query))
 	return id
 
 
@@ -197,7 +198,7 @@ func _keep_uncancelled(path: String, value: Variant, cancelled: String) -> void:
 		return
 	if not path.is_empty() and not cancelled.begins_with(path + "/"):
 		_disconnect_actions[path] = value
-	elif value is Dictionary and value != FirebaseDatabase.SERVER_TIMESTAMP:
+	elif value is Dictionary and not value.has(".sv"):
 		for key in value:
 			_keep_uncancelled(_join(path, key), value[key], cancelled)
 	elif value is Array:
@@ -207,18 +208,20 @@ func _keep_uncancelled(path: String, value: Variant, cancelled: String) -> void:
 		_disconnect_actions[path] = value
 
 
-func listen_value(path: String) -> int:
+func listen_value(path: String, query: Dictionary) -> int:
 	_use_reference()
 	var id := _take_id()
 	if _fail_listener_if_requested(value_changed, id):
 		return id
 	_listeners[id] = path
+	_queries[id] = query.duplicate(true)
 	_notify(id)
 	return id
 
 
 func remove_listener(id: int) -> void:
 	_listeners.erase(id)
+	_queries.erase(id)
 	_sent.erase(id)
 
 
@@ -246,7 +249,7 @@ func _notify_changed(changed_paths: Array) -> void:
 
 func _apply_changes(value: Variant, changes: Array) -> Variant:
 	for change in changes:
-		value = _store_at(value, _keys(change.path), 0, _resolve(change.value))
+		value = _store_at(value, _keys(change.path), 0, _resolve(change.value, _value_at(value, change.path)))
 	return value
 
 
@@ -301,34 +304,116 @@ static func _child(value: Variant, key: String) -> Variant:
 	return null
 
 
-func _resolve(value: Variant) -> Variant:
+## `existing` is the stored value that `value` replaces; an increment adds to it.
+func _resolve(value: Variant, existing: Variant) -> Variant:
 	if value is Dictionary:
 		if value == FirebaseDatabase.SERVER_TIMESTAMP:
 			return int(Time.get_unix_time_from_system() * 1000)
+		if value.has(".sv"):
+			var by: Variant = value[".sv"].increment
+			return existing + by if existing is int or existing is float else by
 		var copy := {}
 		for key in value:
-			var child: Variant = _resolve(value[key])
+			var child: Variant = _resolve(value[key], _child(existing, key))
 			if child != null:
 				copy[key] = child
 		return null if copy.is_empty() else copy
 	if value is StringName:
 		return String(value)
 	if value is Array or typeof(value) >= TYPE_PACKED_INT32_ARRAY and typeof(value) <= TYPE_PACKED_STRING_ARRAY:
-		var items := Array(value).map(_resolve)
+		var items := []
+		for index in value.size():
+			items.append(_resolve(value[index], _child(existing, str(index))))
 		while not items.is_empty() and items.back() == null:
 			items.pop_back()
 		return null if items.is_empty() else items
 	return value
 
 
-func _snapshot(path: String) -> Dictionary:
+func _snapshot(path: String, query: Dictionary) -> Dictionary:
 	if path in FirebaseDatabase.INFO_PATHS:
 		var info: Variant = _connected if path == ".info/connected" else _server_time_offset
 		return {"key": path.get_file(), "exists": info != null, "value": info}
-	var value: Variant = root
+	var value: Variant = _value_at(root, path)
+	value = _delivered(value) if query.is_empty() else _query(value, query)
+	return {"key": path.get_file(), "exists": value != null, "value": value}
+
+
+static func _value_at(value: Variant, path: String) -> Variant:
 	for key in _keys(path):
 		value = _child(value, key)
-	return {"key": path.get_file(), "exists": value != null, "value": _delivered(value)}
+	return value
+
+
+## The children of `value` that match `query`, in query order, like a query snapshot.
+func _query(value: Variant, query: Dictionary) -> Variant:
+	var children := _children(value)
+	if children.is_empty():
+		# The SDKs keep a leaf for a bare order_by; filters and limits leave nothing.
+		return value if query.size() == 1 else null
+	var order: String = query.order_by
+	var compare := _compare_keys if order == "$key" else _compare_values
+	var entries: Array = []
+	for key: String in children:
+		var by: Variant = key
+		if order == "$value":
+			by = children[key]
+		elif order != "$key":
+			by = _value_at(children[key], order)
+		if (not query.has("start_at") or compare.call(by, query.start_at) >= 0) \
+				and (not query.has("end_at") or compare.call(by, query.end_at) <= 0) \
+				and (not query.has("equal_to") or compare.call(by, query.equal_to) == 0):
+			entries.append([by, key])
+	entries.sort_custom(func(a: Array, b: Array) -> bool:
+		var order_compared: int = compare.call(a[0], b[0])
+		return order_compared < 0 or order_compared == 0 and _compare_keys(a[1], b[1]) < 0)
+	if query.has("limit_to_first"):
+		entries = entries.slice(0, query.limit_to_first)
+	if query.has("limit_to_last"):
+		entries = entries.slice(maxi(0, entries.size() - query.limit_to_last))
+	var matched := {}
+	for entry in entries:
+		matched[entry[1]] = _delivered(children[entry[1]])
+	return null if matched.is_empty() else matched
+
+
+## Realtime Database order: null, false, true, numbers, Strings, then maps and lists.
+static func _compare_values(a: Variant, b: Variant) -> int:
+	var rank_a := _rank(a)
+	var rank_b := _rank(b)
+	if rank_a != rank_b:
+		return rank_a - rank_b
+	if a is int or a is float or a is String:
+		return 0 if a == b else -1 if a < b else 1
+	return 0
+
+
+static func _rank(value: Variant) -> int:
+	if value is bool:
+		return 2 if value else 1
+	if value is int or value is float:
+		return 3
+	if value is String:
+		return 4
+	return 0 if value == null else 5
+
+
+## Keys that are 32-bit integers come first, in numeric order, then the others as Strings.
+static func _compare_keys(a: String, b: String) -> int:
+	var int_a := _is_int_key(a)
+	var int_b := _is_int_key(b)
+	if int_a and int_b:
+		return signi(a.to_int() - b.to_int())
+	if int_a or int_b:
+		return -1 if int_a else 1
+	return 0 if a == b else -1 if a < b else 1
+
+
+static func _is_int_key(key: String) -> bool:
+	if key.length() > 11 or not key.is_valid_int():
+		return false
+	var number := key.to_int()
+	return str(number) == key and number >= -2147483648 and number <= 2147483647
 
 
 ## A copy of `value` as DataSnapshot::value() delivers it on iOS and Android. The SDKs'
@@ -382,7 +467,7 @@ static func _is_list_index(key: String) -> bool:
 func _notify(listener_id: int) -> void:
 	if not _listeners.has(listener_id):
 		return
-	var snapshot := _snapshot(_listeners[listener_id])
+	var snapshot := _snapshot(_listeners[listener_id], _queries[listener_id])
 	if _sent.has(listener_id) and _sent[listener_id] == snapshot:
 		return
 	_sent[listener_id] = snapshot.duplicate(true)
