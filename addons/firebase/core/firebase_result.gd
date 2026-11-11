@@ -4,7 +4,7 @@ extends RefCounted
 ##
 ## Firebase error codes (AuthError, firestore::Error) are positive. The
 ## negative codes below come from this addon; the native backend uses the same
-## values in src/core/outcome.h.
+## values in src/core/outcome.h. ERR_TIMEOUT only comes from FirebaseTask.wait().
 
 const ERR_INVALID_ARGUMENT := -1
 const ERR_UNSUPPORTED := -2
@@ -12,6 +12,7 @@ const ERR_UNAVAILABLE := -3
 const ERR_NO_USER := -4
 const ERR_CANCELLED := -5
 const ERR_BUSY := -6
+const ERR_TIMEOUT := -7
 
 var ok := false
 var value: Variant = null

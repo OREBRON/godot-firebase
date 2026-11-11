@@ -391,6 +391,14 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 - Her istek `FirebaseTask` döner; `await task.wait()` bir `FirebaseResult`
   verir: `ok`, `value`, `error_code`, `error_message`. Negatif kodlar
   eklentiden gelir (`FirebaseResult.ERR_*`), pozitifler Firebase'den.
+- `await task.wait(10.0)` beklemeyi sınırlar: sonuç 10 saniyede gelmezse `ERR_TIMEOUT`
+  döner (`0`, varsayılan, süresiz bekler). Süre gerçek saniyedir; oyunu duraklatmak veya
+  `Engine.time_scale` onu uzatmaz. Zaman aşımı yalnız o beklemeyi bitirir, isteği iptal
+  etmez: SDK isteği sürdürür, görev sonra gerçek sonuçla biter ve sonraki `wait()` onu
+  verir. Çevrimdışı bir yazma zaman aşımından sonra da bağlantı gelince sunucuya
+  gidebilir; `ERR_TIMEOUT` yazmanın yapılmadığı anlamına gelmez ve yeniden göndermek
+  (ör. `increment`, `push_value`) işlemi iki kez uygulayabilir. Firebase SDK'ları
+  bekleyen isteği iptal edemez; yalnız Storage aktarımları `cancel_transfer(task)` ile durur.
 - Dinleyici callback'i de `FirebaseResult` alır. Kural reddi veya oturum kapanması
   gibi bir hatada `ok == false`, `value == null` olan bir sonuç gelir. Bu
   dinleyicinin son sonucudur: dinleyici o geldiğinde kaldırılmıştır,
