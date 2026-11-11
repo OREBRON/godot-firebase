@@ -134,12 +134,21 @@ class DevelopmentPackageTests(unittest.TestCase):
             self.assertNotIn("addons/firebase/" + relative, files)
         self.assertIn("addons/firebase/bin/Info.plist", files)
 
+    def test_license_and_notice_files_are_shipped(self):
+        notices = ["LICENSE.md", "bin/NOTICE", "auth/THIRD_PARTY_NOTICES.txt"]
+        for relative in notices:
+            (self.addon / relative).write_text("notice text\n")
+        _, files = self.package("auth")
+        for relative in notices:
+            self.assertIn("addons/firebase/" + relative, files)
+
     def test_files_outside_allowlist_fail_the_package(self):
         (self.addon / "bin/modules.txt").write_text("auth\n")
         bom_config = b"\xef\xbb\xbf" + json.dumps({"project_info": {}, "client": []}).encode()
         for relative, content in [("google-services.json.bak", b"{}"), ("core/game.json", bom_config),
                                   ("release.jks", b"key"), ("bin/upload.keystore", b"key"), ("core/cert.p12", b"key"),
-                                  (".env", b"TOKEN=x"), ("bin/game.mobileprovision", b"profile"), ("auth/notes.txt", b"x")]:
+                                  (".env", b"TOKEN=x"), ("bin/game.mobileprovision", b"profile"), ("auth/notes.txt", b"x"),
+                                  ("LICENSE.bak", b"x")]:
             with self.subTest(file=relative):
                 path = self.addon / relative
                 path.write_bytes(content)

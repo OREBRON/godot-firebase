@@ -39,7 +39,10 @@ def game_config(path):
 # What the addon legitimately ships; anything else (keystores, .env, renamed configs) fails the package.
 SHIPPED_SUFFIXES = (".gd", ".uid", ".gdextension", ".cfg", ".so", ".dylib", ".dll", ".aar",
                     ".plist", ".xcprivacy", ".strings", ".png", ".ttf")
-SHIPPED_NAMES = {".gdignore", "modules.txt"}
+SHIPPED_NAMES = {".gdignore", "modules.txt",
+                 # Licence and third-party notice texts that travel with the shipped binaries.
+                 "license", "license.md", "license.txt", "notice", "notice.md", "notice.txt",
+                 "third_party_notices", "third_party_notices.md", "third_party_notices.txt"}
 
 
 def shipped(path):
