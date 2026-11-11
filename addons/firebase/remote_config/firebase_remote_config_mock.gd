@@ -96,6 +96,22 @@ func get_value(key: String, value_type: int = TYPE_STRING) -> int:
 	return id
 
 
+func get_keys(prefix: String = "") -> int:
+	var id := _take_id()
+	if _fail_if_requested(id):
+		return id
+	if prefix.to_utf8_buffer().has(0):
+		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "Remote Config key prefix must contain no NUL")
+		return id
+	var keys := PackedStringArray()
+	for key in _active.keys() + _defaults.keys():
+		if String(key).begins_with(prefix) and not String(key) in keys:
+			keys.append(String(key))
+	keys.sort()
+	_finish(id, keys)
+	return id
+
+
 func get_info() -> int:
 	var id := _take_id()
 	if not _fail_if_requested(id):

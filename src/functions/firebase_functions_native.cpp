@@ -64,14 +64,15 @@ godot::Error FirebaseFunctionsNative::initialize(const String &p_emulator_host) 
 	}
 	// Android uses the origin as the URL prefix; iOS takes the host and port from it.
 	// Repeating it for a later wrapper of the shared instance only sets the same origin.
-	if (!emulator_host.empty()) {
-		functions->UseFunctionsEmulator(("http://" + to_std(p_emulator_host)).c_str());
+	emulator_origin = emulator_host.empty() ? "" : "http://" + to_std(p_emulator_host);
+	if (!emulator_origin.empty()) {
+		functions->UseFunctionsEmulator(emulator_origin.c_str());
 	}
 	return godot::OK;
 }
 
-int64_t FirebaseFunctionsNative::call_function(const String &p_name, const Variant &p_data) {
-	return start([this, &p_name, &p_data](Completion done) {
+int64_t FirebaseFunctionsNative::call_function(const String &p_name, const Variant &p_data, const String &p_region) {
+	return start([this, &p_name, &p_data, &p_region](Completion done) {
 		if (functions == nullptr) {
 			done(Outcome::failure(kUnavailable, "FirebaseFunctionsNative is not initialized"));
 			return;
@@ -81,13 +82,31 @@ int64_t FirebaseFunctionsNative::call_function(const String &p_name, const Varia
 			done(Outcome::failure(kInvalidArgument, "function name must be non-empty and contain no NUL"));
 			return;
 		}
+		const std::string region = to_std(p_region);
+		if (region.find('\0') != std::string::npos) {
+			done(Outcome::failure(kInvalidArgument, "function region must contain no NUL"));
+			return;
+		}
 		firebase::Variant data;
 		const String reason = to_firebase_variant(p_data, data);
 		if (!reason.is_empty()) {
 			done(Outcome::failure(kInvalidArgument, reason));
 			return;
 		}
-		complete_when_done(functions->GetHttpsCallable(name.c_str()).Call(data), std::move(done), [](const Future<HttpsCallableResult> &future) {
+		firebase::functions::Functions *target = functions;
+		if (!region.empty()) {
+			// The SDK keeps one shared instance per App and region; the App's cleanup frees it.
+			firebase::InitResult result = firebase::kInitResultSuccess;
+			target = firebase::functions::Functions::GetInstance(functions->app(), region.c_str(), &result);
+			if (target == nullptr || result != firebase::kInitResultSuccess) {
+				done(Outcome::failure(kUnavailable, "Cloud Functions is unavailable in region " + p_region));
+				return;
+			}
+			if (!emulator_origin.empty()) {
+				target->UseFunctionsEmulator(emulator_origin.c_str());
+			}
+		}
+		complete_when_done(target->GetHttpsCallable(name.c_str()).Call(data), std::move(done), [](const Future<HttpsCallableResult> &future) {
 			return to_godot_variant(future.result()->data());
 		});
 	});
@@ -95,7 +114,7 @@ int64_t FirebaseFunctionsNative::call_function(const String &p_name, const Varia
 
 void FirebaseFunctionsNative::_bind_methods() {
 	godot::ClassDB::bind_method(D_METHOD("initialize", "emulator_host"), &FirebaseFunctionsNative::initialize, DEFVAL(""));
-	godot::ClassDB::bind_method(D_METHOD("call_function", "name", "data"), &FirebaseFunctionsNative::call_function);
+	godot::ClassDB::bind_method(D_METHOD("call_function", "name", "data", "region"), &FirebaseFunctionsNative::call_function, DEFVAL(""));
 }
 
 } // namespace godot_firebase

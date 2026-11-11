@@ -7,7 +7,7 @@
 namespace godot_firebase {
 
 // Conversion between Godot Variants and firebase::Variant, shared by the
-// database and functions modules. Supported values: null, bool, int, finite float,
+// database, functions and analytics modules. Supported values: null, bool, int, finite float,
 // String, StringName, Array, packed int, float and string arrays, and
 // Dictionary with String keys.
 //

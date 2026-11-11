@@ -8,6 +8,8 @@ func _run() -> void:
 
 	var result := await functions.call_function("add", {"a": 2, "b": 3}).wait()
 	check(result.ok and result.value == {"sum": 5}, "handler result is returned")
+	result = await functions.call_function("add", {"a": 1, "b": 1}, "europe-west1").wait()
+	check(result.ok and result.value == {"sum": 2}, "call in another region reaches the handler")
 
 	result = await functions.call_function("missing").wait()
 	check(not result.ok and result.error_code == FirebaseFunctionsMock.NOT_FOUND, "unknown function fails")

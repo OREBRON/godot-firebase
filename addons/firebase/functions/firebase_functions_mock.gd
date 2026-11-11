@@ -5,7 +5,8 @@ extends FirebaseMockModule
 ## Data and results cross JSON as on a device. A handler gets its own copy in
 ## which every number is a float, as a JavaScript function sees it; the caller
 ## gets whole numbers in the int64 range back as int, packed arrays as Array,
-## StringName as String and Dictionary keys in sorted order.
+## StringName as String and Dictionary keys in sorted order. A handler answers
+## its name in every region.
 
 ## firebase::functions::Error codes: unknown function, and a result the server cannot encode.
 const NOT_FOUND := 5
@@ -25,13 +26,15 @@ func initialize(emulator_host: String = "") -> int:
 	return OK
 
 
-func call_function(name: String, data: Variant) -> int:
+func call_function(name: String, data: Variant, region: String = "") -> int:
 	var id := _take_id()
 	if _fail_if_requested(id):
 		return id
 	var reason := FirebaseFunctions.validate_data(data)
 	if not FirebaseFunctions.is_valid_name(name):
 		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "function name must be non-empty and contain no NUL")
+	elif not (region.is_empty() or FirebaseFunctions.is_valid_name(region)):
+		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, "function region must contain no NUL")
 	elif not reason.is_empty():
 		_finish_error(id, FirebaseResult.ERR_INVALID_ARGUMENT, reason)
 	elif not handlers.has(name):

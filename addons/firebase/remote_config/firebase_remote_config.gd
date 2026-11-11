@@ -79,6 +79,14 @@ func get_value(key: String, value_type: int = TYPE_STRING) -> FirebaseTask:
 	return _requests.send(&"get_value", [key, value_type])
 
 
+## Result: sorted PackedStringArray of the active and default keys that start
+## with `prefix`; "" lists every key. Read each one with get_value().
+func get_keys(prefix: String = "") -> FirebaseTask:
+	if prefix.to_utf8_buffer().has(0):
+		return _invalid("Remote Config key prefix must contain no NUL")
+	return _requests.send(&"get_keys", [prefix])
+
+
 ## Result: {last_fetch_time_ms, last_fetch_status, last_fetch_failure_reason,
 ## throttled_end_time_ms}. Time fields are epoch milliseconds; zero means unset.
 func get_info() -> FirebaseTask:

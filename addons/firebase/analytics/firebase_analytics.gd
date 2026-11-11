@@ -77,10 +77,15 @@ static func validate_event(name: String, parameters: Dictionary) -> String:
 		return "reserved event name"
 	if parameters.size() > 25:
 		return "events accept at most 25 parameters"
+	return _validate_parameters(parameters, true)
+
+## Values are String, int, bool (logged as 1 or 0) or finite float. An event
+## parameter may also be an Array of item Dictionaries, such as "items".
+static func _validate_parameters(parameters: Dictionary, allow_items: bool) -> String:
 	for key in parameters:
 		if not key is String:
 			return "parameter keys must be strings"
-		reason = validate_name(key, 40)
+		var reason := validate_name(key, 40)
 		if not reason.is_empty():
 			return reason
 		var value: Variant = parameters[key]
@@ -88,13 +93,22 @@ static func validate_event(name: String, parameters: Dictionary) -> String:
 			TYPE_STRING:
 				if value.length() > 100 or _has_null(value):
 					return "parameter strings accept at most 100 characters without NUL"
-			TYPE_INT:
+			TYPE_INT, TYPE_BOOL:
 				pass
 			TYPE_FLOAT:
 				if not is_finite(value):
 					return "parameter numbers must be finite"
+			TYPE_ARRAY:
+				if not allow_items:
+					return "item values must be String, int, bool or finite float"
+				for item in value:
+					if not item is Dictionary:
+						return "parameter arrays must contain only item Dictionaries"
+					reason = _validate_parameters(item, false)
+					if not reason.is_empty():
+						return reason
 			_:
-				return "parameter values must be String, int or finite float"
+				return "parameter values must be String, int, bool, finite float or an Array of item Dictionaries"
 	return ""
 
 static func validate_consent(consents: Dictionary) -> String:
