@@ -7,6 +7,7 @@ extends Node
 ## Backend of each module:
 ## - its native class on iOS and Android, when built with that module;
 ## - its mock in the editor and on desktop (desktop libraries are empty stubs);
+##   an exported game warns about each mock at startup;
 ## - none on mobile when native fails. Requests then fail with
 ##   FirebaseResult.ERR_UNAVAILABLE instead of silently losing data.
 
@@ -25,6 +26,8 @@ var remote_config: RefCounted
 var crashlytics: RefCounted
 ## Module name -> backend object (null when unavailable).
 var backends: Dictionary[String, Object] = {}
+## True in exported games, where a mock would silently replace Firebase.
+var _exported := OS.has_feature("template")
 
 
 func _enter_tree() -> void:
@@ -82,6 +85,8 @@ func _create_backend(module: String, native_app: bool) -> Object:
 	if OS.has_feature("mobile"):
 		push_error("Firebase: %s unavailable; its requests will fail" % module)
 		return null
+	if _exported:
+		push_warning("Firebase: %s uses the in-memory mock; data never reaches Firebase and is lost on exit" % module)
 	var mock: Object = load(_api_path(module).replace(".gd", "_mock.gd")).new()
 	if module == "database":
 		mock.callv("initialize", arguments)

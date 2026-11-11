@@ -396,7 +396,9 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   sonuçları tipli değişkene ata (`var r: FirebaseResult = await ...`) ya da
   `var auth: FirebaseAuth = Firebase.auth`.
 - Editörde ve masaüstünde bellek içi mock çalışır (`Firebase.is_mock("auth")`);
-  Windows/Linux/macOS kütüphaneleri Firebase içermeyen boş uzantılardır. Mobilde native
+  Windows/Linux/macOS kütüphaneleri Firebase içermeyen boş uzantılardır. Dışa aktarılmış
+  oyunda mock kullanan her modül açılışta `push_warning` verir: veri Firebase'e
+  gitmez ve kapanınca kaybolur. Mobilde native
   başlatılamazsa mock'a düşülmez; istekler `ERR_UNAVAILABLE` döner.
 - Mock'lar cihazdaki SDK davranışını izler, sunucuyu taklit etmez:
   - Güvenlik kuralları ve Firestore bileşik indeksleri uygulanmaz; editörde her
