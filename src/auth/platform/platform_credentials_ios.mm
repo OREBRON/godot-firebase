@@ -133,7 +133,9 @@ void sign_in_with_game_center(CredentialCallback done, uint64_t generation) {
 		}
 		finished = true;
 		if (!GKLocalPlayer.localPlayer.isAuthenticated) {
-			done(failure(godot_firebase::kCancelled, describe(error, "Game Center sign-in was cancelled")));
+			// Only the player's cancel is ERR_CANCELLED; restricted, disabled or offline Game Center is a failure.
+			const bool cancelled = [error.domain isEqualToString:GKErrorDomain] && error.code == GKErrorCancelled;
+			done(failure(cancelled ? godot_firebase::kCancelled : godot_firebase::kUnavailable, describe(error, "Game Center sign-in failed")));
 			return;
 		}
 		game_center_credential(done);
