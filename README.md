@@ -511,7 +511,8 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   `max_results` 1..1000.
 - `update_metadata(path, {content_type, cache_control, custom_metadata})` yalnız verilen anahtarları
   değiştirir; `custom_metadata` girdileri saklı olanlara eklenir. Değerler String'dir; sonuç güncel metadata'dır.
-- Geçersiz veri native katmana ulaşmadan `ERR_INVALID_ARGUMENT` ile döner.
+- Geçersiz veri native katmana ulaşmadan `ERR_INVALID_ARGUMENT` ile döner; neden aynı anda
+  `push_error` ile loglanır, böylece `await` edilmeyen çağrıda (ör. `log_event`) da görünür.
 - Silinen modülün özelliği `null` olur (`Firebase.firestore == null`). Bu yüzden
   modül özellikleri (`Firebase.auth`, `Firebase.storage`, ...) tipsizdir;
   sonuçları tipli değişkene ata (`var r: FirebaseResult = await ...`) ya da

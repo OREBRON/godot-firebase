@@ -30,7 +30,11 @@ func id_of(task: FirebaseTask) -> int:
 
 
 ## Returns a task that fails on the next idle frame, so callers can always await it.
+## An invalid argument is also logged now, because a call nobody awaits would
+## drop it silently. ERR_UNAVAILABLE is logged once at startup by firebase.gd.
 func failed(code: int, message: String) -> FirebaseTask:
+	if code == FirebaseResult.ERR_INVALID_ARGUMENT:
+		push_error("Firebase: invalid argument: %s" % message)
 	var task := FirebaseTask.new()
 	task.finish.call_deferred(FirebaseResult.failure(code, message))
 	return task
