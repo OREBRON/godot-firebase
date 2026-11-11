@@ -382,8 +382,9 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   verir: `ok`, `value`, `error_code`, `error_message`. Negatif kodlar
   eklentiden gelir (`FirebaseResult.ERR_*`), pozitifler Firebase'den.
 - Dinleyici callback'i de `FirebaseResult` alır. Kural reddi veya oturum kapanması
-  gibi bir hatada `ok == false`, `value == null` olan tek sonuç gelir ve dinleyici
-  durur; `value` okumadan önce `ok`'u kontrol et. Callback'in nesnesi
+  gibi bir hatada `ok == false`, `value == null` olan bir sonuç gelir. Bu
+  dinleyicinin son sonucudur: dinleyici o geldiğinde kaldırılmıştır,
+  `remove_listener()` gerekmez. `value` okumadan önce `ok`'u kontrol et. Callback'in nesnesi
   `remove_listener()` çağrılmadan serbest bırakılırsa dinleyici bir sonraki
   olayında kaldırılır; o olaya kadar abone kalır.
 - Firestore özel değerleri: `FirebaseValue.timestamp()`, `geo_point()`,

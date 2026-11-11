@@ -87,6 +87,7 @@ func on_disconnect_cancel(path: String) -> FirebaseTask:
 
 
 ## Calls `callback(result: FirebaseResult)` with a snapshot now and after every change.
+## A failed result is the last one: the listener is already removed when it arrives.
 ## `query` is the get_value() query. Returns an id for remove_listener(), or 0
 ## when the listener could not start.
 func listen_value(path: String, callback: Callable, query: Dictionary = {}) -> int:
@@ -246,7 +247,8 @@ func _invalid(reason: String) -> FirebaseTask:
 
 func _on_value_changed(listener_id: int, ok: bool, snapshot: Dictionary, error_code: int, error_message: String) -> void:
 	var callback: Callable = _listeners.get(listener_id, Callable())
+	# The SDK stops a listener after an error; a freed callback object never calls remove_listener().
+	if not ok or not callback.is_valid():
+		remove_listener(listener_id)
 	if callback.is_valid():
 		callback.call(FirebaseResult.success(snapshot) if ok else FirebaseResult.failure(error_code, error_message))
-	else:
-		remove_listener(listener_id)  # Its object was freed without remove_listener().
