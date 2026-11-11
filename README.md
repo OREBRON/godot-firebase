@@ -195,7 +195,8 @@ Play Games helper için `firebase/auth/play_games_enabled=true` ve
 `link_with_play_games_platform()` taze server auth code edinir. Oyunun kendisinin
 edindiği code için mevcut `sign_in_with_play_games(code)` / `link_with_play_games(code)`
 API'leri korunur. İkinci eşzamanlı credential UI isteği `ERR_BUSY`, iptal
-`ERR_CANCELLED` döner. Hesaplar veya oyun verisi otomatik birleştirilmez.
+`ERR_CANCELLED`, platform arayüzünün diğer hataları `ERR_UNAVAILABLE` döner.
+Hesaplar veya oyun verisi otomatik birleştirilmez.
 
 ### Firebase Emulator Suite
 
@@ -566,8 +567,9 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 - Hesap açtıran oyunlar App Store kuralı gereği hesap silme sunmalıdır:
   `Firebase.auth.delete_account()`. Apple ile bağlı hesapta önce
   `Firebase.auth.revoke_apple_token()` çağrılır: Apple sayfası bir kez açılır ve
-  Apple belirteçleri iptal edilir (değer `true`); Apple bağlı olmayan hesapta arayüz
-  açılmaz, değer `false` olur. Mock'ta `fail_next()` iptal/başarısızlığı taklit eder.
+  Apple belirteçleri iptal edilir (değer `true`; başarısız iptal `ERR_UNAVAILABLE`);
+  Apple bağlı olmayan hesapta arayüz açılmaz, değer `false` olur. Mock'ta
+  `fail_next()` iptal/başarısızlığı taklit eder.
   Silme "requires recent login" (`error_code` 9) dönerse hesabın bir sağlayıcısıyla
   `reauthenticate_with_google()` / `_apple()` / `_game_center()` /
   `_play_games_platform()` / `_email(email, password)` çağrılıp silme tekrarlanır.

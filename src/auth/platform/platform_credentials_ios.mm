@@ -108,7 +108,8 @@ void game_center_credential(CredentialCallback done) {
 			[done](const firebase::Future<firebase::auth::Credential> &future) {
 				if (future.error() != 0 || future.result() == nullptr) {
 					const char *message = future.error_message();
-					done(failure(future.error(), message ? message : "Game Center credential failed"));
+					// Error 0 means success; a missing result still needs a failure code.
+					done(failure(future.error() != 0 ? future.error() : godot_firebase::kUnavailable, message ? message : "Game Center credential failed"));
 					return;
 				}
 				done(success(*future.result()));
@@ -275,8 +276,9 @@ void sign_in_with_google(const godot_firebase::PlatformCredentialOptions &option
 }
 
 - (void)authorizationController:(ASAuthorizationController *)controller didCompleteWithError:(NSError *)error {
-	const bool cancelled = error.code == ASAuthorizationErrorCanceled;
-	[self finish:failure(cancelled ? godot_firebase::kCancelled : static_cast<int>(error.code), describe(error, "Sign in with Apple failed"))];
+	// ASAuthorizationError codes are not Firebase codes: only the user's cancel is ERR_CANCELLED.
+	const bool cancelled = [error.domain isEqualToString:ASAuthorizationErrorDomain] && error.code == ASAuthorizationErrorCanceled;
+	[self finish:failure(cancelled ? godot_firebase::kCancelled : godot_firebase::kUnavailable, describe(error, "Sign in with Apple failed"))];
 }
 
 @end
@@ -314,7 +316,8 @@ void request_platform_credential(const std::string &p_provider, const PlatformCr
 void revoke_apple_token(const std::string &authorization_code, Completion done) {
 	NSString *code = [NSString stringWithUTF8String:authorization_code.c_str()];
 	[[FIRAuth auth] revokeTokenWithAuthorizationCode:code completion:^(NSError *error) {
-		done(error ? Outcome::failure(static_cast<int>(error.code), to_godot(describe(error, "Apple token revocation failed"))) : Outcome::success(true));
+		// FIRAuthErrorCode numbers (17xxx) are not firebase::auth::AuthError values.
+		done(error ? Outcome::failure(kUnavailable, to_godot(describe(error, "Apple token revocation failed"))) : Outcome::success(true));
 	}];
 }
 
