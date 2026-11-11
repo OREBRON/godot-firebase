@@ -156,11 +156,45 @@ func _query_regressions(db: FirebaseFirestore, backend: FirebaseFirestoreMock) -
 		[["__name__", "==", "scores/a"]],
 		[["__name__", "array-contains", "a"]],
 		[["__name__", "in", ["a", 123]]],
+		[["__name__", "array-contains-any", ["a"]]],
+		[["__name__", "not-in", ["a", "b/c"]]],
+		[["a", "not-in", [1]], ["b", "not-in", [2]]],
+		[["a", "not-in", [1]], ["b", "!=", 2]],
+		[["a", "in", [1]], ["b", "not-in", [2]]],
+		[["a", "array-contains-any", [1]], ["b", "not-in", [2]]],
+		[["a", "not-in", []]],
+		[["a", "not-in", range(11)]],
+		[["a", "array-contains-any", "x"]],
+		[["a", "array-contains-any", [[1]]]],
 	]:
 		var calls_before := backend._next_id
 		var invalid := await db.query("scores", filters).wait()
 		check(not invalid.ok and invalid.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "unsafe query rejected: %s" % str(filters))
 		check(backend._next_id == calls_before, "invalid query never reaches backend")
+		invalid = await db.count("scores", filters).wait()
+		check(not invalid.ok and invalid.error_code == FirebaseResult.ERR_INVALID_ARGUMENT and backend._next_id == calls_before, "unsafe count rejected: %s" % str(filters))
+	var by_score := [["score", "asc"]]
+	for bad in [
+		[[], {start_after = [1]}],
+		[by_score, {start_after = [1, 2]}],
+		[by_score, {start_after = []}],
+		[by_score, {start_after = 1}],
+		[by_score, {start_at = [1], start_after = [1]}],
+		[by_score, {end_at = [1], end_before = [1]}],
+		[by_score, {after = [1]}],
+		[by_score, {5: [1]}],
+		[by_score, {start_after = [FirebaseValue.server_timestamp()]}],
+		[by_score, {start_after = [[[1]]]}],
+		[[["__name__", "asc"]], {start_after = ["a/b"]}],
+		[[["__name__", "asc"]], {end_at = [123]}],
+		[[["score", "asc"], ["__name__", "asc"]], {start_after = [1, ""]}],
+	]:
+		var calls_before := backend._next_id
+		var invalid := await db.query("scores", [], bad[0], 0, "default", bad[1]).wait()
+		check(not invalid.ok and invalid.error_code == FirebaseResult.ERR_INVALID_ARGUMENT and backend._next_id == calls_before, "unsafe cursor rejected: %s" % str(bad))
+		check(db.listen_query("scores", func(_r): pass, [], bad[0], 0, bad[1]) == 0 and backend._next_id == calls_before, "unsafe cursor listener rejected: %s" % str(bad))
+	check((await db.query("scores", [["a", "in", [1]], ["b", "array-contains-any", [2]], ["c", "array-contains-any", [3]]]).wait()).ok, "in and array-contains-any combine in the pinned SDK")
+	check((await db.query("scores", [["a", "not-in", [1]], ["b", ">", 2]]).wait()).ok, "not-in combines with range filters")
 	var result := await db.query("scores", [["__name__", "in", ["a", "b"]]], [["__name__", "desc"]]).wait()
 	check(result.ok and result.value.map(func(s): return s.id) == ["b", "a"], "document-ID filtering and ordering")
 	result = await db.query("scores", [["score", ">", 5], ["name", ">", "a"]]).wait()

@@ -1,7 +1,8 @@
 extends FirebaseTest
 ## The mock must return the documents, in the order, that the Firestore SDK does.
 ## Rules come from firebase-android-sdk core/FieldFilter.java, ArrayContainsFilter.java,
-## InFilter.java, Query.java and model/Values.kt.
+## ArrayContainsAnyFilter.java, InFilter.java, NotInFilter.java, Bound.java, Query.java
+## and model/Values.kt.
 
 var db: FirebaseFirestore
 
@@ -12,6 +13,7 @@ func _run() -> void:
 	await _array_contains()
 	await _values_within_a_type()
 	await _normalized_order()
+	await _cursors()
 
 
 func _type_order_and_filters() -> void:
@@ -53,6 +55,9 @@ func _type_order_and_filters() -> void:
 	await _expect("mixed", [["v", "!=", null]], [], ascending.slice(1), "!= null matches every stored non-null value")
 	await _expect("mixed", [["v", "!=", NAN]], [], ascending.filter(func(id): return not id in ["a_null", "d_nan"]), "!= NaN excludes NaN and null")
 	await _expect("mixed", [["v", "in", [3.0, "5", null, NAN]]], [], ["a_null", "d_nan", "f_three", "g_three_float", "j_text"], "in uses value equality, including null and NaN")
+	var not_in := ["b_false", "c_true", "e_neg", "h_float", "i_time", "k_bytes", "k_reference", "k_spot", "l_array", "m_map"]
+	await _expect("mixed", [["v", "not-in", [3, "5", NAN]]], [], not_in, "not-in uses value equality, orders by its field and skips null and missing fields")
+	await _expect("mixed", [["v", "not-in", [3, null]]], [], [], "not-in with null in the list matches nothing")
 
 
 func _array_contains() -> void:
@@ -66,6 +71,8 @@ func _array_contains() -> void:
 	await _expect("tags", [["t", "array-contains", 1]], [], ["a", "b"], "array-contains compares numbers numerically and ignores bytes")
 	await _expect("tags", [["t", "array-contains", "x"]], [], ["a"], "array-contains never matches a non-array field")
 	await _expect("tags", [["t", "array-contains", {"k": 1.0}]], [], ["d"], "array-contains compares maps by value")
+	await _expect("tags", [["t", "array-contains-any", [1, {"k": 1.0}]]], [], ["a", "b", "d"], "array-contains-any matches any listed element by value")
+	await _expect("tags", [["t", "array-contains-any", ["x", 7]]], [], ["a"], "array-contains-any never matches a non-array field")
 
 
 func _values_within_a_type() -> void:
@@ -137,8 +144,27 @@ func _normalized_order() -> void:
 	await _expect("players", [["__name__", "!=", "p1"]], [["level", "asc"]], ["p6", "p3", "p2", "p4", "p5"], "a document-ID inequality adds no field order")
 	await _expect("players", [], [["score", "asc"]], ["p6", "p2", "p3", "p1", "p4"], "order excludes a missing field but keeps a null value")
 
+	await _expect("players", [["__name__", "not-in", ["p1", "p2"]]], [], ["p3", "p4", "p5", "p6"], "not-in on document IDs adds no field order")
+
 	await _seed("paths", {"x": {"a": {"b": 1}, "a-c": 2}, "y": {"a": {"b": 2}, "a-c": 1}})
 	await _expect("paths", [["a-c", ">", 0], ["a.b", ">", 0]], [], ["x", "y"], "inequality field paths compare segment by segment")
+
+
+## Uses the players of _normalized_order(); by score: p6 (null), p2 and p3 (10), p1 (20), p4 (30).
+func _cursors() -> void:
+	var by_score := [["score", "asc"]]
+	await _expect("players", [], by_score, ["p2", "p3", "p1", "p4"], "start_at includes an equal position", 0, {start_at = [10]})
+	await _expect("players", [], by_score, ["p1", "p4"], "start_after skips an equal position", 0, {start_after = [10]})
+	await _expect("players", [], by_score, ["p6", "p2", "p3", "p1"], "end_at includes an equal position", 0, {end_at = [20]})
+	await _expect("players", [], by_score, ["p6", "p2", "p3"], "end_before skips an equal position", 0, {end_before = [20]})
+	await _expect("players", [], by_score, ["p2", "p3", "p1"], "a start and an end bound a range", 0, {start_at = [10], end_at = [20.0]})
+	await _expect("players", [], [["score", "desc"]], ["p3", "p2", "p6"], "cursors follow a descending order", 0, {start_after = [20]})
+	await _expect("players", [["level", ">", 0]], by_score, ["p1", "p4"], "cursors apply with filters", 0, {start_after = [10]})
+
+	var pages := [["score", "asc"], ["__name__", "asc"]]
+	await _expect("players", [], pages, ["p6", "p2"], "first page", 2)
+	await _expect("players", [], pages, ["p3", "p1"], "the next page starts after the last score and document ID", 2, {start_after = [10, "p2"]})
+	await _expect("players", [], pages, ["p4"], "the last page", 2, {start_after = [20, "p1"]})
 
 
 func _seed(collection: String, documents: Dictionary) -> void:
@@ -148,8 +174,8 @@ func _seed(collection: String, documents: Dictionary) -> void:
 	check((await db.batch(ops).wait()).ok, "%s fixtures are accepted" % collection)
 
 
-func _expect(collection: String, filters: Array, order_by: Array, expected: Array, message: String, limit := 0) -> void:
-	var result := await db.query(collection, filters, order_by, limit).wait()
+func _expect(collection: String, filters: Array, order_by: Array, expected: Array, message: String, limit := 0, cursor := {}) -> void:
+	var result := await db.query(collection, filters, order_by, limit, "default", cursor).wait()
 	var ids: Array = result.value.map(func(doc): return doc.id) if result.ok else []
 	check(result.ok and ids == expected, "%s: expected %s, got %s" % [message, expected, ids])
 

@@ -101,3 +101,54 @@ func _run() -> void:
 	cycle["self"] = cycle
 	check(not FirebaseValue.validate_data(cycle, false).is_empty(), "map cycle is rejected")
 	cycle.clear()
+
+	_list_filters()
+	_array_transforms()
+
+
+func _list_filters() -> void:
+	for op in ["not-in", "array-contains-any"]:
+		check(FirebaseValue.validate_filter_value(op, [1, "a", null]).is_empty(), "%s accepts a list of values" % op)
+		check(not FirebaseValue.validate_filter_value(op, []).is_empty(), "%s rejects an empty list" % op)
+		check(not FirebaseValue.validate_filter_value(op, 1).is_empty(), "%s rejects a single value" % op)
+		check(not FirebaseValue.validate_filter_value(op, [[1]]).is_empty(), "%s rejects arrays in the list" % op)
+		check(not FirebaseValue.validate_filter_value(op, [FirebaseValue.server_timestamp()]).is_empty(), "%s rejects write-only values" % op)
+	check(FirebaseValue.validate_filter_value("array-contains-any", range(30)).is_empty(), "array-contains-any accepts 30 values")
+	check(not FirebaseValue.validate_filter_value("array-contains-any", range(31)).is_empty(), "array-contains-any rejects more than 30 values")
+	check(FirebaseValue.validate_filter_value("not-in", range(10)).is_empty(), "not-in accepts 10 values")
+	check(not FirebaseValue.validate_filter_value("not-in", range(11)).is_empty(), "not-in rejects more than 10 values")
+
+
+func _array_transforms() -> void:
+	check(FirebaseValue.array_union(["a"]) == {FirebaseValue.TAG: FirebaseValue.ARRAY_UNION, "elements": ["a"]}, "array_union builds the tagged dictionary")
+	check(FirebaseValue.array_remove([1]) == {FirebaseValue.TAG: FirebaseValue.ARRAY_REMOVE, "elements": [1]}, "array_remove builds the tagged dictionary")
+	var elements := [1, "a", null, {"k": [2]}, FirebaseValue.timestamp(0), FirebaseValue.geo_point(1, 2), PackedByteArray([1])]
+	for transform in [FirebaseValue.array_union(elements), FirebaseValue.array_remove(elements), FirebaseValue.array_union([])]:
+		var tag := FirebaseValue.tag_of(transform)
+		check(FirebaseValue.validate_data({"tags": transform}, false).is_empty(), "%s is valid in a set" % tag)
+		check(FirebaseValue.validate_data({"m": {"tags": transform}}, true).is_empty(), "%s is valid in a nested merge-set map" % tag)
+		check(FirebaseValue.validate_update_data({"m.tags": transform}).is_empty(), "%s is valid in an update" % tag)
+		check(not FirebaseValue.validate_data({"tags": [transform]}, false).is_empty(), "%s is rejected inside an array" % tag)
+		check(not FirebaseValue.validate_filter_value("==", transform).is_empty(), "%s is rejected in a query" % tag)
+	for bad in [
+		[[1]],
+		[PackedInt32Array([1])],
+		[FirebaseValue.server_timestamp()],
+		[FirebaseValue.increment(1)],
+		[FirebaseValue.delete_field()],
+		[FirebaseValue.array_union([1])],
+		[{"__x__": 1}],
+		[Vector2.ONE],
+	]:
+		check(not FirebaseValue.validate_data({"tags": FirebaseValue.array_union(bad)}, false).is_empty(), "invalid array_union element is rejected: %s" % str(bad))
+	check(not FirebaseValue.validate_data({"tags": {FirebaseValue.TAG: FirebaseValue.ARRAY_REMOVE, "elements": "a"}}, false).is_empty(), "array_remove needs an Array")
+	check(not FirebaseValue.validate_data({"tags": {FirebaseValue.TAG: FirebaseValue.ARRAY_UNION}}, false).is_empty(), "array_union needs elements")
+	var nested: Variant = 1
+	for i in range(19):
+		nested = {"child": nested}
+	check(FirebaseValue.validate_data({"tags": FirebaseValue.array_union([nested])}, false).is_empty(), "array_union elements may fill the remaining field levels")
+	check(not FirebaseValue.validate_data({"tags": FirebaseValue.array_union([{"child": nested}])}, false).is_empty(), "array_union elements count toward the 20 field levels")
+	var looping := FirebaseValue.array_union([])
+	looping.elements.append({"loop": looping})
+	check(not FirebaseValue.validate_data({"tags": looping}, false).is_empty(), "a cycle through array_union elements is rejected")
+	looping.elements.clear()

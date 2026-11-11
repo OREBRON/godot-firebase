@@ -12,6 +12,8 @@
 #include "value_convert.h"
 
 using firebase::Future;
+using firebase::firestore::AggregateQuerySnapshot;
+using firebase::firestore::AggregateSource;
 using firebase::firestore::DocumentReference;
 using firebase::firestore::DocumentSnapshot;
 using firebase::firestore::FieldValue;
@@ -40,10 +42,23 @@ bool is_string(const Variant &p_value) {
 	return p_value.get_type() == Variant::STRING || p_value.get_type() == Variant::STRING_NAME;
 }
 
-// Validate query shapes/combinations before any SDK builder can throw/abort. The pinned
-// iOS query_core ConflictingOps permits multiple inequality and "in" fields.
-String validate_query(const Array &p_filters, const Array &p_order_by, int64_t p_limit) {
-	bool not_equal_seen = false;
+// Cursor keys of FirebaseFirestore.CURSOR_KEYS, in the order build_query() applies them.
+const char *const kCursorKeys[] = { "start_at", "start_after", "end_at", "end_before" };
+
+bool is_list_op(const String &p_op) {
+	return p_op == "in" || p_op == "not-in" || p_op == "array-contains-any";
+}
+
+bool is_document_id(const Variant &p_id) {
+	return is_string(p_id) && !String(p_id).is_empty() && !String(p_id).contains("/");
+}
+
+// Same rules as FirebaseFirestore._validate_filters(); query_core ConflictingOps() permits
+// several inequality, "in" and "array-contains-any" filters.
+String validate_filters(const Array &p_filters) {
+	int not_equal = 0;
+	int not_in = 0;
+	bool disjunctive = false;
 	for (int64_t i = 0; i < p_filters.size(); ++i) {
 		if (p_filters[i].get_type() != Variant::ARRAY) {
 			return "filter must be [field path, op, value]";
@@ -53,36 +68,69 @@ String validate_query(const Array &p_filters, const Array &p_order_by, int64_t p
 			return "filter must be [field path, op, value]";
 		}
 		const String op = filter[1];
-		if (op != "==" && op != "!=" && op != "<" && op != "<=" && op != ">" && op != ">=" && op != "in" && op != "array-contains") {
+		if (op != "==" && op != "!=" && op != "<" && op != "<=" && op != ">" && op != ">=" && op != "array-contains" && !is_list_op(op)) {
 			return "unknown filter operator " + op;
 		}
-		if (op == "!=") {
-			if (not_equal_seen) {
-				return "a query supports only one != filter";
-			}
-			not_equal_seen = true;
-		}
+		not_equal += op == "!=" ? 1 : 0;
+		not_in += op == "not-in" ? 1 : 0;
+		disjunctive = disjunctive || op == "in" || op == "array-contains-any";
 		Array values;
-		if (op == "in") {
-			if (filter[2].get_type() != Variant::ARRAY) {
-				return "'in' needs an array with 1-30 values";
+		if (is_list_op(op)) {
+			const int64_t max_values = op == "not-in" ? 10 : 30;
+			if (filter[2].get_type() != Variant::ARRAY || Array(filter[2]).is_empty() || Array(filter[2]).size() > max_values) {
+				return op + String(" needs an array with 1-") + String::num_int64(max_values) + String(" values");
 			}
 			values = filter[2];
-			if (values.is_empty() || values.size() > 30) {
-				return "'in' needs an array with 1-30 values";
-			}
 		} else {
 			values.push_back(filter[2]);
 		}
 		const bool document_id = String(filter[0]) == "__name__";
-		if (document_id && op == "array-contains") {
-			return "document IDs cannot use array-contains";
+		if (document_id && op.begins_with("array-contains")) {
+			return "document IDs cannot use " + op;
 		}
 		for (int64_t j = 0; j < values.size(); ++j) {
-			if (document_id && (!is_string(values[j]) || String(values[j]).is_empty() || String(values[j]).contains("/"))) {
+			if (document_id && !is_document_id(values[j])) {
 				return "document ID must be a non-empty string without '/'";
 			}
 		}
+	}
+	if (not_equal > 1 || not_in > 1) {
+		return "a query supports only one != and one not-in filter";
+	}
+	return not_in > 0 && (not_equal > 0 || disjunctive) ? String("not-in cannot be combined with !=, in or array-contains-any") : String();
+}
+
+// Same rules as FirebaseFirestore._validate_cursor(); value conversion is checked by build_query().
+String validate_cursor(const Dictionary &p_cursor, const Array &p_order_by) {
+	if ((p_cursor.has("start_at") && p_cursor.has("start_after")) || (p_cursor.has("end_at") && p_cursor.has("end_before"))) {
+		return "a cursor has at most one start and one end";
+	}
+	const Array keys = p_cursor.keys();
+	for (int64_t i = 0; i < keys.size(); ++i) {
+		const Variant key = keys[i];
+		const bool known = is_string(key) && (String(key) == kCursorKeys[0] || String(key) == kCursorKeys[1] || String(key) == kCursorKeys[2] || String(key) == kCursorKeys[3]);
+		if (!known) {
+			return "unknown cursor key";
+		}
+		// The SDKs abort on more values than explicit orders, or a bad document ID for __name__.
+		const Variant values = p_cursor[key];
+		if (values.get_type() != Variant::ARRAY || Array(values).is_empty() || Array(values).size() > p_order_by.size()) {
+			return String(key) + " needs a value for each leading order_by field";
+		}
+		for (int64_t j = 0; j < Array(values).size(); ++j) {
+			if (String(Array(p_order_by[j])[0]) == "__name__" && !is_document_id(Array(values)[j])) {
+				return "document ID must be a non-empty string without '/'";
+			}
+		}
+	}
+	return String();
+}
+
+// Validate query shapes/combinations before any SDK builder can throw/abort.
+String validate_query(const Array &p_filters, const Array &p_order_by, int64_t p_limit, const Dictionary &p_cursor) {
+	const String reason = validate_filters(p_filters);
+	if (!reason.is_empty()) {
+		return reason;
 	}
 	for (int64_t i = 0; i < p_order_by.size(); ++i) {
 		if (p_order_by[i].get_type() != Variant::ARRAY) {
@@ -93,7 +141,10 @@ String validate_query(const Array &p_filters, const Array &p_order_by, int64_t p
 			return "order must be [field path, asc | desc]";
 		}
 	}
-	return p_limit > std::numeric_limits<int32_t>::max() ? String("limit must be at most 2147483647") : String();
+	if (p_limit > std::numeric_limits<int32_t>::max()) {
+		return "limit must be at most 2147483647";
+	}
+	return validate_cursor(p_cursor, p_order_by);
 }
 
 bool parse_source(const String &p_source, Source &r_source) {
@@ -115,22 +166,16 @@ String add_filter(const Array &p_filter, Query &r_query) {
 	}
 	const std::string field = to_std(p_filter[0]);
 	const String op = p_filter[1];
-	if (op == "in") {
-		const Array items = p_filter[2];
+	if (is_list_op(op)) {
 		std::vector<FieldValue> values;
-		values.reserve(static_cast<size_t>(items.size()));
-		for (int64_t i = 0; i < items.size(); i++) {
-			FieldValue value;
-			const String reason = to_query_value(r_query.firestore(), items[i], value);
-			if (!reason.is_empty()) {
-				return reason;
-			}
-			values.push_back(value);
+		const String reason = p_filter[2].get_type() == Variant::ARRAY ? to_query_values(r_query.firestore(), p_filter[2], values) : String("filter list must be an array");
+		if (!reason.is_empty()) {
+			return reason;
 		}
 		if (values.empty() || values.size() > 30) {
-			return "'in' needs an array with 1-30 values";
+			return op + String(" needs an array with 1-30 values");
 		}
-		r_query = r_query.WhereIn(field, values);
+		r_query = op == "in" ? r_query.WhereIn(field, values) : op == "not-in" ? r_query.WhereNotIn(field, values) : r_query.WhereArrayContainsAny(field, values);
 		return String();
 	}
 	FieldValue value;
@@ -158,8 +203,31 @@ String add_filter(const Array &p_filter, Query &r_query) {
 	return String();
 }
 
-String build_query(Query &r_query, const Array &p_filters, const Array &p_order_by, int64_t p_limit) {
-	const String validation = validate_query(p_filters, p_order_by, p_limit);
+// Cursors come after the orders: the SDK aborts on OrderBy() after StartAt() or EndAt().
+String add_cursor(const Dictionary &p_cursor, Query &r_query) {
+	for (const char *key : kCursorKeys) {
+		if (!p_cursor.has(key)) {
+			continue;
+		}
+		const Array items = p_cursor[key];
+		std::vector<FieldValue> values;
+		values.reserve(static_cast<size_t>(items.size()));
+		for (int64_t i = 0; i < items.size(); i++) {
+			FieldValue value;
+			const String reason = to_query_value(r_query.firestore(), items[i], value);
+			if (!reason.is_empty()) {
+				return String(key) + ": " + reason;
+			}
+			values.push_back(value);
+		}
+		const String name = key;
+		r_query = name == "start_at" ? r_query.StartAt(values) : name == "start_after" ? r_query.StartAfter(values) : name == "end_at" ? r_query.EndAt(values) : r_query.EndBefore(values);
+	}
+	return String();
+}
+
+String build_query(Query &r_query, const Array &p_filters, const Array &p_order_by, int64_t p_limit, const Dictionary &p_cursor) {
+	const String validation = validate_query(p_filters, p_order_by, p_limit, p_cursor);
 	if (!validation.is_empty()) {
 		return validation;
 	}
@@ -183,7 +251,28 @@ String build_query(Query &r_query, const Array &p_filters, const Array &p_order_
 	if (p_limit > 0) {
 		r_query = r_query.Limit(static_cast<int32_t>(p_limit));
 	}
-	return String();
+	return add_cursor(p_cursor, r_query);
+}
+
+// Builds the query, or returns why it is invalid; `p_db` must be initialized.
+String to_query(firebase::firestore::Firestore *p_db, const String &p_collection, const Array &p_filters, const Array &p_order_by, int64_t p_limit, const Dictionary &p_cursor, Query &r_query) {
+	if (!is_collection_path(p_collection)) {
+		return "not a collection path: " + p_collection;
+	}
+	r_query = p_db->Collection(to_std(p_collection));
+	return build_query(r_query, p_filters, p_order_by, p_limit, p_cursor);
+}
+
+// {documents, metadata}
+Dictionary to_query_snapshot(const QuerySnapshot &p_snapshot) {
+	Array documents;
+	for (const DocumentSnapshot &document : p_snapshot.documents()) {
+		documents.push_back(to_snapshot(document));
+	}
+	Dictionary result;
+	result["documents"] = documents;
+	result["metadata"] = to_metadata(p_snapshot.metadata());
+	return result;
 }
 
 String add_batch_op(firebase::firestore::Firestore *p_db, const Variant &p_op, WriteBatch &r_batch) {
@@ -331,12 +420,30 @@ int64_t FirebaseFirestoreNative::delete_doc(const String &p_path) {
 	});
 }
 
-int64_t FirebaseFirestoreNative::run_query(const String &p_collection, const Array &p_filters, const Array &p_order_by, int64_t p_limit, const String &p_source) {
-	return start_query(p_collection, p_filters, p_order_by, p_limit, p_source, false);
+int64_t FirebaseFirestoreNative::run_query(const String &p_collection, const Array &p_filters, const Array &p_order_by, int64_t p_limit, const String &p_source, const Dictionary &p_cursor) {
+	return start_query(p_collection, p_filters, p_order_by, p_limit, p_source, p_cursor, false);
 }
 
-int64_t FirebaseFirestoreNative::run_query_snapshot(const String &p_collection, const Array &p_filters, const Array &p_order_by, int64_t p_limit, const String &p_source) {
-	return start_query(p_collection, p_filters, p_order_by, p_limit, p_source, true);
+int64_t FirebaseFirestoreNative::run_query_snapshot(const String &p_collection, const Array &p_filters, const Array &p_order_by, int64_t p_limit, const String &p_source, const Dictionary &p_cursor) {
+	return start_query(p_collection, p_filters, p_order_by, p_limit, p_source, p_cursor, true);
+}
+
+int64_t FirebaseFirestoreNative::run_count(const String &p_collection, const Array &p_filters) {
+	return start([&](Completion done) {
+		if (db == nullptr) {
+			done(Outcome::failure(kUnavailable, "FirebaseFirestoreNative is not initialized"));
+			return;
+		}
+		Query query;
+		const String reason = to_query(db, p_collection, p_filters, Array(), 0, Dictionary(), query);
+		if (!reason.is_empty()) {
+			done(invalid(reason));
+			return;
+		}
+		complete_when_done(query.Count().Get(AggregateSource::kServer), std::move(done), [](const Future<AggregateQuerySnapshot> &future) {
+			return Variant(future.result()->count());
+		});
+	});
 }
 
 int64_t FirebaseFirestoreNative::set_network_enabled(bool p_enabled) {
@@ -360,14 +467,10 @@ int64_t FirebaseFirestoreNative::wait_pending_writes() {
 	});
 }
 
-int64_t FirebaseFirestoreNative::start_query(const String &p_collection, const Array &p_filters, const Array &p_order_by, int64_t p_limit, const String &p_source, bool p_with_metadata) {
+int64_t FirebaseFirestoreNative::start_query(const String &p_collection, const Array &p_filters, const Array &p_order_by, int64_t p_limit, const String &p_source, const Dictionary &p_cursor, bool p_with_metadata) {
 	return start([&](Completion done) {
 		if (db == nullptr) {
 			done(Outcome::failure(kUnavailable, "FirebaseFirestoreNative is not initialized"));
-			return;
-		}
-		if (!is_collection_path(p_collection)) {
-			done(invalid("not a collection path: " + p_collection));
 			return;
 		}
 		Source source;
@@ -375,24 +478,15 @@ int64_t FirebaseFirestoreNative::start_query(const String &p_collection, const A
 			done(invalid("source must be default, cache, or server"));
 			return;
 		}
-		Query query = db->Collection(to_std(p_collection));
-		const String reason = build_query(query, p_filters, p_order_by, p_limit);
+		Query query;
+		const String reason = to_query(db, p_collection, p_filters, p_order_by, p_limit, p_cursor, query);
 		if (!reason.is_empty()) {
 			done(invalid(reason));
 			return;
 		}
 		complete_when_done(query.Get(source), std::move(done), [p_with_metadata](const Future<QuerySnapshot> &future) {
-			Array snapshots;
-			for (const DocumentSnapshot &snapshot : future.result()->documents()) {
-				snapshots.push_back(to_snapshot(snapshot));
-			}
-			if (p_with_metadata) {
-				Dictionary result;
-				result["documents"] = snapshots;
-				result["metadata"] = to_metadata(future.result()->metadata());
-				return Variant(result);
-			}
-			return Variant(snapshots);
+			const Dictionary result = to_query_snapshot(*future.result());
+			return p_with_metadata ? Variant(result) : result["documents"];
 		});
 	});
 }
@@ -431,6 +525,23 @@ int64_t FirebaseFirestoreNative::listen_doc(const String &p_path, bool p_include
 	return id;
 }
 
+int64_t FirebaseFirestoreNative::listen_query(const String &p_collection, const Array &p_filters, const Array &p_order_by, int64_t p_limit, const Dictionary &p_cursor, bool p_include_metadata_changes) {
+	Query query;
+	if (db == nullptr || !to_query(db, p_collection, p_filters, p_order_by, p_limit, p_cursor, query).is_empty()) {
+		return 0;
+	}
+	const int64_t id = ++next_listener_id;
+	const uint64_t object_id = get_instance_id();
+	listeners[id] = query.AddSnapshotListener(
+			p_include_metadata_changes ? MetadataChanges::kInclude : MetadataChanges::kExclude,
+			[object_id, id](const QuerySnapshot &snapshot, firebase::firestore::Error error, const std::string &message) {
+				const bool ok = error == firebase::firestore::kErrorOk;
+				const Array args = Array::make(id, ok, ok ? to_query_snapshot(snapshot) : Dictionary(), static_cast<int>(error), to_godot(message));
+				emit_deferred_to(object_id, "query_changed", args);
+			});
+	return id;
+}
+
 void FirebaseFirestoreNative::remove_listener(int64_t p_id) {
 	auto listener = listeners.find(p_id);
 	if (listener != listeners.end()) {
@@ -445,17 +556,21 @@ void FirebaseFirestoreNative::_bind_methods() {
 	godot::ClassDB::bind_method(D_METHOD("set_doc", "path", "data", "merge"), &FirebaseFirestoreNative::set_doc);
 	godot::ClassDB::bind_method(D_METHOD("update_doc", "path", "data"), &FirebaseFirestoreNative::update_doc);
 	godot::ClassDB::bind_method(D_METHOD("delete_doc", "path"), &FirebaseFirestoreNative::delete_doc);
-	godot::ClassDB::bind_method(D_METHOD("run_query", "collection_path", "filters", "order_by", "limit", "source"), &FirebaseFirestoreNative::run_query, DEFVAL("default"));
-	godot::ClassDB::bind_method(D_METHOD("run_query_snapshot", "collection_path", "filters", "order_by", "limit", "source"), &FirebaseFirestoreNative::run_query_snapshot, DEFVAL("default"));
+	godot::ClassDB::bind_method(D_METHOD("run_query", "collection_path", "filters", "order_by", "limit", "source", "cursor"), &FirebaseFirestoreNative::run_query, DEFVAL("default"), DEFVAL(Dictionary()));
+	godot::ClassDB::bind_method(D_METHOD("run_query_snapshot", "collection_path", "filters", "order_by", "limit", "source", "cursor"), &FirebaseFirestoreNative::run_query_snapshot, DEFVAL("default"), DEFVAL(Dictionary()));
+	godot::ClassDB::bind_method(D_METHOD("run_count", "collection_path", "filters"), &FirebaseFirestoreNative::run_count);
 	godot::ClassDB::bind_method(D_METHOD("set_network_enabled", "enabled"), &FirebaseFirestoreNative::set_network_enabled);
 	godot::ClassDB::bind_method(D_METHOD("wait_pending_writes"), &FirebaseFirestoreNative::wait_pending_writes);
 	godot::ClassDB::bind_method(D_METHOD("commit_batch", "ops"), &FirebaseFirestoreNative::commit_batch);
 	godot::ClassDB::bind_method(D_METHOD("listen_doc", "path", "include_metadata_changes"), &FirebaseFirestoreNative::listen_doc, DEFVAL(false));
+	godot::ClassDB::bind_method(D_METHOD("listen_query", "collection_path", "filters", "order_by", "limit", "cursor", "include_metadata_changes"), &FirebaseFirestoreNative::listen_query, DEFVAL(Dictionary()), DEFVAL(false));
 	godot::ClassDB::bind_method(D_METHOD("remove_listener", "id"), &FirebaseFirestoreNative::remove_listener);
-	ADD_SIGNAL(godot::MethodInfo("document_changed",
-			godot::PropertyInfo(Variant::INT, "listener_id"), godot::PropertyInfo(Variant::BOOL, "ok"),
-			godot::PropertyInfo(Variant::DICTIONARY, "snapshot"), godot::PropertyInfo(Variant::INT, "error_code"),
-			godot::PropertyInfo(Variant::STRING, "error_message")));
+	for (const char *signal : { "document_changed", "query_changed" }) {
+		ADD_SIGNAL(godot::MethodInfo(signal,
+				godot::PropertyInfo(Variant::INT, "listener_id"), godot::PropertyInfo(Variant::BOOL, "ok"),
+				godot::PropertyInfo(Variant::DICTIONARY, "snapshot"), godot::PropertyInfo(Variant::INT, "error_code"),
+				godot::PropertyInfo(Variant::STRING, "error_message")));
+	}
 }
 
 } // namespace godot_firebase
