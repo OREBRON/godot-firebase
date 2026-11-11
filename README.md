@@ -607,7 +607,9 @@ print(welcome.value.value, welcome.value.source)
 # Geçersiz tek anahtar ya da değer hiçbirini yazmaz.
 await Firebase.crashlytics.set_custom_keys({"level": 7, "mode": "puzzle"}).wait()
 # Explicit GDScript nonfatal; bütün Godot hataları otomatik raporlanmaz.
-await Firebase.crashlytics.record_error("SaveError", "Save file unavailable").wait()
+# Stack kareleri {function, file, line}; get_stack() çıktısı olduğu gibi verilir
+# (release export'ta boş dönebilir).
+await Firebase.crashlytics.record_error("SaveError", "Save file unavailable", get_stack()).wait()
 ```
 
 Analytics/Crashlytics export seçenekleri `firebase/analytics_collection` ve

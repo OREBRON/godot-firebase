@@ -27,8 +27,10 @@ func set_user_id(user_id: String) -> FirebaseTask:
 func clear_user_id() -> FirebaseTask:
 	return _requests.send(&"clear_user_id", [])
 
+## Frames are {function, file, line}; get_stack() frames are accepted as they are.
 func record_error(name: String, message: String, stack: Array[Dictionary] = []) -> FirebaseTask:
-	return _send(&"record_error", [name, message, stack], validate_error(name, stack))
+	var frames := _with_file_keys(stack)
+	return _send(&"record_error", [name, message, frames], validate_error(name, frames))
 
 func set_collection_enabled(enabled: bool) -> FirebaseTask:
 	return _requests.send(&"set_collection_enabled", [enabled])
@@ -72,6 +74,17 @@ static func validate_custom_keys(keys: Dictionary) -> String:
 		if not reason.is_empty():
 			return reason
 	return ""
+
+## get_stack() names the script path "source"; the platform bridges read "file".
+static func _with_file_keys(stack: Array[Dictionary]) -> Array[Dictionary]:
+	var frames: Array[Dictionary] = []
+	for frame in stack:
+		var copy := frame.duplicate()
+		if copy.has("source") and not copy.has("file"):
+			copy.file = copy.source
+			copy.erase("source")
+		frames.append(copy)
+	return frames
 
 static func validate_error(name: String, stack: Array) -> String:
 	if name.is_empty():
