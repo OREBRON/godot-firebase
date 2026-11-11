@@ -3,7 +3,7 @@ extends RefCounted
 ## Cloud Functions (callable HTTPS functions) API.
 ##
 ## Data and results are null, bool, int, finite float, String, Array and Dictionary
-## with String keys. The region comes from the project setting REGION_SETTING.
+## with String keys. The default region comes from the project setting REGION_SETTING.
 
 const REGION_SETTING := "firebase/functions/region"
 const DEFAULT_REGION := "us-central1"
@@ -16,16 +16,20 @@ func _init(requests: FirebaseRequests) -> void:
 
 
 ## Calls the callable function `name`. Result value is its returned data.
-func call_function(name: String, data: Variant = null) -> FirebaseTask:
+## `region` (for example "europe-west1") calls a function deployed there;
+## "" uses the REGION_SETTING region.
+func call_function(name: String, data: Variant = null, region: String = "") -> FirebaseTask:
 	if not is_valid_name(name):
 		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, "function name must be non-empty and contain no NUL")
+	if not (region.is_empty() or is_valid_name(region)):
+		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, "function region must contain no NUL")
 	var reason := validate_data(data)
 	if not reason.is_empty():
 		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, reason)
-	return _requests.send(&"call_function", [name, data])
+	return _requests.send(&"call_function", [name, data, region])
 
 
-## The SDK takes the name as a C string, so NUL would cut it.
+## The SDK takes names and regions as C strings, so NUL would cut them.
 static func is_valid_name(name: String) -> bool:
 	return not name.is_empty() and not name.to_utf8_buffer().has(0)
 

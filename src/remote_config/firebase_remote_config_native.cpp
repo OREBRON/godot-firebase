@@ -263,6 +263,24 @@ int64_t FirebaseRemoteConfigNative::get_value(const String &p_key, int64_t p_val
 	});
 }
 
+int64_t FirebaseRemoteConfigNative::get_keys(const String &p_prefix) {
+	return with_config([&p_prefix](RemoteConfig *config, Completion done) {
+		const std::string prefix = to_std(p_prefix);
+		if (prefix.find('\0') != std::string::npos) {
+			done(Outcome::failure(kInvalidArgument, "Remote Config key prefix must contain no NUL"));
+			return;
+		}
+		// Both platforms list active and default keys; "" lists all of them.
+		PackedStringArray keys;
+		for (const std::string &key : config->GetKeysByPrefix(prefix.c_str())) {
+			keys.push_back(to_godot(key));
+		}
+		// The platform SDKs return sets in different orders.
+		keys.sort();
+		done(Outcome::success(keys));
+	});
+}
+
 int64_t FirebaseRemoteConfigNative::get_info() {
 	return with_config([](RemoteConfig *config, Completion done) {
 		done(Outcome::success(config_info(config->GetInfo())));
@@ -314,6 +332,7 @@ void FirebaseRemoteConfigNative::_bind_methods() {
 	godot::ClassDB::bind_method(D_METHOD("activate"), &FirebaseRemoteConfigNative::activate);
 	godot::ClassDB::bind_method(D_METHOD("fetch_and_activate"), &FirebaseRemoteConfigNative::fetch_and_activate);
 	godot::ClassDB::bind_method(D_METHOD("get_value", "key", "value_type"), &FirebaseRemoteConfigNative::get_value, DEFVAL(Variant::STRING));
+	godot::ClassDB::bind_method(D_METHOD("get_keys", "prefix"), &FirebaseRemoteConfigNative::get_keys, DEFVAL(""));
 	godot::ClassDB::bind_method(D_METHOD("get_info"), &FirebaseRemoteConfigNative::get_info);
 	godot::ClassDB::bind_method(D_METHOD("start_listening"), &FirebaseRemoteConfigNative::start_listening);
 	godot::ClassDB::bind_method(D_METHOD("stop_listening"), &FirebaseRemoteConfigNative::stop_listening);

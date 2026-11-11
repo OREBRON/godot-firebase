@@ -6,6 +6,7 @@
 #include <firebase/analytics.h>
 #include <godot_cpp/core/class_db.hpp>
 #include "../core/firebase_app_native.h"
+#include "../core/variant_convert.h"
 
 using godot::Array;
 using godot::Dictionary;
@@ -49,29 +50,44 @@ String validate_property(const String &p_name) {
 	if (p_name == "first_open_time" || p_name == "last_deep_link_referrer" || p_name == "user_id") return "reserved user property";
 	return validate_name(p_name, 24);
 }
-String validate_event(const String &p_name, const Dictionary &p_parameters) {
-	String reason = validate_name(p_name, 40);
-	if (!reason.is_empty()) return reason;
-	if (reserved_events.count(to_std(p_name))) return "reserved event name";
-	if (p_parameters.size() > 25) return "events accept at most 25 parameters";
+// The SDK logs bool as 1 or 0 and an Array of item maps as an items list.
+String validate_parameters(const Dictionary &p_parameters, bool p_allow_items) {
 	const Array keys = p_parameters.keys();
 	for (int64_t i = 0; i < keys.size(); i++) {
 		if (keys[i].get_type() != Variant::STRING) return "parameter keys must be strings";
-		reason = validate_name(keys[i], 40);
+		String reason = validate_name(keys[i], 40);
 		if (!reason.is_empty()) return reason;
 		const Variant value = p_parameters[keys[i]];
 		switch (value.get_type()) {
 			case Variant::STRING:
 				if (String(value).length() > 100 || has_null(value)) return "parameter strings accept at most 100 characters without NUL";
 				break;
-			case Variant::INT: break;
+			case Variant::INT:
+			case Variant::BOOL: break;
 			case Variant::FLOAT:
 				if (!std::isfinite(static_cast<double>(value))) return "parameter numbers must be finite";
 				break;
-			default: return "parameter values must be String, int or finite float";
+			case Variant::ARRAY: {
+				if (!p_allow_items) return "item values must be String, int, bool or finite float";
+				const Array items = value;
+				for (int64_t j = 0; j < items.size(); j++) {
+					if (items[j].get_type() != Variant::DICTIONARY) return "parameter arrays must contain only item Dictionaries";
+					reason = validate_parameters(items[j], false);
+					if (!reason.is_empty()) return reason;
+				}
+				break;
+			}
+			default: return "parameter values must be String, int, bool, finite float or an Array of item Dictionaries";
 		}
 	}
 	return String();
+}
+String validate_event(const String &p_name, const Dictionary &p_parameters) {
+	const String reason = validate_name(p_name, 40);
+	if (!reason.is_empty()) return reason;
+	if (reserved_events.count(to_std(p_name))) return "reserved event name";
+	if (p_parameters.size() > 25) return "events accept at most 25 parameters";
+	return validate_parameters(p_parameters, true);
 }
 } // namespace
 
@@ -111,11 +127,9 @@ int64_t FirebaseAnalyticsNative::log_event(const String &p_name, const Dictionar
 		names.reserve(keys.size()); parameters.reserve(keys.size());
 		for (int64_t i = 0; i < keys.size(); i++) {
 			names.push_back(to_std(keys[i]));
-			const Variant value = p_parameters[keys[i]];
 			firebase::Variant converted;
-			if (value.get_type() == Variant::STRING) converted = firebase::Variant(to_std(value));
-			else if (value.get_type() == Variant::INT) converted = firebase::Variant(static_cast<int64_t>(value));
-			else converted = firebase::Variant(static_cast<double>(value));
+			// validate_event() already accepted the value, so the conversion succeeds.
+			to_firebase_variant(p_parameters[keys[i]], converted);
 			parameters.emplace_back(names.back().c_str(), std::move(converted));
 		}
 		firebase::analytics::LogEvent(to_std(p_name).c_str(), parameters);

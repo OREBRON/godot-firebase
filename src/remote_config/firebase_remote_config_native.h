@@ -25,6 +25,7 @@ public:
 	int64_t activate();
 	int64_t fetch_and_activate();
 	int64_t get_value(const godot::String &p_key, int64_t p_value_type = godot::Variant::STRING);
+	int64_t get_keys(const godot::String &p_prefix = "");
 	int64_t get_info();
 	int64_t start_listening();
 	void stop_listening();

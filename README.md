@@ -11,9 +11,9 @@ ayrılmıştır; mevcut native build seçilen modülleri tek kütüphaneye bağl
 | firestore | `firestore/` | `FirebaseFirestoreNative` | Doküman, sorgu (sayfalama imleci, count), batch, doküman/sorgu dinleyicisi, dizi union/remove, cache/pending-write gözlemi |
 | storage | `storage/` | `FirebaseStorageNative` | Dosya yükleme/indirme (bayt veya yerel dosya; ilerleme, iptal), klasör listeleme, indirme URL'si, metadata okuma/güncelleme, silme |
 | database | `database/` | `FirebaseDatabaseNative` | Realtime Database, başlangıç persistence seçimi, bağlantı/presence |
-| functions | `functions/` | `FirebaseFunctionsNative` | Callable HTTPS fonksiyon çağrısı |
-| analytics | `analytics/` | `FirebaseAnalyticsNative` | Event, kullanıcı özelliği, collection ve consent |
-| remote_config | `remote_config/` | `FirebaseRemoteConfigNative` | Defaults/fetch/activate, tipli değer, realtime güncelleme |
+| functions | `functions/` | `FirebaseFunctionsNative` | Callable HTTPS fonksiyon çağrısı (çağrı başına bölge) |
+| analytics | `analytics/` | `FirebaseAnalyticsNative` | Event (bool ve `items` dizisi dahil), kullanıcı özelliği, collection ve consent |
+| remote_config | `remote_config/` | `FirebaseRemoteConfigNative` | Defaults/fetch/activate, tipli değer, anahtar listesi, realtime güncelleme |
 | crashlytics | `crashlytics/` | `FirebaseCrashlyticsNative` | Açık nonfatal rapor, platform native crash, collection ve rapor kontrolü |
 
 Sekiz ürünün API/mock katmanı mevcuttur. Analytics ve Remote Config pinned
@@ -135,7 +135,8 @@ Eksik LFS binary, import/script hatası ve timeout başarısız sayılır.
    projesine ayrıca yükle; `templates/` mevcut eklenti ZIP'ine dahil değildir.
    Diğer ürünlerin erişim kurallarını oyununa göre yapılandır.
 6. Functions varsayılan bölgesi `us-central1`. Başka bölge için proje ayarı
-   `firebase/functions/region` ekle.
+   `firebase/functions/region` ekle. Başka bölgedeki tek bir fonksiyonu
+   `call_function(name, data, "europe-west1")` ile çağır.
 
 ### Android
 
@@ -230,7 +231,8 @@ yol olmadan `"host:port"` yaz; boş değer Firebase projesini kullanır.
   `"host": "0.0.0.0"` ile başlat.
 - Realtime Database emulator namespace'i olarak uygulama config'indeki database
   URL'sinin adını (yoksa `<project_id>-default-rtdb`) kullanır. Functions bölgesi
-  yine `firebase/functions/region` ayarından gelir.
+  yine `firebase/functions/region` ayarından ya da `call_function()`'ın `region`
+  argümanından gelir.
 - Emulator'ler TLS kullanmaz. Android 9+ şifresiz HTTP'yi varsayılan olarak
   engeller; Godot'da bunun export seçeneği yoktur ve eklenti export güvenlik
   ayarlarını değiştirmez. Gradle build'de yalnız debug build için emulator host'una
@@ -534,8 +536,9 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
     `Firebase.backends.firestore.documents`, `database.root` veya `storage.files`
     üzerinden doldur.
   - Functions yalnızca `Firebase.backends.functions.handlers` içine kaydedilen
-    yerel fonksiyonları çağırır. Veri ve sonuç JSON'dan geçer: handler sayıları
-    float görür; tam sayı sonuçlar int, packed diziler Array döner, anahtarlar sıralanır.
+    yerel fonksiyonları çağırır; bir handler adını her bölgede yanıtlar. Veri ve
+    sonuç JSON'dan geçer: handler sayıları float görür; tam sayı sonuçlar int,
+    packed diziler Array döner, anahtarlar sıralanır.
   - Storage indirme URL'leri (`https://storage.mock/...`) indirilemez; içerik tipi
     verilmeyen yükleme `application/octet-stream` olur. Aktarımlar bir sonraki boş
     karede biter (iptal ancak ondan önce işler); `upload_file`/`download_file` gerçek yerel
@@ -597,6 +600,10 @@ döndürür. Oyun her bağlantıda yeniden kayıt yapar; ACK'ten sonra online ya
 ```gdscript
 # Yerel Analytics çağrısıdır; upload onayı değildir. Auth UID otomatik atanmaz.
 await Firebase.analytics.log_event("level_end", {"level": 7}).wait()
+# Parametreler String, int, bool (1/0 olarak gider) veya sonlu float; dizi parametresi
+# (ör. "items") yalnız aynı tiplerde değerli item sözlükleri alır.
+await Firebase.analytics.log_event("purchase", {"currency": "TRY", "value": 49.9, "first_purchase": true,
+		"items": [{"item_id": "sword", "price": 49.9, "quantity": 1}]}).wait()
 await Firebase.analytics.set_consent({"analytics_storage": FirebaseAnalytics.GRANTED}).wait()
 
 # Fetch aktif değerleri değiştirmez. Uygulama anını oyun seçer.
@@ -605,6 +612,8 @@ await Firebase.remote_config.fetch().wait()
 await Firebase.remote_config.activate().wait()
 var welcome: FirebaseResult = await Firebase.remote_config.get_value("welcome").wait()
 print(welcome.value.value, welcome.value.source)
+# Aktif ve varsayılan anahtarlar, sıralı; önekle süzülebilir ("" hepsi).
+var keys: PackedStringArray = (await Firebase.remote_config.get_keys("shop_").wait()).value
 
 # Anahtarlar boş olmayan String; değerler String, bool, int veya sonlu float.
 # Geçersiz tek anahtar ya da değer hiçbirini yazmaz.

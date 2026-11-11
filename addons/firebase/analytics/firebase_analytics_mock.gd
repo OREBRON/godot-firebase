@@ -11,7 +11,7 @@ var consents := {"analytics_storage": 0, "ad_storage": 0, "ad_user_data": 0, "ad
 func log_event(name: String, parameters: Dictionary = {}) -> int:
 	return _apply(func():
 		if collection_enabled:
-			events.append({"name": name, "parameters": parameters.duplicate()}))
+			events.append({"name": name, "parameters": parameters.duplicate(true)}))
 
 func set_user_id(value: String) -> int:
 	return _apply(func(): user_id = value)

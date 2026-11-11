@@ -13,9 +13,15 @@ func _run() -> void:
 	for name in ["", "1bad", "firebase_custom", "ga_custom", "google_custom", "session_start", "a".repeat(41)]:
 		result = await api.log_event(name).wait()
 		check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "invalid/reserved event rejected: " + name)
-	for values in [{"nested": {}}, {"value": true}, {"value": INF}, {"value": "a".repeat(101)}, {"firebase_key": 1}, {1: "x"}]:
+	for values in [{"nested": {}}, {"value": INF}, {"value": "a".repeat(101)}, {"firebase_key": 1}, {1: "x"},
+			{"items": [1]}, {"items": [{"tags": []}]}, {"items": [{"price": NAN}]}, {"items": [{"firebase_id": "a"}]}]:
 		result = await api.log_event("level_end", values).wait()
-		check(not result.ok, "invalid event parameter rejected")
+		check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "invalid event parameter rejected: %s" % str(values))
+	var items := [{"item_id": "sword", "price": 9.99, "quantity": 1, "on_sale": false}]
+	result = await api.log_event("purchase", {"currency": "USD", "value": 9.99, "first_purchase": true, "items": items}).wait()
+	check(result.ok and backend.events.size() == 2, "bool parameter and item array accepted")
+	items[0].item_id = "changed"
+	check(backend.events[1].parameters.items[0].item_id == "sword", "recorded items are a copy")
 	var many := {}
 	for i in 26:
 		many["p%d" % i] = i
@@ -24,7 +30,7 @@ func _run() -> void:
 	result = await api.set_collection_enabled(false).wait()
 	check(result.ok, "collection switch is a local success")
 	result = await api.log_event("level_end").wait()
-	check(result.ok and backend.events.size() == 1, "collection disabled drops event with local success")
+	check(result.ok and backend.events.size() == 2, "collection disabled drops event with local success")
 	result = await api.set_consent({"analytics_storage": 1, "ad_storage": 1}).wait()
 	check(result.ok, "consent accepted")
 	result = await api.set_consent({"ad_storage": 0}).wait()
