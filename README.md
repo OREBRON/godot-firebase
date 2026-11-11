@@ -9,7 +9,7 @@ ayrılmıştır; mevcut native build seçilen modülleri tek kütüphaneye bağl
 | core (zorunlu) | `core/` | `FirebaseAppNative` | App başlatma, görev ve sonuç tipleri |
 | auth | `auth/` | `FirebaseAuthNative` | Anonim, Google, Play Games, Game Center, Apple, custom token, e-posta/parola, hesap bağlama, yeniden doğrulama, sağlayıcı kaldırma, profil, silme |
 | firestore | `firestore/` | `FirebaseFirestoreNative` | Doküman, sorgu, batch, dinleyici, cache/pending-write gözlemi |
-| storage | `storage/` | `FirebaseStorageNative` | Dosya yükleme/indirme (bayt), indirme URL'si, metadata, silme |
+| storage | `storage/` | `FirebaseStorageNative` | Dosya yükleme/indirme (bayt veya yerel dosya; ilerleme, iptal), klasör listeleme, indirme URL'si, metadata okuma/güncelleme, silme |
 | database | `database/` | `FirebaseDatabaseNative` | Realtime Database, başlangıç persistence seçimi, bağlantı/presence |
 | functions | `functions/` | `FirebaseFunctionsNative` | Callable HTTPS fonksiyon çağrısı |
 | analytics | `analytics/` | `FirebaseAnalyticsNative` | Event, kullanıcı özelliği, collection ve consent |
@@ -357,6 +357,14 @@ var file := "users/%s/avatar.png" % uid
 await Firebase.storage.upload_bytes(file, png_bytes, "image/png").wait()
 var bytes: PackedByteArray = (await Firebase.storage.download_bytes(file).wait()).value
 
+# Büyük dosyayı belleğe almadan diske indir. İlerlemeyi her karede oku; vazgeçilirse cancel_transfer(pack).
+var pack: FirebaseTask = Firebase.storage.download_file("packs/level2.pck", "user://level2.pck")
+var progress: Dictionary = Firebase.storage.get_transfer_progress(pack)  # {bytes_transferred, total_bytes}
+if (await pack.wait()).ok:
+	ProjectSettings.load_resource_pack("user://level2.pck")
+var page: Dictionary = (await Firebase.storage.list_files("packs").wait()).value  # {files, folders, next_page_token}
+await Firebase.storage.update_metadata(file, {"cache_control": "public, max-age=3600", "custom_metadata": {"version": "2"}}).wait()
+
 await Firebase.database.set_value("rooms/r1/players/%s" % uid, {"ready": true, "joined": FirebaseDatabase.SERVER_TIMESTAMP}).wait()
 var key: String = (await Firebase.database.push_value("rooms/r1/chat", {"text": "selam"}).wait()).value
 var room: int = Firebase.database.listen_value("rooms/r1", func(r: FirebaseResult): print(r.value.value if r.ok else r.error_message))
@@ -403,9 +411,23 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   `limit_to_first` veya `limit_to_last` (1..2147483647). Sonuç `value` eşleşen alt
   düğümlerin sorgu sırasındaki sözlüğüdür (Array'e dönmez); eşleşme yoksa `null`.
   Child olayları ve transaction yoktur.
-- Storage metadata sonucu `{path, name, size, content_type, updated}`;
-  `updated` Unix milisaniye. `download_bytes` varsayılan olarak en fazla 10 MB okur;
+- Storage metadata sonucu `{path, name, size, content_type, cache_control, custom_metadata, updated}`;
+  `updated` Unix milisaniye, `custom_metadata` String anahtar ve değerli sözlük. `download_bytes` varsayılan olarak en fazla 10 MB okur;
   `max_size` tamponu baştan ayrıldığı için en fazla 100 MB (`FirebaseStorage.MAX_DOWNLOAD`) olabilir.
+  Daha büyük dosyalar için `download_file(path, local_path)` ve `upload_file(path, local_path, content_type)`
+  dosyayı belleğe almadan diske yazar/diskten okur; `local_path` `user://` ya da mutlak yoldur
+  (`res://` dışa aktarımda gerçek dosya değildir). İndirme hedefteki dosyanın yerine geçer, klasörü
+  var olmalıdır; sonuç değeri yazılan bayt sayısıdır, başarısız indirmede dosya yarım kalabilir.
+- Dört aktarım görevinde (`upload_bytes`, `upload_file`, `download_bytes`, `download_file`)
+  `get_transfer_progress(task)` `{bytes_transferred, total_bytes}` döner (`total_bytes` bilinene
+  kadar -1; görev bitince `{}`); her karede okunabilir. `cancel_transfer(task)` süren aktarımı
+  durdurur, görev `error_code == 11` (Firebase `kErrorCancelled`) ile biter; bitmiş göreve etkisizdir.
+- `list_files(folder, max_results = 1000, page_token = "")` klasörün doğrudan içindeki dosya ve
+  alt klasörlerin tam yollarını sayfa sayfa verir: `{files, folders, next_page_token}`; sonraki sayfa
+  için `next_page_token`'ı geri ver, son sayfada `""`. Klasör yolu dosya yolu kuralına uyar (kök listelenmez);
+  `max_results` 1..1000.
+- `update_metadata(path, {content_type, cache_control, custom_metadata})` yalnız verilen anahtarları
+  değiştirir; `custom_metadata` girdileri saklı olanlara eklenir. Değerler String'dir; sonuç güncel metadata'dır.
 - Geçersiz veri native katmana ulaşmadan `ERR_INVALID_ARGUMENT` ile döner.
 - Silinen modülün özelliği `null` olur (`Firebase.firestore == null`). Bu yüzden
   modül özellikleri (`Firebase.auth`, `Firebase.storage`, ...) tipsizdir;
@@ -429,7 +451,9 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
     yerel fonksiyonları çağırır. Veri ve sonuç JSON'dan geçer: handler sayıları
     float görür; tam sayı sonuçlar int, packed diziler Array döner, anahtarlar sıralanır.
   - Storage indirme URL'leri (`https://storage.mock/...`) indirilemez; içerik tipi
-    verilmeyen yükleme `application/octet-stream` olur.
+    verilmeyen yükleme `application/octet-stream` olur. Aktarımlar bir sonraki boş
+    karede biter (iptal ancak ondan önce işler); `upload_file`/`download_file` gerçek yerel
+    dosyayı okur/yazar.
 - Auth kullanıcısı `{uid, email, display_name, photo_url, is_anonymous, providers}`
   sözlüğüdür; `providers` Firebase sağlayıcı kimlikleridir (`"google.com"`,
   `"apple.com"`, `"gc.apple.com"`, `"playgames.google.com"`, `"password"`).

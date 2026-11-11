@@ -23,6 +23,12 @@ func send(method: StringName, args: Array = []) -> FirebaseTask:
 	return task
 
 
+## Request id of a task that has not finished yet, or 0.
+func id_of(task: FirebaseTask) -> int:
+	var id: Variant = _pending.find_key(task)
+	return id if id != null else 0
+
+
 ## Returns a task that fails on the next idle frame, so callers can always await it.
 func failed(code: int, message: String) -> FirebaseTask:
 	var task := FirebaseTask.new()
