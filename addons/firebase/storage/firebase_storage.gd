@@ -38,6 +38,8 @@ func upload_file(path: String, local_path: String, content_type := "") -> Fireba
 
 ## Result value is a PackedByteArray. Files larger than `max_size` fail.
 ## `max_size` must be in 1..MAX_DOWNLOAD (100 MB); the whole buffer is reserved before downloading.
+## The received bytes are copied from that buffer into the result, so memory
+## briefly holds the file at least twice. Use download_file() for large files.
 func download_bytes(path: String, max_size := DEFAULT_MAX_DOWNLOAD) -> FirebaseTask:
 	if max_size <= 0 or max_size > MAX_DOWNLOAD:
 		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, "max_size must be in 1..%d" % MAX_DOWNLOAD)
