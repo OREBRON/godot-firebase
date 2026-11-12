@@ -735,7 +735,8 @@ kanıtı ayrı kabul işlerinde bekliyor.
 
 Release, imza anahtarı Keychain'inde olan Mac'te `tools/release.sh` ile yayımlanır:
 tag'i oluşturup push et, tag'e checkout yap ve `tools/release.sh v4.7.2` çalıştır.
-Betik temiz çalışma kopyasını ve tag eşleşmesini kontrol eder, iOS/Android/macOS'u
+Betik temiz çalışma kopyasını (kendisinin yeniden derlediği iki macOS editör
+stub'ı hariç) ve tag eşleşmesini kontrol eder, iOS/Android/macOS'u
 derler, testleri ve paket smoke testini koşar, iOS'u `--sign-ios` ile imzalar,
 origin'deki tag'in HEAD'i gösterdiğini doğrular ve `godot-firebase.zip`,
 `godot-firebase-symbols.zip`, `SHA256SUMS.txt` dosyalarıyla yeni release'i oluşturur.

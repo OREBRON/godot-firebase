@@ -18,7 +18,9 @@ modules="auth,firestore,storage,database,functions,analytics,remote_config,crash
 
 # The published binaries must be built from exactly the tagged, committed sources.
 test "$(git rev-parse HEAD)" = "$(git rev-parse "$tag^{commit}")" || { echo "Check out $tag first" >&2; exit 1; }
-test -z "$(git status --porcelain --untracked-files=no)" || { echo "Commit or stash local changes first" >&2; exit 1; }
+# Tracked changes block the release, except the two macOS editor stubs: the macOS build below
+# rewrites them, and their bytes follow the local Xcode, so any earlier build leaves them modified.
+test -z "$(git status --porcelain --untracked-files=no -- . ':!addons/firebase/bin/macos/*.dylib')" || { echo "Commit or stash local changes first" >&2; exit 1; }
 # SConstruct and the AAR glob sources and package.sh ships all of addons/firebase, so
 # untracked and ignored files are inputs too. The build regenerates the mobile outputs;
 # only SCons objects and Finder metadata (never linked or packaged) may remain.
