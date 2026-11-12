@@ -13,17 +13,18 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 source = (ROOT / "src/auth/firebase_auth_native.cpp").read_text()
-def function(start):
- pos=source.index(start)
- brace=source.index('{',pos)
+def function(start, text=source):
+ pos=text.index(start)
+ brace=text.index('{',pos)
  level=1
  end=brace+1
  while level:
-  level += (source[end]=='{')-(source[end]=='}')
+  level += (text[end]=='{')-(text[end]=='}')
   end+=1
- return source[pos:end]
+ return text[pos:end]
 structs=source[source.index('struct AuthOperation {'):source.index('namespace {',source.index('struct AuthOperation {'))]
 helpers='\n'.join(function(n) for n in ['void cancel_operation(', 'Completion finish_operation(', 'bool compensating_sign_out_pending('])
+helpers+='\n'+function('template <typename T, typename Map>', (ROOT / "src/core/outcome.h").read_text())
 methods='\n'.join(function(n) for n in ['void FirebaseAuthNative::shutdown()', 'void FirebaseAuthNative::shutdown_all()', 'void FirebaseAuthNative::sign_out()'])
 prelude=r"""
 #include <functional>
@@ -38,9 +39,22 @@ prelude=r"""
 namespace firebase { namespace auth {
 struct Auth { int signouts=0; void SignOut(){++signouts;} void RemoveAuthStateListener(void*){}; };
 }}
+namespace firebase {
+enum FutureStatus { kFutureStatusComplete, kFutureStatusPending, kFutureStatusInvalid };
+// The invalid Future the SDK's User methods return without a signed-in user:
+// its OnCompletion() drops the callback.
+template <typename T> struct Future {
+ FutureStatus status() const {return kFutureStatusInvalid;}
+ int error() const {return -1;}
+ const char* error_message() const {return nullptr;}
+ void OnCompletion(std::function<void(const Future&)>) const {}
+};
+}
+namespace godot { struct Variant {}; struct String { static const char* utf8(const char* text) {return text;} }; }
 struct User {};
-struct Outcome { bool ok; static Outcome failure(int,const char*) {return {false};} };
+struct Outcome { bool ok; int error_code=0; static Outcome success(godot::Variant) {return {true};} static Outcome failure(int code,const char*) {return {false,code};} };
 using Completion=std::function<void(Outcome)>;
+constexpr int kUnavailable=-3;
 constexpr int kCancelled=-5;
 int platform_clears=0;
 void clear_platform_credential_state() {++platform_clears;}
@@ -109,12 +123,29 @@ void uninitialized_wrapper_does_not_clear_owner() {
  owner.shutdown();
  assert(platform_clears==clears_before+1);
 }
+void invalid_sdk_future_releases_slot() {
+ firebase::auth::Auth sdk;
+ auto session=std::make_shared<AuthSession>();
+ session->auth=&sdk;
+ auto operation=std::make_shared<AuthOperation>();
+ operation->sdk_started=true;
+ int code=0;
+ operation->done=[&](Outcome result){assert(!result.ok); code=result.error_code;};
+ session->active=operation;
+ {
+  std::lock_guard<std::recursive_mutex> lock(session->mutex); // as the sign-in call sites hold it
+  complete_when_done(firebase::Future<void>(), finish_operation(session,operation), [](const firebase::Future<void>&){return godot::Variant();});
+ }
+ assert(code==kUnavailable);
+ assert(!session->active); // the next sign-in is not busy
+}
 int main() {
  pending_sdk_completion(true,false,false);
  pending_sdk_completion(false,false,false);
  pending_sdk_completion(true,true,false);
  pending_sdk_completion(false,true,true);
  uninitialized_wrapper_does_not_clear_owner();
+ invalid_sdk_future_releases_slot();
  std::cout << "Auth lifecycle state checks passed (SDK stub, not device evidence)\n";
 }
 """
