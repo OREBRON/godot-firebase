@@ -33,6 +33,15 @@ func _fail_if_requested(id: int) -> bool:
 	return true
 
 
+## Starts a request that runs `action` now, unless fail_next() was called, and
+## finishes with its return value. Returns the request id.
+func _apply(action: Callable) -> int:
+	var id := _take_id()
+	if not _fail_if_requested(id):
+		_finish(id, action.call())
+	return id
+
+
 ## Fails listener `id` through `changed` when fail_next() was called; returns true
 ## then. The SDKs deliver no snapshot with a listener error and stop that listener.
 func _fail_listener_if_requested(changed: Signal, id: int) -> bool:

@@ -36,10 +36,3 @@ func reset_analytics_data() -> int:
 		events.clear()
 		user_id = ""
 		user_properties.clear())
-
-func _apply(action: Callable) -> int:
-	var id := _take_id()
-	if not _fail_if_requested(id):
-		action.call()
-		_finish(id)
-	return id

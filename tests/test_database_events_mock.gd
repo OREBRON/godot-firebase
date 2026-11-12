@@ -50,7 +50,7 @@ func _run() -> void:
 	await process_frame
 	check(denied != 0 and rejected.size() == 1, "a failed listener gets one event, then stops")
 	check(rejected.size() == 1 and not rejected[0].ok and rejected[0].value == null and rejected[0].error_code == 8 and rejected[0].error_message == "permission denied", "listener failure has no snapshot")
-	check(not db._listeners.has(denied), "a failed listener is removed without remove_listener()")
+	check(not db._listeners._callbacks.has(denied), "a failed listener is removed without remove_listener()")
 
 	var cancelled: Array[FirebaseResult] = []
 	var running := db.listen_value("game/score", func(result: FirebaseResult): cancelled.append(result))
@@ -59,7 +59,7 @@ func _run() -> void:
 	await db.set_value("game/score", 4).wait()
 	await process_frame
 	check(cancelled.size() == 2 and not cancelled[1].ok, "a cancelled listener gets the failure as its last event")
-	check(not db._listeners.has(running) and not backend._listeners.has(running), "a cancelled listener is removed from the backend")
+	check(not db._listeners._callbacks.has(running) and not backend._listeners.has(running), "a cancelled listener is removed from the backend")
 
 	var owner := ListenerOwner.new()
 	var orphan := db.listen_value("game/score", owner.on_result)

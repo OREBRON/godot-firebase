@@ -70,7 +70,7 @@ func _listener_failures() -> void:
 	await db.set_doc("rooms/r1/chat/m4", {"at": 4}).wait()
 	await process_frame
 	check(denied != 0 and rejected.size() == 1 and not rejected[0].ok and rejected[0].error_code == 7 and rejected[0].value == null, "a failed query listener gets one failure event")
-	check(not db._listeners.has(denied) and not backend._listeners.has(denied), "a failed query listener is removed")
+	check(not db._listeners._callbacks.has(denied) and not backend._listeners.has(denied), "a failed query listener is removed")
 
 
 func _count() -> void:

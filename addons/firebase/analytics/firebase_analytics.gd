@@ -16,10 +16,10 @@ func _init(requests: FirebaseRequests) -> void:
 	_requests = requests
 
 func log_event(name: String, parameters: Dictionary = {}) -> FirebaseTask:
-	return _send(&"log_event", [name, parameters], validate_event(name, parameters))
+	return _requests.send_if_valid(&"log_event", [name, parameters], validate_event(name, parameters))
 
 func set_user_id(user_id: String) -> FirebaseTask:
-	return _send(&"set_user_id", [user_id], "user_id must contain 1..256 characters" if user_id.is_empty() or user_id.length() > 256 or _has_null(user_id) else "")
+	return _requests.send_if_valid(&"set_user_id", [user_id], "user_id must contain 1..256 characters" if user_id.is_empty() or user_id.length() > 256 or _has_null(user_id) else "")
 
 func clear_user_id() -> FirebaseTask:
 	return _requests.send(&"clear_user_id", [])
@@ -28,24 +28,19 @@ func set_user_property(name: String, value: String) -> FirebaseTask:
 	var reason := validate_property_name(name)
 	if reason.is_empty() and (value.length() > 36 or _has_null(value)):
 		reason = "user property value must contain at most 36 characters without NUL"
-	return _send(&"set_user_property", [name, value], reason)
+	return _requests.send_if_valid(&"set_user_property", [name, value], reason)
 
 func clear_user_property(name: String) -> FirebaseTask:
-	return _send(&"clear_user_property", [name], validate_property_name(name))
+	return _requests.send_if_valid(&"clear_user_property", [name], validate_property_name(name))
 
 func set_collection_enabled(enabled: bool) -> FirebaseTask:
 	return _requests.send(&"set_collection_enabled", [enabled])
 
 func set_consent(consents: Dictionary) -> FirebaseTask:
-	return _send(&"set_consent", [consents], validate_consent(consents))
+	return _requests.send_if_valid(&"set_consent", [consents], validate_consent(consents))
 
 func reset_analytics_data() -> FirebaseTask:
 	return _requests.send(&"reset_analytics_data", [])
-
-func _send(method: StringName, args: Array, reason: String) -> FirebaseTask:
-	if not reason.is_empty():
-		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, reason)
-	return _requests.send(method, args)
 
 static func _has_null(value: String) -> bool:
 	for i in value.length():

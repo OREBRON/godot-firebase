@@ -58,9 +58,3 @@ func delete_unsent_reports() -> int:
 	return _apply(func():
 		if not collection_enabled:
 			delete_requested = true)
-
-func _apply(action: Callable) -> int:
-	var id := _take_id()
-	if not _fail_if_requested(id):
-		_finish(id, action.call())
-	return id

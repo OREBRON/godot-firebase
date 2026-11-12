@@ -16,20 +16,21 @@ const MAX_LIMIT := 2147483647
 const INVALID_DOCUMENT_ID := "document ID must be a non-empty string without '/'"
 
 var _requests: FirebaseRequests
-var _listeners: Dictionary[int, Callable] = {}
+var _listeners: FirebaseListeners
 
 
 func _init(requests: FirebaseRequests) -> void:
 	_requests = requests
+	_listeners = FirebaseListeners.new(_requests.backend)
 	if _requests.backend:
-		_requests.backend.document_changed.connect(_on_snapshot)
-		_requests.backend.query_changed.connect(_on_snapshot)
+		_requests.backend.document_changed.connect(_listeners.deliver)
+		_requests.backend.query_changed.connect(_listeners.deliver)
 
 
 ## Source is default (server with cache fallback), cache, or server.
 func get_doc(path: String, source: String = "default") -> FirebaseTask:
 	if not source in ["default", "cache", "server"]:
-		return _invalid("source must be default, cache, or server")
+		return _requests.invalid("source must be default, cache, or server")
 	return _document_request(path, &"get_doc", [path, source])
 
 
@@ -63,7 +64,7 @@ func query_snapshot(collection_path: String, filters: Array = [], order_by: Arra
 func count(collection_path: String, filters: Array = []) -> FirebaseTask:
 	var reason := _validate_query(collection_path, filters)
 	if not reason.is_empty():
-		return _invalid(reason)
+		return _requests.invalid(reason)
 	return _requests.send(&"run_count", [collection_path, filters])
 
 
@@ -80,10 +81,10 @@ func wait_pending_writes() -> FirebaseTask:
 
 func _query(method: StringName, collection_path: String, filters: Array, order_by: Array, limit: int, source: String, cursor: Dictionary) -> FirebaseTask:
 	if not source in ["default", "cache", "server"]:
-		return _invalid("source must be default, cache, or server")
+		return _requests.invalid("source must be default, cache, or server")
 	var reason := _validate_query(collection_path, filters, order_by, limit, cursor)
 	if not reason.is_empty():
-		return _invalid(reason)
+		return _requests.invalid(reason)
 	return _requests.send(method, [collection_path, filters, order_by, limit, source, cursor])
 
 
@@ -93,7 +94,7 @@ func batch(ops: Array) -> FirebaseTask:
 	for op in ops:
 		var reason := _validate_batch_op(op)
 		if not reason.is_empty():
-			return _invalid(reason)
+			return _requests.invalid(reason)
 	return _requests.send(&"commit_batch", [ops])
 
 
@@ -104,7 +105,7 @@ func listen_doc(path: String, callback: Callable, include_metadata_changes: bool
 	if _requests.backend == null or not FirebaseValue.is_document_path(path):
 		push_error("Firebase: cannot listen to %s" % path)
 		return 0
-	return _listen(_requests.backend.listen_doc(path, include_metadata_changes), callback)
+	return _listeners.add(_requests.backend.listen_doc(path, include_metadata_changes), callback)
 
 
 ## Like listen_doc() for a query: each result value is {documents, metadata} as
@@ -114,30 +115,23 @@ func listen_query(collection_path: String, callback: Callable, filters: Array = 
 	if _requests.backend == null or not reason.is_empty():
 		push_error("Firebase: cannot listen to %s: %s" % [collection_path, reason if reason else "no backend"])
 		return 0
-	return _listen(_requests.backend.listen_query(collection_path, filters, order_by, limit, cursor, include_metadata_changes), callback)
-
-
-func _listen(id: int, callback: Callable) -> int:
-	if id != 0:
-		_listeners[id] = callback
-	return id
+	return _listeners.add(_requests.backend.listen_query(collection_path, filters, order_by, limit, cursor, include_metadata_changes), callback)
 
 
 func remove_listener(id: int) -> void:
-	if _listeners.erase(id):
-		_requests.backend.remove_listener(id)
+	_listeners.remove(id)
 
 
 func _document_request(path: String, method: StringName, args: Array) -> FirebaseTask:
 	if not FirebaseValue.is_document_path(path):
-		return _invalid("not a document path: %s" % path)
+		return _requests.invalid("not a document path: %s" % path)
 	return _requests.send(method, args)
 
 
 ## `reason` is the data validation result.
 func _write(path: String, method: StringName, reason: String, args: Array) -> FirebaseTask:
 	if not reason.is_empty():
-		return _invalid(reason)
+		return _requests.invalid(reason)
 	return _document_request(path, method, args)
 
 
@@ -230,16 +224,3 @@ func _validate_batch_op(op: Variant) -> String:
 	if not merge is bool:
 		return "batch merge must be a bool: %s" % str(merge)
 	return FirebaseValue.validate_data(data, merge)
-
-
-func _invalid(reason: String) -> FirebaseTask:
-	return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, reason)
-
-
-func _on_snapshot(listener_id: int, ok: bool, snapshot: Dictionary, error_code: int, error_message: String) -> void:
-	var callback: Callable = _listeners.get(listener_id, Callable())
-	# The SDK stops a listener after an error; a freed callback object never calls remove_listener().
-	if not ok or not callback.is_valid():
-		remove_listener(listener_id)
-	if callback.is_valid():
-		callback.call(FirebaseResult.success(snapshot) if ok else FirebaseResult.failure(error_code, error_message))
