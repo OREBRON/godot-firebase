@@ -3,6 +3,7 @@
 #   godot-cpp            ~25 MB  (git, pinned commit)
 #   Firebase C++ SDK     ~1.8 GB zip (dl.google.com)
 #   Firebase iOS SDK zip ~340 MB (github.com/firebase/firebase-ios-sdk releases)
+#   Firebase Android BoM  ~5 KB  (dl.google.com), only read by tests
 # Only iOS (device + arm64 simulator) and Android arm64-v8a files of the used
 # modules are extracted; archives are verified, then deleted.
 set -euo pipefail
@@ -68,6 +69,11 @@ fetch_zip "https://github.com/firebase/firebase-ios-sdk/releases/download/${FIRE
 	'Firebase/FirebaseAnalytics/*' 'Firebase/FirebaseAuth/*' 'Firebase/FirebaseFirestore/*' \
 	'Firebase/FirebaseStorage/*' 'Firebase/FirebaseDatabase/*' 'Firebase/FirebaseFunctions/*' \
 	'Firebase/FirebaseRemoteConfig/*' 'Firebase/FirebaseCrashlytics/*'
+
+bom="third_party/firebase-bom-${FIREBASE_ANDROID_BOM_VERSION}.pom"
+[ -f "$bom" ] || curl --fail --location --silent --show-error --output "$bom" \
+	"https://dl.google.com/dl/android/maven2/com/google/firebase/firebase-bom/${FIREBASE_ANDROID_BOM_VERSION}/$(basename "$bom")"
+verify "$bom" "$FIREBASE_ANDROID_BOM_SHA256"
 
 du -sh third_party/* | sed 's/^/third_party size: /'
 df -h third_party | tail -1 | sed 's/^/disk: /'

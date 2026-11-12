@@ -101,6 +101,7 @@ jobs:
           python3 tests/test_auth_lifecycle.py
           python3 tests/test_native_guards.py
           python3 tests/test_sdk_capability_packages.py
+          python3 tests/test_android_dependency_pins.py
       - name: Build selected monolith for all supported targets
         run: |
           set -euo pipefail
