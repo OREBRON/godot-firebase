@@ -491,7 +491,21 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   sunucuya ulaşmamış yerel yazmaları saymaz.
 - `listen_query(collection, callback, filters, order_by, limit, cursor, include_metadata_changes)`
   her sonuçta `query_snapshot()` biçimini (`{documents, metadata}`) verir: ilk sonuç hemen,
-  sonrakiler sonuçtaki dokümanlar değişince gelir. Firestore transaction'ı yoktur.
+  sonrakiler sonuçtaki dokümanlar değişince gelir.
+- Firestore transaction'ı yoktur: SDK transaction fonksiyonunu kendi thread'inde, gerekirse
+  birkaç kez çağırır ve okuma/yazmaları o çağrının içinde ister; eklenti GDScript'i yalnız
+  ana thread'de çalıştırır. Okuma gerektirmeyen yazmalar için `batch(ops)` birden çok
+  dokümana ya hepsini ya hiçbirini yazar (`{op = "set", path, data, merge}`,
+  `{op = "update", path, data}`, `{op = "delete", path}`); sayaç için `FirebaseValue.increment()`,
+  küme gibi dizi için `array_union()`/`array_remove()` değeri okumadan sunucuda değiştirir.
+  Okunan değere bağlı yazmalar için güvenlik kuralı ya da Admin SDK transaction'ı
+  çalıştıran bir Cloud Function (`call_function()`) kullan. Kural yazmadan sonraki dokümanı
+  (`request.resource.data`) eskisiyle (`resource.data`) karşılaştırır: bakiye yetiyorsa
+  harcamak için `increment(-fiyat)` + `request.resource.data.coins >= 0`; boş yuvayı kapmak
+  için `set_doc()` + yalnız `allow create`; sürüm değişmediyse yazmak için okunan
+  `version + 1` + `request.resource.data.version == resource.data.version + 1`. Reddedilen yazma izin
+  hatasıyla döner; o ana kadar yerel önbellekte ve dinleyicilerde görünür, sonra geri
+  alınır. Mock kuralları uygulamaz.
 - Firestore tipleri: null, bool, int, float, String, PackedByteArray, Array
   (iç içe dizi yok), Dictionary (String anahtarlı) ve yukarıdaki özel değerler.
 - Database ve Functions tipleri: null, bool, int, sonlu float (NaN/Inf yok), String, Array
