@@ -29,6 +29,10 @@ func _run() -> void:
 	doc = (await db.get_doc(path).wait()).value
 	check(doc.data.profile == {"name": "Bea", "age": 30} and doc.data.level == 2, "merge set merges nested maps")
 
+	result = await db.set_doc(path, {"profile": {"age": FirebaseValue.delete_field()}, "level": {"x": FirebaseValue.delete_field()}, "gone": {"x": FirebaseValue.delete_field()}}, true).wait()
+	doc = (await db.get_doc(path).wait()).value
+	check(result.ok and doc.data == {"level": 2, "coins": 10, "profile": {"name": "Bea"}, "tags": ["a"]}, "merge set nested delete removes the nested field, keeps a non-map field and creates no map")
+
 	await db.update_doc(path, {"coins": FirebaseValue.increment(5), "profile.age": 31, "level": FirebaseValue.delete_field(), "at": FirebaseValue.server_timestamp()}).wait()
 	doc = (await db.get_doc(path).wait()).value
 	check(doc.data.coins == 15, "increment adds")
