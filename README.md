@@ -802,6 +802,8 @@ Firebase C++/iOS, godot-cpp, SCons ve Android NDK/SDK platformu sürümleri
 `tools/versions.env` içindedir. Workflow `env:`/`with:` değerleri ve
 `.gdextension` dosyaları bu dosyayı okuyamadığı için sürümü tekrarlar;
 `tests/test_toolchain_pins.py` bunların `tools/versions.env` ile aynı kaldığını denetler.
+Workflow'lar kurulum adımlarını ortak bir action yerine kopyalar; `tests/test_workflow_copies.py`
+aynı adlı adımların aynı betiği koştuğunu ve her self-hosted macOS job'ının Xcode'u aynı satırlarla seçtiğini denetler.
 GoogleSignIn kaynakları `tools/google_signin_ios/Podfile` ve lock dosyasında (kütüphaneye
 bağlanan GoogleSignIn/AppAuth/GTMAppAuth/AppCheckCore git commit'ine pinli),
 Android bridge bağımlılıkları `android/build.gradle` ve lock dosyasında,

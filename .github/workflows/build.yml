@@ -52,6 +52,7 @@ jobs:
             echo '::error::Full Xcode is required on this runner.'
             exit 1
           }
+          export DEVELOPER_DIR
           echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
           xcodebuild -version
           command -v uvx >/dev/null || {
@@ -63,7 +64,7 @@ jobs:
         run: |
           set -euo pipefail
           df -h "$GITHUB_WORKSPACE"
-          free_gb=$(df -g "$GITHUB_WORKSPACE" | awk 'NR == 2 {print $4}')
+          free_gb=$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 {print int($4 / 1048576)}')
           if [ "$free_gb" -lt "$MIN_FREE_GB" ]; then
             echo "::error::Runner has ${free_gb} GB free; this build needs ${MIN_FREE_GB} GB."
             exit 1
@@ -101,7 +102,7 @@ jobs:
         run: |
           set -euo pipefail
           source tools/versions.env
-          actual="$(godot --version)"
+          actual="$("$GODOT" --version)"
           case "$actual" in
             "$GODOT_VERSION.stable"|"$GODOT_VERSION.stable".*) ;;
             *)
@@ -156,5 +157,7 @@ jobs:
             [ -d "$THIRD_PARTY_CACHE/godot-cpp/.git" ] && git -C "$THIRD_PARTY_CACHE/godot-cpp" clean -ffdxq
             du -sh "$THIRD_PARTY_CACHE"
           fi
-          rm -rf "$HOME/Library/Application Support/Godot/app_userdata/Godot Firebase"
+          for project in 'Godot Firebase' 'Firebase package smoke'; do
+            rm -rf "$HOME/Library/Application Support/Godot/app_userdata/$project"
+          done
           df -h "$GITHUB_WORKSPACE"
