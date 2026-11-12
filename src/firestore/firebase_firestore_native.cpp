@@ -170,20 +170,15 @@ bool parse_source(const String &p_source, Source &r_source) {
 	return true;
 }
 
+// Only build_query() calls this, after validate_query(): just the value conversion can fail here.
 String add_filter(const Array &p_filter, Query &r_query) {
-	if (p_filter.size() != 3 || !is_field_path(p_filter[0])) {
-		return "filter must be [field path, op, value]";
-	}
 	const std::string field = to_std(p_filter[0]);
 	const String op = p_filter[1];
 	if (is_list_op(op)) {
 		std::vector<FieldValue> values;
-		const String reason = p_filter[2].get_type() == Variant::ARRAY ? to_query_values(r_query.firestore(), p_filter[2], values) : String("filter list must be an array");
+		const String reason = to_query_values(r_query.firestore(), p_filter[2], values);
 		if (!reason.is_empty()) {
 			return reason;
-		}
-		if (values.empty() || values.size() > 30) {
-			return op + String(" needs an array with 1-30 values");
 		}
 		r_query = op == "in" ? r_query.WhereIn(field, values) : op == "not-in" ? r_query.WhereNotIn(field, values) : r_query.WhereArrayContainsAny(field, values);
 		return String();
@@ -205,10 +200,8 @@ String add_filter(const Array &p_filter, Query &r_query) {
 		r_query = r_query.WhereGreaterThan(field, value);
 	} else if (op == ">=") {
 		r_query = r_query.WhereGreaterThanOrEqualTo(field, value);
-	} else if (op == "array-contains") {
+	} else { // array-contains
 		r_query = r_query.WhereArrayContains(field, value);
-	} else {
-		return "unknown filter operator " + op;
 	}
 	return String();
 }
@@ -249,14 +242,8 @@ String build_query(Query &r_query, const Array &p_filters, const Array &p_order_
 	}
 	for (int64_t i = 0; i < p_order_by.size(); i++) {
 		const Array order = p_order_by[i];
-		if (order.size() != 2 || !is_field_path(order[0]) || (String(order[1]) != "asc" && String(order[1]) != "desc")) {
-			return "order must be [field path, \"asc\" | \"desc\"]";
-		}
 		const bool descending = String(order[1]) == "desc";
 		r_query = r_query.OrderBy(to_std(order[0]), descending ? Query::Direction::kDescending : Query::Direction::kAscending);
-	}
-	if (p_limit > std::numeric_limits<int32_t>::max()) {
-		return "limit must be at most 2147483647";
 	}
 	if (p_limit > 0) {
 		r_query = r_query.Limit(static_cast<int32_t>(p_limit));
