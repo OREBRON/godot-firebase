@@ -140,9 +140,10 @@ Eksik LFS binary, import/script hatası ve timeout başarısız sayılır.
 
 ### Android
 
-Android SDK (platform 35), NDK, JDK 17 ve Godot Android Gradle build template'i
-gerekir. `ANDROID_HOME` SDK dizinine işaret etmeli. Kurulu NDK varsayılan
-28.1.13356709 değilse `NDK_VERSION` ortam değişkenini ayarla:
+Android SDK platformu ve NDK (`tools/versions.env` içindeki
+`ANDROID_PLATFORM_VERSION` ve `ANDROID_NDK_VERSION`), JDK 17 ve Godot Android
+Gradle build template'i gerekir. `ANDROID_HOME` SDK dizinine işaret etmeli. Kurulu
+NDK bu varsayılan değilse `NDK_VERSION` ortam değişkenini ayarla:
 
 ```bash
 ANDROID_HOME="$HOME/Library/Android/sdk" NDK_VERSION=28.2.13676358 \
@@ -743,7 +744,7 @@ origin'deki tag'in HEAD'i gösterdiğini doğrular ve `godot-firebase.zip`,
 Var olan release'in üzerine yazılmaz; betik reddeder, `plugin.cfg` sürümünü artır.
 `IOS_SIGNING_IDENTITY` (tam Apple Distribution/Development sertifika adı veya SHA-1)
 ve `IOS_SIGNING_TEAM_ID` ortam değişkenleri gerekir; `IOS_SIGNING_KEYCHAIN` isteğe bağlı Keychain yoludur.
-`ANDROID_HOME` (platform 35, NDK 28.1.13356709), JDK 17 ve oturum açmış `gh` gerekir.
+`ANDROID_HOME` (`tools/versions.env` içindeki Android platformu ve NDK), JDK 17 ve oturum açmış `gh` gerekir.
 Eksik kimlik/anahtar, yanlış ekip, imzasız/ad-hoc, zaman damgasız veya bozuk paket
 betiği durdurur. Yeni `.p8` gerekmez.
 
@@ -751,7 +752,7 @@ betiği durdurur. Yeni `.p8` gerekmez.
 Analytics, Remote Config ve Crashlytics tekil seçimlerini, telemetry
 birleşimini, sekiz ürünün full seçimini (`full-eight`), Auth+Firestore ve Auth+Database
 seçimlerini iOS/Android/macOS için derler; mock/paket testleri ve sembol doğrulaması
-koşar. Kurulu platform 35, NDK 28.1.13356709, JDK, CocoaPods, Xcode ve Godot gerekir.
+koşar. `tools/versions.env` içindeki Android platformu ve NDK kurulu olmalı; JDK, CocoaPods, Xcode ve Godot gerekir.
 ZIP/semboller kısa ömürlü, imzasız workflow artifact'larıdır; dokuz-paket release yayımlamaz.
 Bu workflow yerelde çalıştırılmış GitHub CI sonucu veya cihaz kabulü değildir.
 Manual çalışmada `android_export_fixture=true`, yalnız full-eight job'ında
@@ -789,7 +790,7 @@ sembolleri artifact'a eklenmez.
 Linux runner'da `godot` 4.7.2, `python3`, `clang` ve `lld` (`lld-link`) gerekir.
 macOS runner'da Xcode, `godot` 4.7.2, SDKMAN (JDK `.sdkmanrc` ile zsh'te seçilir,
 varsayılan JDK değişmez), `uv`, `python3`, `curl`, `shasum`, `zip` ve `unzip`
-gerekir; Android SDK platform 35 ve NDK 28.1.13356709
+gerekir; `tools/versions.env` içindeki Android SDK platformu ve NDK
 `android-actions/setup-android` ile kurulur, CocoaPods yalnız Auth seçimlerinde
 kilitli sürümle kurulur.
 Runner'a ayrıca Node.js kurmak gerekmez; action'lar runner'ın kendi Node.js'iyle çalışır. SDK indirmeleri macOS runner'da
@@ -797,7 +798,10 @@ Runner'a ayrıca Node.js kurmak gerekmez; action'lar runner'ın kendi Node.js'iy
 SCons imzalarıyla seçimler arasında yeniden kullanılır. Fork PR'ları
 self-hosted runner'larda çalışmaz.
 
-Firebase C++/iOS, godot-cpp ve SCons sürümleri `tools/versions.env` içindedir.
+Firebase C++/iOS, godot-cpp, SCons ve Android NDK/SDK platformu sürümleri
+`tools/versions.env` içindedir. Workflow `env:`/`with:` değerleri ve
+`.gdextension` dosyaları bu dosyayı okuyamadığı için sürümü tekrarlar;
+`tests/test_toolchain_pins.py` bunların `tools/versions.env` ile aynı kaldığını denetler.
 GoogleSignIn kaynakları `tools/google_signin_ios/Podfile` ve lock dosyasında (kütüphaneye
 bağlanan GoogleSignIn/AppAuth/GTMAppAuth/AppCheckCore git commit'ine pinli),
 Android bridge bağımlılıkları `android/build.gradle` ve lock dosyasında,

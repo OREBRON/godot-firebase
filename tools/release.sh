@@ -3,7 +3,7 @@
 # builds and tests; the Apple signing key never leaves the releaser's Keychain.
 #   tools/release.sh v1.0.0
 # Needs IOS_SIGNING_IDENTITY and IOS_SIGNING_TEAM_ID (IOS_SIGNING_KEYCHAIN optional),
-# ANDROID_HOME with platform 35 and NDK 28.1.13356709, JDK 17 and an authenticated gh.
+# ANDROID_HOME with the Android platform and NDK of tools/versions.env, JDK 17 and an authenticated gh.
 # The tag is v<plugin.cfg version>; a published release is never replaced.
 set -euo pipefail
 cd "$(dirname "$0")/.."

@@ -84,9 +84,9 @@ jobs:
           java -version
           javac -version
           test -n "${ANDROID_HOME:-}"
-          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
-          test -x "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf"
           source tools/versions.env
+          test -f "$ANDROID_HOME/platforms/android-$ANDROID_PLATFORM_VERSION/android.jar"
+          test -x "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf"
           case "$(godot --version)" in "$GODOT_VERSION.stable"|"$GODOT_VERSION.stable".*) ;; *) exit 1;; esac
       - name: Download verified dependencies
         run: |

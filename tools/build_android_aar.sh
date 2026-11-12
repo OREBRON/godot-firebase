@@ -5,9 +5,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+source tools/versions.env
 sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-if [[ ! -f "$sdk/platforms/android-35/android.jar" ]]; then
-	echo "Android AAR needs SDK platform 35 (set ANDROID_HOME)" >&2
+android_jar="$sdk/platforms/android-$ANDROID_PLATFORM_VERSION/android.jar"
+if [[ ! -f "$android_jar" ]]; then
+	echo "Android AAR needs SDK platform $ANDROID_PLATFORM_VERSION (set ANDROID_HOME)" >&2
 	exit 1
 fi
 
@@ -23,7 +25,7 @@ if [[ -z "${GRADLE:-}" ]]; then
 	[[ "$wrapper_sha" == b3a875ddc1f044746e1b1a55f645584505f4a10438c1afea9f15e92a7c42ec13 ]] || { echo "Unexpected gradle-wrapper.jar SHA-256: $wrapper_sha" >&2; exit 1; }
 fi
 "${GRADLE:-$PWD/android/gradlew}" --no-daemon -p android bridgeClasspath
-classpath="$sdk/platforms/android-35/android.jar"
+classpath="$android_jar"
 for dependency in android/build/bridge-classpath/*.jar; do
 	classpath="$classpath:$dependency"
 done

@@ -9,6 +9,7 @@ output="$repo/third_party/GoogleSignIn"
 mkdir -p "$work" "$(dirname "$output")"
 command -v pod >/dev/null || { echo "Google Sign-In iOS requires CocoaPods" >&2; exit 1; }
 cp tools/google_signin_ios/Podfile tools/google_signin_ios/Podfile.lock "$work/"
+version=$(awk -F'[()]' '/^  - GoogleSignIn \(/ {print $2; exit}' "$work/Podfile.lock")
 fingerprint=$( { cat "$work/Podfile" "$work/Podfile.lock" "$repo/tools/build_google_signin_ios.sh"; xcodebuild -version; printf '%s\n' 'ios15:arm64:sim-arm64-x86_64:Release:distribution'; } | shasum -a 256 | cut -d ' ' -f1)
 if [[ -f "$output/.build-id" && "$(cat "$output/.build-id")" == "$fingerprint" ]]; then
     complete=true
@@ -21,7 +22,7 @@ if [[ -f "$output/.build-id" && "$(cat "$output/.build-id")" == "$fingerprint" ]
         [[ -d "$output/resources/$resource.bundle" ]] || complete=false
     done
     if $complete; then
-        echo "GoogleSignIn 10.1.0 build is current"
+        echo "GoogleSignIn $version build is current"
         exit 0
     fi
 fi
@@ -60,4 +61,4 @@ rm -rf "$previous"
 if [[ -e "$output" ]]; then mv "$output" "$previous"; fi
 mv "$stage" "$output"
 rm -rf "$previous"
-echo "GoogleSignIn 10.1.0 frameworks and resource bundles: $output"
+echo "GoogleSignIn $version frameworks and resource bundles: $output"
