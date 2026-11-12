@@ -32,6 +32,7 @@ python3 tools/ios_signing.py check-identity
 python3 tests/test_ios_signing.py
 tools/bootstrap.sh
 tools/run_tests.sh
+bash tests/test_android_aar.sh
 tools/build.sh --platforms ios,android,macos --modules "$modules"
 test "$(cat addons/firebase/bin/modules.txt)" = "$modules"
 tools/run_tests.sh

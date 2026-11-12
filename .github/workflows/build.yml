@@ -119,6 +119,9 @@ jobs:
       - name: Test Android Maven pins against the C++ SDK's Firebase BoM
         run: python3 tests/test_android_dependency_pins.py
 
+      - name: Test Android bridge AAR
+        run: bash tests/test_android_aar.sh
+
       # Build every mobile target with one module selection. Windows and Linux
       # editor stubs are tracked through LFS and included by the packager.
       # Releases are signed and published locally with tools/release.sh, never here.
