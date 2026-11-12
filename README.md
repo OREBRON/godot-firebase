@@ -506,7 +506,9 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 - Storage metadata sonucu `{path, name, size, content_type, cache_control, custom_metadata, updated}`;
   `updated` Unix milisaniye, `custom_metadata` String anahtar ve değerli sözlük. `download_bytes` varsayılan olarak en fazla 10 MB okur;
   `max_size` tamponu baştan ayrıldığı için en fazla 100 MB (`FirebaseStorage.MAX_DOWNLOAD`) olabilir.
-  Daha büyük dosyalar için `download_file(path, local_path)` ve `upload_file(path, local_path, content_type)`
+  Gelen baytlar bu tampondan dönen `PackedByteArray`'e kopyalanır; indirme sırasında dosya bellekte kısa
+  süre en az iki kez bulunur (100 MB'lık dosya için en az 200 MB).
+  Büyük dosyalar için `download_file(path, local_path)` ve `upload_file(path, local_path, content_type)`
   dosyayı belleğe almadan diske yazar/diskten okur; `local_path` `user://` ya da mutlak yoldur
   (`res://` dışa aktarımda gerçek dosya değildir). İndirme hedefteki dosyanın yerine geçer, klasörü
   var olmalıdır; sonuç değeri yazılan bayt sayısıdır, başarısız indirmede dosya yarım kalabilir.
