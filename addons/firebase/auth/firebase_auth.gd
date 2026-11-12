@@ -7,6 +7,9 @@ extends RefCounted
 ## "apple.com", "gc.apple.com", "playgames.google.com" and "password".
 ## An empty dictionary means nobody is signed in.
 
+## Emitted once at startup, when a user with another uid signs in and on sign-out.
+## A link keeps the uid and emits nothing: read the linked user from the link
+## task's value (is_anonymous turns false) or from current_user().
 signal state_changed(user: Dictionary)
 
 const ANONYMOUS := "anonymous"

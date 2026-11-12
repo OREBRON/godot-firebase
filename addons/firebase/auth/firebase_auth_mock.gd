@@ -166,7 +166,10 @@ func _complete_sign_in(operation: Dictionary) -> void:
 	if operation.provider != "anonymous":
 		_provider_accounts[key] = _user.uid
 	_finish(operation.id, current_user())
-	auth_state_changed.emit.call_deferred(current_user())
+	# The SDK auth state listeners fire only for another uid: a link or the same
+	# account signing in again is no state change.
+	if _user.uid != operation.uid:
+		auth_state_changed.emit.call_deferred(current_user())
 
 
 func _cancel_pending() -> void:
