@@ -194,7 +194,8 @@ jobs:
       - name: Check Android toolchain
         run: |
           set -euo pipefail
-          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          source tools/versions.env
+          test -f "$ANDROID_HOME/platforms/android-$ANDROID_PLATFORM_VERSION/android.jar"
           test -x "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf"
           "$JAVA_HOME/bin/javac" -version
 

@@ -99,6 +99,8 @@ jobs:
         run: python tests/test_native_shutdown.py
       - name: Test iOS auth error codes
         run: python tests/test_ios_auth_error_codes.py
+      - name: Test toolchain pins
+        run: python tests/test_toolchain_pins.py
       - name: Verify desktop source can be rebuilt
         run: python tools/build_desktop_stub.py --platform "$DESKTOP_PLATFORM" --arch "$DESKTOP_ARCH"
       - name: Test rebuilt library with editor import and stock tests

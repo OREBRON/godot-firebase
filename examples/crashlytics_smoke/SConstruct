@@ -1,10 +1,13 @@
 #!/usr/bin/env python
+import re
+
 from SCons.Script import ARGUMENTS, SConscript, Exit, Default
 
 if ARGUMENTS.get("target", "template_debug") != "template_debug":
     print("Crashlytics smoke fixture accepts only target=template_debug")
     Exit(1)
-ARGUMENTS.setdefault("api_version", "4.7")
+with open("../../tools/versions.env") as versions:
+    ARGUMENTS.setdefault("api_version", re.search(r"^GODOT_API_VERSION=(.*)$", versions.read(), re.M).group(1))
 ARGUMENTS.setdefault("ios_min_version", "15.0")
 env = SConscript("../../third_party/godot-cpp/SConstruct").Clone()
 if env["platform"] not in ("android", "ios"):

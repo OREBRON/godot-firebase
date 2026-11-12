@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -377,7 +378,8 @@ class SymbolIdentityTests(unittest.TestCase):
     def android_ndk(self):
         sdk = os.environ.get("ANDROID_HOME", os.environ.get("ANDROID_SDK_ROOT", ""))
         host = "darwin-x86_64" if sys.platform == "darwin" else "linux-x86_64"
-        ndk = Path(sdk) / "ndk" / os.environ.get("NDK_VERSION", "28.1.13356709") / "toolchains/llvm/prebuilt" / host / "bin"
+        pinned = re.search(r"^ANDROID_NDK_VERSION=(.*)$", (ROOT / "tools/versions.env").read_text(), re.M).group(1)
+        ndk = Path(sdk) / "ndk" / os.environ.get("NDK_VERSION", pinned) / "toolchains/llvm/prebuilt" / host / "bin"
         if not (ndk / "aarch64-linux-android24-clang++").is_file():
             self.skipTest("Set ANDROID_HOME and NDK_VERSION for real Android ELF fixtures")
         return ndk

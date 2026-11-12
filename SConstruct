@@ -13,6 +13,7 @@
 
 import glob
 import os
+import re
 import subprocess
 
 FIREBASE_CPP = "third_party/firebase_cpp_sdk"
@@ -34,7 +35,8 @@ MODULES = {
 RESOURCE_BUNDLES_LIST = "build/ios/resource_bundles.txt"
 ios_framework_dirs = []
 
-ARGUMENTS.setdefault("api_version", "4.7")
+with open("tools/versions.env") as versions:
+    ARGUMENTS.setdefault("api_version", re.search(r"^GODOT_API_VERSION=(.*)$", versions.read(), re.M).group(1))
 ARGUMENTS.setdefault("ios_min_version", "15.0")
 # Keep product flags out of godot-cpp's build environment, so changing module
 # selections does not recompile the entire engine binding library.

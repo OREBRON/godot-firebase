@@ -9,11 +9,16 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+HELPER = (ROOT / "addons/firebase/export/firebase_android_gradle.gd").read_text()
+# The versions the export helper writes now; its LEGACY_BLOCKS keep earlier text.
+R8_VERSION = re.search(r"const TOOLCHAIN_CLASSPATH := .*?com\.android\.tools:r8:([\w.-]+)'", HELPER, re.S).group(1)
+KOTLIN_VERSION = re.search(r"const TOOLCHAIN_CONFIG := .*?kotlinVersion = '([\w.-]+)'", HELPER).group(1)
 
 
 def run(command, directory, log):
@@ -121,7 +126,7 @@ dependencies {{
         mapping = game / "build/outputs/mapping/release/mapping.txt"
         # Check the compiler that actually shrank the app, not only the declared pin.
         assert mapping.is_file(), "R8 mapping missing"
-        assert "# compiler_version: 9.1.29" in mapping.read_text(), "pinned R8 override was not used"
+        assert f"# compiler_version: {R8_VERSION}" in mapping.read_text(), "pinned R8 override was not used"
         with zipfile.ZipFile(apk) as archive:
             assert "resources.arsc" in archive.namelist(), "APK resources missing"
         aapt = Path(sdk) / "build-tools/36.1.0/aapt2"
@@ -134,7 +139,7 @@ dependencies {{
         copied_hash = hashlib.sha256((game / "libs/godot_firebase.aar").read_bytes()).hexdigest()
         assert copied_hash == aar_hash, "generic AAR changed per game"
         evidence.append({"game": label, "modules": modules, "play_games": bool(games_id), "app_id": app_id, "aar_sha256": aar_hash,
-                         "toolchain": {"agp": "8.6.1", "kotlin": "2.4.0", "r8": "9.1.29", "gradle": "8.11.1"},
+                         "toolchain": {"agp": "8.6.1", "kotlin": KOTLIN_VERSION, "r8": R8_VERSION, "gradle": "8.11.1"},
                          "apk": str(apk), "google_values": [str(p) for p in google_values],
                          "crash_values": [str(p) for p in crash_values]})
     (args.output / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
