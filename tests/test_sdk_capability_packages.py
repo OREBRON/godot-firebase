@@ -214,8 +214,9 @@ echo placeholder > "build/android/libgodot_firebase.android.$target.so"
             self.assertTrue((self.root / f"addons/firebase/bin/android/libgodot_firebase.android.{target}.so").is_file())
 
 
-class ReleaseCleanTreeTests(unittest.TestCase):
-    """Runs the real tools/release.sh in a tagged fixture repo; a stand-in git-lfs stops it after the tree checks."""
+class ReleasePreconditionTests(unittest.TestCase):
+    """Runs the real tools/release.sh in a tagged fixture repo whose tag is pushed to a local origin,
+    with stand-in tools; a stand-in git-lfs stops it at the first step after the checks."""
     MACOS_STUBS = ["addons/firebase/bin/macos/libgodot_firebase.macos.arm64.dylib",
                    "addons/firebase/bin/macos/libgodot_firebase.macos.x86_64.dylib"]
     OTHER_FILES = ["addons/firebase/bin/linux/libgodot_firebase.linux.x86_64.so", "src/desktop/godot_firebase_stub.c"]
@@ -223,7 +224,8 @@ class ReleaseCleanTreeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name) / "repo"
+        temp = Path(self.temp.name)
+        self.root = temp / "repo"
         (self.root / "tools").mkdir(parents=True)
         for name in ["release.sh", "versions.env"]:
             shutil.copy2(ROOT / "tools" / name, self.root / "tools" / name)
@@ -231,27 +233,87 @@ class ReleaseCleanTreeTests(unittest.TestCase):
             (self.root / relative).parent.mkdir(parents=True, exist_ok=True)
             (self.root / relative).write_text("committed\n")
         (self.root / "addons/firebase/plugin.cfg").write_text('version="1.2.3"\n')
-        for args in [["init", "-q"], ["add", "."], ["commit", "-qm", "fixture"], ["tag", "v1.2.3"]]:
-            subprocess.run(["git", "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid",
-                            "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args],
-                           cwd=self.root, check=True, capture_output=True)
-        stubs = Path(self.temp.name) / "bin"
-        stubs.mkdir()
-        # No published release yet; git lfs pull is the first step after the tree checks.
-        for name, body in {"gh": "exit 1", "git-lfs": "echo tree checks passed; exit 42"}.items():
-            (stubs / name).write_text("#!/usr/bin/env bash\n" + body + "\n")
-            (stubs / name).chmod(0o755)
-        self.env = {**os.environ, "PATH": f"{stubs}:{os.environ['PATH']}"}
+        for args in [["init", "-q"], ["add", "."], ["commit", "-qm", "fixture"], ["tag", "v1.2.3"],
+                     ["init", "-q", "--bare", str(temp / "origin.git")], ["remote", "add", "origin", str(temp / "origin.git")],
+                     ["push", "-q", "origin", "v1.2.3"]]:
+            self.git(*args)
+        pins = dict(re.findall(r"^(\w+)=(.*)$", (ROOT / "tools/versions.env").read_text(), re.M))
+        sdk = temp / "android-sdk"
+        self.android_jar = sdk / f"platforms/android-{pins['ANDROID_PLATFORM_VERSION']}/android.jar"
+        self.android_jar.parent.mkdir(parents=True)
+        self.android_jar.write_text("")
+        self.ndk = sdk / "ndk" / pins["ANDROID_NDK_VERSION"]
+        self.ndk.mkdir(parents=True)
+        self.stubs = temp / "bin"
+        self.stubs.mkdir()
+        # Only these and the stubs are on PATH, so an installed gh, pod or uvx cannot stand in for a stub.
+        for tool in ["bash", "cut", "dirname", "git", "rm", "sed"]:
+            (self.stubs / tool).symlink_to(shutil.which(tool))
+        # No published release yet; git lfs pull is the first step after the checks.
+        for name, body in {"gh": "echo 'release not found' >&2; exit 1", "git-lfs": "echo checks passed; exit 42",
+                           "javac": "", "pod": "", "uvx": ""}.items():
+            self.stub(name, body)
+        env = {key: value for key, value in os.environ.items() if key not in {"ANDROID_SDK_ROOT", "NDK_VERSION", "SCONS"}}
+        self.env = {**env, "PATH": str(self.stubs), "ANDROID_HOME": str(sdk)}
+
+    def git(self, *args):
+        subprocess.run(["git", "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid",
+                        "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args],
+                       cwd=self.root, check=True, capture_output=True)
+
+    def stub(self, name, body):
+        (self.stubs / name).write_text("#!/usr/bin/env bash\n" + body + "\n")
+        (self.stubs / name).chmod(0o755)
 
     def release(self):
         return subprocess.run(["bash", "tools/release.sh", "v1.2.3"], cwd=self.root, env=self.env, capture_output=True, text=True)
+
+    def assert_stops_before_build(self, result, message):
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(message, result.stderr)
+        self.assertNotIn("checks passed", result.stdout)
+
+    def test_pushed_tag_and_tools_reach_the_first_step_after_the_checks(self):
+        result = self.release()
+        self.assertEqual(result.returncode, 42, result.stderr)
+        self.assertIn("checks passed", result.stdout)
+        # SCONS replaces uvx in tools/build.sh, so uvx is then not required.
+        (self.stubs / "uvx").unlink()
+        self.env["SCONS"] = "scons"
+        self.assertEqual(self.release().returncode, 42)
+
+    def test_tag_not_pushed_to_origin_fails_before_any_build_step(self):
+        self.git("push", "-q", "origin", ":refs/tags/v1.2.3")
+        self.assert_stops_before_build(self.release(), "origin tag v1.2.3 is missing or not at HEAD; push v1.2.3 first")
+
+    def test_existing_release_still_fails(self):
+        self.stub("gh", "echo 'tag: v1.2.3'")
+        self.assert_stops_before_build(self.release(), "Release v1.2.3 already exists")
+
+    def test_gh_login_or_network_failure_fails_before_any_build_step(self):
+        for body in ["echo 'To get started with GitHub CLI, please run:  gh auth login' >&2; exit 4",
+                     "echo 'HTTP 401: Bad credentials' >&2; exit 1",
+                     "echo 'error connecting to api.github.com' >&2; exit 1"]:
+            with self.subTest(gh=body):
+                self.stub("gh", body)
+                self.assert_stops_before_build(self.release(), "gh could not check release v1.2.3")
+
+    def test_missing_build_tool_fails_before_any_build_step(self):
+        for path, message in {self.android_jar: "Android SDK platform", self.ndk: "Android NDK", self.stubs / "javac": "JDK",
+                              self.stubs / "pod": "CocoaPods", self.stubs / "uvx": "uvx"}.items():
+            with self.subTest(missing=path.name):
+                hidden = path.with_name(path.name + ".hidden")
+                path.rename(hidden)
+                result = self.release()
+                hidden.rename(path)
+                self.assert_stops_before_build(result, message)
 
     def test_macos_stubs_rebuilt_by_an_earlier_build_do_not_block_the_release(self):
         for relative in self.MACOS_STUBS:
             (self.root / relative).write_text("rebuilt with another Xcode\n")
         result = self.release()
         self.assertEqual(result.returncode, 42, result.stderr)
-        self.assertIn("tree checks passed", result.stdout)
+        self.assertIn("checks passed", result.stdout)
 
     def test_other_local_changes_still_block_the_release(self):
         for relative in self.MACOS_STUBS:
