@@ -25,6 +25,7 @@ func _init(requests: FirebaseRequests) -> void:
 	_listeners = FirebaseListeners.new(_requests.backend)
 	if _requests.backend:
 		_requests.backend.value_changed.connect(_listeners.deliver)
+		_requests.backend.children_changed.connect(_listeners.deliver)
 
 
 ## Write it as a value to add `by` to the stored number on the server atomically.
@@ -94,11 +95,20 @@ func on_disconnect_cancel(path: String) -> FirebaseTask:
 ## `query` is the get_value() query. Returns an id for remove_listener(), or 0
 ## when the listener could not start.
 func listen_value(path: String, callback: Callable, query: Dictionary = {}) -> int:
-	var reason := _read_reason(path, query)
-	if _requests.backend == null or not reason.is_empty() or not callback.is_valid():
-		push_error("Firebase: cannot listen to %s: %s" % [path, reason if reason else "no backend or invalid callback"])
-		return 0
-	return _listeners.add(_requests.backend.listen_value(path, query), callback)
+	return _listen(&"listen_value", path, callback, query, _read_reason(path, query))
+
+
+## Calls `callback(result: FirebaseResult)` once per change to a child of `path`.
+## result.value is {event, key, value, previous_key}: `event` is "added", "changed",
+## "moved" or "removed", `value` the child's new value (its last value when removed)
+## and `previous_key` the key of the child before it in query order, or null for the
+## first child and for "removed". Existing children arrive first as "added". `query`
+## is the get_value() query; a child that enters or leaves a limited query's window
+## arrives as "added" or "removed". A failed result is the last one.
+## Returns an id for remove_listener(), or 0 when the listener could not start.
+func listen_children(path: String, callback: Callable, query: Dictionary = {}) -> int:
+	var reason := _read_reason(path, query) if is_valid_path(path) else "not a database path: %s" % path
+	return _listen(&"listen_children", path, callback, query, reason)
 
 
 func remove_listener(id: int) -> void:
@@ -206,6 +216,13 @@ static func _read_reason(path: String, query: Dictionary) -> String:
 
 static func _is_query_bound(bound: Variant, by_key: bool) -> bool:
 	return bound is String or not by_key and (bound is bool or bound is int or bound is float and is_finite(bound))
+
+
+func _listen(method: StringName, path: String, callback: Callable, query: Dictionary, reason: String) -> int:
+	if _requests.backend == null or not reason.is_empty() or not callback.is_valid():
+		push_error("Firebase: cannot listen to %s: %s" % [path, reason if reason else "no backend or invalid callback"])
+		return 0
+	return _listeners.add(_requests.backend.call(method, path, query), callback)
 
 
 func _request(path: String, method: StringName, args: Array) -> FirebaseTask:

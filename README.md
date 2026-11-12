@@ -429,6 +429,8 @@ await Firebase.database.set_value("rooms/r1/players/%s" % uid, {"ready": true, "
 var key: String = (await Firebase.database.push_value("rooms/r1/chat", {"text": "selam"}).wait()).value
 var room: int = Firebase.database.listen_value("rooms/r1", func(r: FirebaseResult): print(r.value.value if r.ok else r.error_message))
 Firebase.database.remove_listener(room)
+# Sohbete yalnız değişen mesajlar gelir: {event = "added" | "changed" | "moved" | "removed", key, value, previous_key}
+var chat: int = Firebase.database.listen_children("rooms/r1/chat", func(r: FirebaseResult): print(r.value if r.ok else r.error_message))
 await Firebase.database.set_value("rooms/r1/visits", FirebaseDatabase.increment(1)).wait()
 var leaders: Dictionary = (await Firebase.database.get_value("leaderboard", {order_by = "score", limit_to_last = 10}).wait()).value
 
@@ -502,7 +504,21 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   `start_at`, `end_at`, `equal_to` (bool, sayı, String; `"$key"` ile yalnız String),
   `limit_to_first` veya `limit_to_last` (1..2147483647). Sonuç `value` eşleşen alt
   düğümlerin sorgu sırasındaki sözlüğüdür (Array'e dönmez); eşleşme yoksa `null`.
-  Child olayları ve transaction yoktur.
+- Database `listen_children(path, callback, query)` her alt düğüm değişikliği için ayrı
+  sonuç verir: `value` `{event, key, value, previous_key}` olur, `event` `"added"`,
+  `"changed"`, `"moved"` ya da `"removed"`dır. Var olan alt düğümler önce `"added"` olarak
+  gelir; alt düğümü olmayan yer olay vermez. `"removed"` silinen düğümün son değerini
+  taşır. `previous_key` sorgu sırasında önceki alt düğümün anahtarıdır; ilk alt düğümde
+  ve `"removed"`da `null`. Bir yazmanın olayları SDK'daki gibi önce `"removed"`, sonra
+  `"added"`, `"moved"` ve `"changed"` sırasıyla gelir. Sıralama değeri değişen alt düğüm,
+  yeri aynı kalsa da `"moved"` ve ardından `"changed"` verir. `query`, `listen_value()`
+  sorgusudur; sorgusuz sıra anahtar sırasıdır. Limitli sorguda pencereye giren alt düğüm
+  `"added"`, çıkan `"removed"` olarak gelir. `.info` yolları dinlenemez.
+- Database transaction'ı yoktur: SDK transaction fonksiyonunu kendi thread'inde, gerekirse
+  birkaç kez çağırır; eklenti GDScript'i yalnız ana thread'de çalıştırır. Sayaç için
+  `FirebaseDatabase.increment(by)` kullan. Eşleştirme yuvası kapmak gibi "boşsa yaz"
+  işlemleri için bir Cloud Function ya da yalnız boş yere yazmaya izin veren güvenlik
+  kuralı (`".write": "!data.exists()"`) kullan; dolu yuvaya yazma izin hatasıyla döner.
 - Storage metadata sonucu `{path, name, size, content_type, cache_control, custom_metadata, updated}`;
   `updated` Unix milisaniye, `custom_metadata` String anahtar ve değerli sözlük. `download_bytes` varsayılan olarak en fazla 10 MB okur;
   `max_size` tamponu baştan ayrıldığı için en fazla 100 MB (`FirebaseStorage.MAX_DOWNLOAD`) olabilir.
@@ -579,7 +595,11 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   olan Array, seyrek diziler sözlük olarak döner. `.info/connected` önce `false`,
   bağlantı kurulunca `true` olur; `set_network_enabled(true)` görevi bağlantıdan önce
   biter. Değer dinleyicisi yalnızca değer değişince çağrılır; bağlantı koparken
-  onDisconnect işlemleri yerelde hemen görünür.
+  onDisconnect işlemleri yerelde hemen görünür. Child dinleyicisi bir yazmanın bütün
+  olaylarını birlikte verir; cihazda limitli pencereye girecek alt düğüm yerelde yoksa
+  onun `"added"` olayı sunucu yanıtıyla sonra gelir. Mock, Android gibi, `"moved"`
+  olayını sıralama değeri farklı karşılaştırılınca verir; iOS SDK'sı
+  `order_by = "$value"` ile map değerli alt düğüm her değiştiğinde de `"moved"` verir.
 - Hesap açtıran oyunlar App Store kuralı gereği hesap silme sunmalıdır:
   `Firebase.auth.delete_account()`. Apple ile bağlı hesapta önce
   `Firebase.auth.revoke_apple_token()` çağrılır: Apple sayfası bir kez açılır ve
@@ -833,6 +853,8 @@ kontrol edilecekler:
   cihazda export, Firebase başlatma ve modül istekleri henüz doğrulanmadı.
 - Emulator Suite bağlantısı beş üründe derlendi ve mock testleriyle ayar akışı
   doğrulandı; cihaz/simülatörde gerçek emulator'e istek henüz denenmedi.
+- Database `listen_children()` Android ve iOS için derlendi; olay sırası ve
+  `previous_key` değerleri cihazda SDK'ya karşı henüz denenmedi.
 - Birleşebilir paketlerin path/hash, import sırası, tekrar import, Core-only,
   kaldırma ve mixed-build testleri #67'de; nihai platform kararı #90'da bekliyor.
   Cihaz ve release/minification kabulü #55/#59'da açık. Güncel kanıt ayrımı

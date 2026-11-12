@@ -276,15 +276,21 @@ std::string database_namespace(const firebase::AppOptions &p_options) {
 
 } // namespace
 
-// Emits value_changed for one listen_value() call. Nested to reach emit_deferred_to().
-class FirebaseDatabaseNative::Listener : public firebase::database::ValueListener {
+// One listen_value() or listen_children() call; deleting it removes its SDK listener.
+class FirebaseDatabaseNative::Listener {
 public:
-	Listener(uint64_t p_object_id, int64_t p_id, Query p_query, bool p_ordered) :
+	virtual ~Listener() = default;
+};
+
+// Emits value_changed for one listen_value() call. Nested to reach emit_deferred_to().
+class FirebaseDatabaseNative::ValueListener final : public Listener, public firebase::database::ValueListener {
+public:
+	ValueListener(uint64_t p_object_id, int64_t p_id, Query p_query, bool p_ordered) :
 			object_id(p_object_id), id(p_id), target(std::move(p_query)), ordered(p_ordered) {
 		target.AddValueListener(this);
 	}
 
-	~Listener() override {
+	~ValueListener() override {
 		target.RemoveValueListener(this);
 	}
 
@@ -302,6 +308,56 @@ private:
 	int64_t id;
 	Query target;
 	bool ordered;
+};
+
+// Emits children_changed with {event, key, value, previous_key} for each child event
+// of one listen_children() call.
+class FirebaseDatabaseNative::ChildListener final : public Listener, public firebase::database::ChildListener {
+public:
+	ChildListener(uint64_t p_object_id, int64_t p_id, Query p_query) :
+			object_id(p_object_id), id(p_id), target(std::move(p_query)) {
+		target.AddChildListener(this);
+	}
+
+	~ChildListener() override {
+		target.RemoveChildListener(this);
+	}
+
+	void OnChildAdded(const DataSnapshot &p_child, const char *p_previous_key) override {
+		emit("added", p_child, p_previous_key);
+	}
+
+	void OnChildChanged(const DataSnapshot &p_child, const char *p_previous_key) override {
+		emit("changed", p_child, p_previous_key);
+	}
+
+	void OnChildMoved(const DataSnapshot &p_child, const char *p_previous_key) override {
+		emit("moved", p_child, p_previous_key);
+	}
+
+	void OnChildRemoved(const DataSnapshot &p_child) override {
+		emit("removed", p_child, nullptr);
+	}
+
+	void OnCancelled(const firebase::database::Error &p_error, const char *p_message) override {
+		const String message = String::utf8(p_message ? p_message : "listener cancelled");
+		emit_deferred_to(object_id, "children_changed", Array::make(id, false, Dictionary(), static_cast<int>(p_error), message));
+	}
+
+private:
+	// The SDK's snapshot and key are only valid during the callback; copy them now.
+	void emit(const char *p_event, const DataSnapshot &p_child, const char *p_previous_key) {
+		Dictionary event;
+		event["event"] = p_event;
+		event["key"] = to_godot(p_child.key_string());
+		event["value"] = to_godot_variant(p_child.value());
+		event["previous_key"] = p_previous_key ? Variant(String::utf8(p_previous_key)) : Variant();
+		emit_deferred_to(object_id, "children_changed", Array::make(id, true, event, 0, String()));
+	}
+
+	uint64_t object_id;
+	int64_t id;
+	Query target;
 };
 
 FirebaseDatabaseNative::FirebaseDatabaseNative() {
@@ -494,17 +550,32 @@ int64_t FirebaseDatabaseNative::on_disconnect_cancel(const String &p_path) {
 	});
 }
 
-int64_t FirebaseDatabaseNative::listen_value(const String &p_path, const Dictionary &p_query) {
-	const bool path_ok = p_query.is_empty() ? is_readable_path(p_path) : is_valid_path(p_path);
+bool FirebaseDatabaseNative::listened_query(const String &p_path, const Dictionary &p_query, bool p_allow_info, Query &r_query) const {
+	const bool path_ok = (p_allow_info && p_query.is_empty()) ? is_readable_path(p_path) : is_valid_path(p_path);
 	if (db == nullptr || !path_ok || !validate_query(p_query).is_empty()) {
-		return 0;
+		return false;
 	}
-	Query query = to_query(reference(p_path), p_query);
-	if (!query.is_valid()) {
+	r_query = to_query(reference(p_path), p_query);
+	return r_query.is_valid();
+}
+
+int64_t FirebaseDatabaseNative::listen_value(const String &p_path, const Dictionary &p_query) {
+	Query query;
+	if (!listened_query(p_path, p_query, true, query)) {
 		return 0;
 	}
 	const int64_t id = ++next_listener_id;
-	listeners[id] = std::make_unique<Listener>(get_instance_id(), id, std::move(query), !p_query.is_empty());
+	listeners[id] = std::make_unique<ValueListener>(get_instance_id(), id, std::move(query), !p_query.is_empty());
+	return id;
+}
+
+int64_t FirebaseDatabaseNative::listen_children(const String &p_path, const Dictionary &p_query) {
+	Query query;
+	if (!listened_query(p_path, p_query, false, query)) {
+		return 0;
+	}
+	const int64_t id = ++next_listener_id;
+	listeners[id] = std::make_unique<ChildListener>(get_instance_id(), id, std::move(query));
 	return id;
 }
 
@@ -525,11 +596,14 @@ void FirebaseDatabaseNative::_bind_methods() {
 	godot::ClassDB::bind_method(D_METHOD("on_disconnect_remove_value", "path"), &FirebaseDatabaseNative::on_disconnect_remove_value);
 	godot::ClassDB::bind_method(D_METHOD("on_disconnect_cancel", "path"), &FirebaseDatabaseNative::on_disconnect_cancel);
 	godot::ClassDB::bind_method(D_METHOD("listen_value", "path", "query"), &FirebaseDatabaseNative::listen_value);
+	godot::ClassDB::bind_method(D_METHOD("listen_children", "path", "query"), &FirebaseDatabaseNative::listen_children);
 	godot::ClassDB::bind_method(D_METHOD("remove_listener", "id"), &FirebaseDatabaseNative::remove_listener);
-	ADD_SIGNAL(godot::MethodInfo("value_changed",
-			godot::PropertyInfo(Variant::INT, "listener_id"), godot::PropertyInfo(Variant::BOOL, "ok"),
-			godot::PropertyInfo(Variant::DICTIONARY, "snapshot"), godot::PropertyInfo(Variant::INT, "error_code"),
-			godot::PropertyInfo(Variant::STRING, "error_message")));
+	for (const char *signal : { "value_changed", "children_changed" }) {
+		ADD_SIGNAL(godot::MethodInfo(signal,
+				godot::PropertyInfo(Variant::INT, "listener_id"), godot::PropertyInfo(Variant::BOOL, "ok"),
+				godot::PropertyInfo(Variant::DICTIONARY, "snapshot"), godot::PropertyInfo(Variant::INT, "error_code"),
+				godot::PropertyInfo(Variant::STRING, "error_message")));
+	}
 }
 
 } // namespace godot_firebase

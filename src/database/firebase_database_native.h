@@ -41,6 +41,8 @@ public:
 	int64_t on_disconnect_cancel(const godot::String &p_path);
 	// Emits value_changed(listener_id, ok, snapshot, error_code, error_message).
 	int64_t listen_value(const godot::String &p_path, const godot::Dictionary &p_query);
+	// Emits children_changed(listener_id, ok, {event, key, value, previous_key}, error_code, error_message).
+	int64_t listen_children(const godot::String &p_path, const godot::Dictionary &p_query);
 	void remove_listener(int64_t p_id);
 
 protected:
@@ -48,10 +50,14 @@ protected:
 
 private:
 	class Listener;
+	class ValueListener;
+	class ChildListener;
 
 	// Runs `p_request` with the reference at `p_path`, or fails for an invalid path.
 	int64_t start_with_reference(const godot::String &p_path, const std::function<void(firebase::database::DatabaseReference, Completion)> &p_request, bool p_allow_info = false);
 	firebase::database::DatabaseReference reference(const godot::String &p_path) const;
+	// False when the path or query is invalid; the SDKs abort or throw on those.
+	bool listened_query(const godot::String &p_path, const godot::Dictionary &p_query, bool p_allow_info, firebase::database::Query &r_query) const;
 
 	firebase::database::Database *db = nullptr;
 	std::unordered_map<int64_t, std::unique_ptr<Listener>> listeners;
