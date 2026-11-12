@@ -13,10 +13,12 @@ on:
 permissions:
   contents: read
 
-# Share the runner/dependency lock with the build workflow (build.yml).
+# Share the runner/dependency lock with the build workflow (build.yml); queue: max
+# keeps every waiting run in line instead of cancelling it.
 concurrency:
   group: godot-firebase-build
   cancel-in-progress: false
+  queue: max
 
 jobs:
   development:
