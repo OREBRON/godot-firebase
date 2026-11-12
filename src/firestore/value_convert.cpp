@@ -120,14 +120,15 @@ String validate_structure(const Variant &p_value, std::vector<Variant> &p_ancest
 }
 
 // `p_sentinel_reason` is null when server_timestamp() and increment() are allowed.
-String convert(Firestore *p_db, const Variant &p_value, bool p_in_array, const char *p_sentinel_reason, FieldValue &r_out);
+// `p_allow_delete` permits delete_field() in maps nested in `p_value` (merge set).
+String convert(Firestore *p_db, const Variant &p_value, bool p_in_array, const char *p_sentinel_reason, bool p_allow_delete, FieldValue &r_out);
 
 // Array items: no nested arrays, and no sentinels.
 String convert_items(Firestore *p_db, const Array &p_items, const char *p_sentinel_reason, std::vector<FieldValue> &r_out) {
 	r_out.reserve(static_cast<size_t>(p_items.size()));
 	for (int64_t i = 0; i < p_items.size(); i++) {
 		FieldValue item;
-		const String reason = convert(p_db, p_items[i], true, p_sentinel_reason ? p_sentinel_reason : kInArray, item);
+		const String reason = convert(p_db, p_items[i], true, p_sentinel_reason ? p_sentinel_reason : kInArray, false, item);
 		if (!reason.is_empty()) {
 			return reason;
 		}
@@ -234,7 +235,7 @@ String convert_tagged(Firestore *p_db, const Dictionary &p_value, const char *p_
 		return "increment needs a number";
 	}
 	if (tag == kDelete) {
-		return "delete_field() must be a top-level field of update or merge set";
+		return "delete_field() needs a merge set or a top-level update field";
 	}
 	return "unknown tag " + tag;
 }
@@ -260,7 +261,8 @@ String convert_map(Firestore *p_db, const Dictionary &p_data, bool p_allow_delet
 		if (p_allow_delete && value.get_type() == Variant::DICTIONARY && String(Dictionary(value).get(kTag, "")) == kDelete) {
 			field = FieldValue::Delete();
 		} else {
-			const String reason = convert(p_db, value, false, p_sentinel_reason, field);
+			// The SDK aborts on delete_field() nested in update data; a merge set takes it in nested maps.
+			const String reason = convert(p_db, value, false, p_sentinel_reason, p_allow_delete && !p_path_keys, field);
 			if (!reason.is_empty()) {
 				return name + String(": ") + reason;
 			}
@@ -270,7 +272,7 @@ String convert_map(Firestore *p_db, const Dictionary &p_data, bool p_allow_delet
 	return String();
 }
 
-String convert(Firestore *p_db, const Variant &p_value, bool p_in_array, const char *p_sentinel_reason, FieldValue &r_out) {
+String convert(Firestore *p_db, const Variant &p_value, bool p_in_array, const char *p_sentinel_reason, bool p_allow_delete, FieldValue &r_out) {
 	switch (p_value.get_type()) {
 		case Variant::NIL:
 			r_out = FieldValue::Null();
@@ -309,7 +311,7 @@ String convert(Firestore *p_db, const Variant &p_value, bool p_in_array, const c
 				return convert_tagged(p_db, map, p_sentinel_reason, r_out);
 			}
 			MapFieldValue fields;
-			const String reason = convert_map(p_db, map, false, p_sentinel_reason, false, fields);
+			const String reason = convert_map(p_db, map, p_allow_delete, p_sentinel_reason, false, fields);
 			if (reason.is_empty()) {
 				r_out = FieldValue::Map(std::move(fields));
 			}
@@ -424,7 +426,7 @@ String to_update_field_value(Firestore *p_db, const Dictionary &p_data, MapField
 String to_query_value(Firestore *p_db, const Variant &p_value, FieldValue &r_out) {
 	std::vector<Variant> ancestors;
 	const String reason = validate_structure(p_value, ancestors, 1);
-	return reason.is_empty() ? convert(p_db, p_value, false, kInQuery, r_out) : reason;
+	return reason.is_empty() ? convert(p_db, p_value, false, kInQuery, false, r_out) : reason;
 }
 
 String to_query_values(Firestore *p_db, const Array &p_items, std::vector<FieldValue> &r_out) {

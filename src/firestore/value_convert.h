@@ -18,9 +18,9 @@ namespace godot_firebase {
 // so invalid input can never crash the game.
 
 // Returns an empty string on success, otherwise the reason. `p_db` builds reference values.
-// `p_allow_delete` permits delete_field() at the top level (update, merge set).
+// `p_allow_delete` permits delete_field() at any map level outside arrays (merge set).
 godot::String to_map_field_value(firebase::firestore::Firestore *p_db, const godot::Dictionary &p_data, bool p_allow_delete, firebase::firestore::MapFieldValue &r_out);
-// Update data: keys are field paths, delete_field() is allowed.
+// Update data: keys are field paths, delete_field() is allowed as a top-level value.
 godot::String to_update_field_value(firebase::firestore::Firestore *p_db, const godot::Dictionary &p_data, firebase::firestore::MapFieldValue &r_out);
 // A filter or cursor value: write-only special values are rejected.
 godot::String to_query_value(firebase::firestore::Firestore *p_db, const godot::Variant &p_value, firebase::firestore::FieldValue &r_out);

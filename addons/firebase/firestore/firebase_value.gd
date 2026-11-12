@@ -25,6 +25,7 @@ const MIN_TIMESTAMP_SECONDS := -62135596800
 const MAX_TIMESTAMP_SECONDS := 253402300799
 const IN_ARRAY := "cannot be inside an array"
 const IN_QUERY := "cannot be used in a query"
+const TOP_LEVEL_DELETE := "delete_field() must be a top-level field"
 
 
 static func timestamp(unix_seconds: float) -> Dictionary:
@@ -98,7 +99,7 @@ static func is_field_path(path: Variant) -> bool:
 
 
 ## Returns an empty string when `data` can be written, otherwise the reason.
-## `allow_delete` is true for update and merge writes.
+## `allow_delete` is true for merge writes; delete_field() may then sit in nested maps too.
 static func validate_data(data: Dictionary, allow_delete: bool) -> String:
 	return _validate_document(data, allow_delete, false)
 
@@ -123,13 +124,15 @@ static func _validate_document(data: Dictionary, allow_delete: bool, path_keys: 
 ## `sentinel_reason` is empty when server_timestamp() and increment() are allowed.
 ## Keys are literal field names unless `path_keys` is true.
 static func _validate_map(data: Dictionary, delete_reason: String, sentinel_reason: String, path_keys := false) -> String:
+	# Update data (path keys) takes delete_field() only at the top level; a merge set also in nested maps.
+	var nested_delete_reason := TOP_LEVEL_DELETE if path_keys else delete_reason
 	for key in data:
 		if not key is String or key.is_empty() or key.split(".").has(""):
 			return "field names must be non-empty strings: %s" % str(key)
 		if sentinel_reason != IN_QUERY and is_reserved_field_name(key, path_keys):
 			return "field names cannot begin and end with __: %s" % key
 		var value: Variant = data[key]
-		var reason := delete_reason if tag_of(value) == DELETE else _validate_value(value, false, sentinel_reason)
+		var reason := delete_reason if tag_of(value) == DELETE else _validate_value(value, false, sentinel_reason, nested_delete_reason)
 		if not reason.is_empty():
 			return "%s: %s" % [key, reason]
 	return ""
@@ -186,7 +189,8 @@ static func _validate_structure(value: Variant, ancestors: Array, depth: int, do
 	return reason
 
 
-static func _validate_value(value: Variant, in_array: bool, sentinel_reason: String) -> String:
+## `delete_reason` is empty when delete_field() is allowed in maps nested in `value`.
+static func _validate_value(value: Variant, in_array: bool, sentinel_reason: String, delete_reason := TOP_LEVEL_DELETE) -> String:
 	match typeof(value):
 		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_STRING_NAME, TYPE_PACKED_BYTE_ARRAY:
 			return ""
@@ -201,14 +205,15 @@ static func _validate_value(value: Variant, in_array: bool, sentinel_reason: Str
 					return item_reason
 			return ""
 		TYPE_DICTIONARY:
-			return _validate_dictionary(value, sentinel_reason)
+			return _validate_dictionary(value, sentinel_reason, delete_reason)
 	return "unsupported type %s" % type_string(typeof(value))
 
 
 ## `sentinel_reason` is empty when server_timestamp() and increment() are allowed.
-static func _validate_dictionary(value: Dictionary, sentinel_reason: String) -> String:
+static func _validate_dictionary(value: Dictionary, sentinel_reason: String, delete_reason: String) -> String:
 	if not value.has(TAG):
-		return _validate_map(value, "delete_field() must be a top-level field", sentinel_reason)
+		# Arrays and queries reject every special write value, delete_field() too.
+		return _validate_map(value, delete_reason if sentinel_reason.is_empty() else "delete_field() " + sentinel_reason, sentinel_reason)
 	match tag_of(value):
 		TIMESTAMP:
 			var seconds: Variant = value.get("seconds")
@@ -233,7 +238,7 @@ static func _validate_dictionary(value: Dictionary, sentinel_reason: String) -> 
 				return "increment() " + sentinel_reason
 			return "" if value.get("by") is int or value.get("by") is float else "increment() needs a number"
 		DELETE:
-			return "delete_field() " + (sentinel_reason if not sentinel_reason.is_empty() else "must be a top-level field")
+			return "delete_field() " + sentinel_reason if not sentinel_reason.is_empty() else TOP_LEVEL_DELETE
 		ARRAY_UNION, ARRAY_REMOVE:
 			if not sentinel_reason.is_empty():
 				return "%s() %s" % [tag_of(value), sentinel_reason]

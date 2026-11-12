@@ -302,9 +302,13 @@ func _write_field(parent: Dictionary, field: String, value: Variant, merge_maps:
 			parent[field] = kept.filter(func(item): return not _contains(value.elements, item)).map(_copy)
 		"":
 			if value is Dictionary:
-				var nested: Dictionary = parent[field] if merge_maps and parent.get(field) is Dictionary else {}
+				var existing: Variant = parent.get(field)
+				var nested: Dictionary = existing if merge_maps and existing is Dictionary else {}
 				var previous_map: Dictionary = previous if previous is Dictionary else {}
 				_write_fields(nested, value, false, merge_maps, previous_map)
+				# A merge set's nested deletes alone only remove fields: they never create or replace this map.
+				if nested.is_empty() and not value.is_empty() and not existing is Dictionary:
+					return
 				parent[field] = nested
 			else:
 				parent[field] = _copy(value)

@@ -461,6 +461,8 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   Zaman damgası 0001-01-01 ile 9999-12-31 arasında, enlem -90..90, boylam
   -180..180 olmalı. `server_timestamp()`, `increment()`, `delete_field()`,
   `array_union()` ve `array_remove()` dizi içinde ve sorgu değerinde kullanılamaz.
+  `delete_field()` `set_doc(merge = true)` verisinde iç içe sözlüklerde de alanı siler;
+  `update_doc()`'ta yalnız üst düzey değerdir, iç içe alan için noktalı yol (`"profile.level"`) kullan.
   `array_union()` dizide olmayan öğeleri sona ekler, `array_remove()` her öğenin bütün
   kopyalarını siler; alan yoksa ya da dizi değilse sonuç sırasıyla öğeler ve `[]` olur.
   Öğeler dizi veya özel yazma değeri olamaz; eşitlik değere göredir (`1 == 1.0`).
