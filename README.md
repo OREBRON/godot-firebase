@@ -197,6 +197,8 @@ Play Games helper için `firebase/auth/play_games_enabled=true` ve
 edindiği code için mevcut `sign_in_with_play_games(code)` / `link_with_play_games(code)`
 API'leri korunur. İkinci eşzamanlı credential UI isteği `ERR_BUSY`, iptal
 `ERR_CANCELLED`, platform arayüzünün diğer hataları `ERR_UNAVAILABLE` döner.
+iOS'ta giriş arayüzünü gösterecek etkin pencere yoksa Google ve Game Center
+girişi beklemeden `ERR_UNAVAILABLE` döner; uygulama etkin olunca yeniden denenebilir.
 Hesaplar veya oyun verisi otomatik birleştirilmez.
 
 ### Firebase Emulator Suite

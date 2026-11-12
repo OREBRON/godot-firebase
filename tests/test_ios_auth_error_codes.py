@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""iOS auth failures return FirebaseResult codes, never another error domain's.
+"""iOS auth failures return FirebaseResult codes, never another error domain's,
+and fail instead of waiting when no window can show the platform UI.
 
 Static check of src/auth/platform/platform_credentials_ios.mm: ASAuthorizationError,
 GKError and FIRAuthErrorCode numbers are not firebase::auth::AuthError values, and
@@ -22,6 +23,14 @@ class IosAuthErrorCodesTest(unittest.TestCase):
 		guarded = "future.error() != 0 ? future.error() : godot_firebase::kUnavailable"
 		self.assertTrue(guarded in SOURCE, "Game Center credential failure falls back to kUnavailable")
 		self.assertIsNone(re.search(r"failure\(future\.error\(\),", SOURCE))
+
+	def test_missing_presentation_window_fails_instead_of_waiting(self):
+		# Presenting on nil shows nothing; GameKit then never calls back and Auth stays busy.
+		guards = re.findall(r"UIViewController \*presenter = top_view_controller\(\);\s*if \(!presenter\) \{([^}]*)\}", SOURCE)
+		self.assertEqual(len(guards), SOURCE.count("top_view_controller()"), "every presenter lookup is checked")
+		for guard in guards:
+			self.assertIn("failure(godot_firebase::kUnavailable, kNoPresentationWindow)", guard)
+		self.assertTrue(any("finished = true;" in guard for guard in guards), "GameKit's later handler calls are ignored")
 
 
 if __name__ == "__main__":
