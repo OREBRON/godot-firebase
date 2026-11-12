@@ -6,8 +6,16 @@ from pathlib import Path
 import platform
 import shlex
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def is_x86_64_elf(path):
+    """Whether path starts with a 64-bit little-endian x86-64 ELF header."""
+    with open(path, "rb") as library:
+        header = library.read(20)
+    return header[:6] == b"\x7fELF\x02\x01" and header[18:20] == b"\x3e\x00"
 
 
 def main():
@@ -45,8 +53,17 @@ def main():
         flags += ["-shared"]
         if Path(compiler[0]).stem != "zig":
             flags += ["--target=x86_64-pc-windows-msvc", "-fuse-ld=lld", "-Wl,/noentry"]
+    # Linux gets no target flag (GCC has none), so check what the compiler built before replacing the library.
+    linux = args.platform == "linux"
+    built = output.with_name(output.name + ".tmp") if linux else output
     subprocess.run([*compiler, *flags, str(ROOT / "src/desktop/godot_firebase_stub.c"),
-                    "-o", str(output)], check=True)
+                    "-o", str(built)], check=True)
+    if linux:
+        if not is_x86_64_elf(built):
+            built.unlink()
+            sys.exit(f"{args.cc} did not build an x86_64 library; build on x86_64 Linux "
+                     'or pass an x86_64 cross compiler, e.g. --cc "zig cc"')
+        built.replace(output)
     print(output.relative_to(ROOT))
 
 
