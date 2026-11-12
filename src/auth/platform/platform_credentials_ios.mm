@@ -29,6 +29,7 @@ using godot_firebase::PlatformCredential;
 
 namespace {
 std::atomic<uint64_t> platform_generation{0};
+constexpr char kNoPresentationWindow[] = "no active iOS presentation window";
 
 PlatformCredential failure(int code, const std::string &message) {
 	PlatformCredential result;
@@ -129,7 +130,14 @@ void sign_in_with_game_center(CredentialCallback done, uint64_t generation) {
 			return;
 		}
 		if (view_controller) {
-			[top_view_controller() presentViewController:view_controller animated:YES completion:nil];
+			UIViewController *presenter = top_view_controller();
+			if (!presenter) {
+				// GameKit waits for its unshown login UI and may never call again: fail now, ignore later calls.
+				finished = true;
+				done(failure(godot_firebase::kUnavailable, kNoPresentationWindow));
+				return;
+			}
+			[presenter presentViewController:view_controller animated:YES completion:nil];
 			return;
 		}
 		finished = true;
@@ -204,7 +212,7 @@ void sign_in_with_google(const godot_firebase::PlatformCredentialOptions &option
 	if (!has_url_scheme(scheme)) { done(failure(godot_firebase::kInvalidArgument, "Google's reversed client ID URL scheme is missing from the export")); return; }
 	if (!register_google_url_service()) { done(failure(godot_firebase::kUnavailable, "Godot's iOS URL callback service is unavailable")); return; }
 	UIViewController *presenter = top_view_controller();
-	if (!presenter) { done(failure(godot_firebase::kUnavailable, "no active iOS presentation window")); return; }
+	if (!presenter) { done(failure(godot_firebase::kUnavailable, kNoPresentationWindow)); return; }
 	NSString *server = options.google_web_client_id.empty() ? nil : [NSString stringWithUTF8String:options.google_web_client_id.c_str()];
 	GIDSignIn.sharedInstance.configuration = [[GIDConfiguration alloc] initWithClientID:client serverClientID:server];
 	[GIDSignIn.sharedInstance signInWithPresentingViewController:presenter completion:^(GIDSignInResult *result, NSError *error) {
