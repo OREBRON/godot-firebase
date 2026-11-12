@@ -166,6 +166,53 @@ class DevelopmentPackageTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
 
 
+class BuildSelectionTests(unittest.TestCase):
+    """Runs the real tools/build.sh with a stand-in SCons that writes placeholder Android libraries."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / "tools").mkdir()
+        for name in ["build.sh", "versions.env"]:
+            shutil.copy2(ROOT / "tools" / name, self.root / "tools" / name)
+        (self.root / "tools/build_android_aar.sh").write_text("")
+        for module in MODULES:
+            api = self.root / "addons/firebase" / module / f"firebase_{module}.gd"
+            api.parent.mkdir(parents=True)
+            api.write_text(f"# {module} API\n")
+        self.selection = self.root / "addons/firebase/bin/modules.txt"
+        self.selection.parent.mkdir()
+        self.selection.write_text("auth,firestore\n")
+        self.scons = self.root / "scons.sh"
+        self.scons.write_text('''for arg; do [[ $arg != target=* ]] || target=${arg#target=}; done
+mkdir -p build/android
+echo placeholder > "build/android/libgodot_firebase.android.$target.so"
+''')
+
+    def build(self, *args):
+        return subprocess.run(["bash", "tools/build.sh", *args], cwd=self.root,
+            env={**os.environ, "SCONS": f"bash {self.scons}"}, capture_output=True, text=True)
+
+    def test_invalid_selection_fails_before_anything_is_built_or_written(self):
+        for platforms, modules in [("andriod", "auth"), ("", "auth"), ("android,", "auth"), ("android, macos", "auth"),
+                                   ("android", "auth, firestore"), ("android", ""), ("android", "auth,unknown"),
+                                   ("android", "auth,auth"), ("android", "auth,,firestore"), ("android", "../core")]:
+            with self.subTest(platforms=platforms, modules=modules):
+                result = self.build("--platforms", platforms, "--modules", modules)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertTrue(result.stderr.strip())
+                self.assertEqual(self.selection.read_text(), "auth,firestore\n")
+                self.assertFalse((self.root / "build").exists())
+
+    def test_valid_selection_is_built_and_recorded(self):
+        result = self.build("--platforms", "android", "--modules", "storage,remote_config")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.selection.read_text(), "storage,remote_config\n")
+        for target in ["template_debug", "template_release"]:
+            self.assertTrue((self.root / f"addons/firebase/bin/android/libgodot_firebase.android.{target}.so").is_file())
+
+
 class SymbolIdentityTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -236,6 +283,9 @@ class SymbolIdentityTests(unittest.TestCase):
         for name in ["build.sh", "versions.env", "verify_crashlytics_symbols.py"]:
             shutil.copy2(ROOT / "tools" / name, self.root / "tools" / name)
         (self.root / "tools/build_android_aar.sh").write_text("")
+        api = self.root / "addons/firebase/crashlytics/firebase_crashlytics.gd"
+        api.parent.mkdir(parents=True)
+        api.write_text("# crashlytics API\n")
         # Stands in for SCons: links the requested target with DWARF and a build ID.
         scons = self.root / "scons.sh"
         scons.write_text(f'''for arg; do [[ $arg != target=* ]] || target=${{arg#target=}}; done
