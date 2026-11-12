@@ -67,6 +67,11 @@ constexpr int kMaxIncomingDepth = 64;
 // Calls `done` when `future` completes; `map` turns the result into a Variant.
 template <typename T, typename Map>
 void complete_when_done(const firebase::Future<T> &p_future, Completion p_done, Map p_map) {
+	// The SDK drops the callback of an invalid future (e.g. a User call with no signed-in user).
+	if (p_future.status() == firebase::kFutureStatusInvalid) {
+		p_done(Outcome::failure(kUnavailable, "Firebase did not start the request"));
+		return;
+	}
 	p_future.OnCompletion([done = std::move(p_done), map = std::move(p_map)](const firebase::Future<T> &result) {
 		if (result.error() != 0) {
 			const char *message = result.error_message();
