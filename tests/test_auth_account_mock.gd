@@ -25,10 +25,12 @@ func _run() -> void:
 	result = await auth.sign_in_with_email("player@example.com", "secret").wait()
 	check(result.ok and result.value.email == "player@example.com" and result.value.providers == ["password"], "email sign-in reports the password provider")
 	var uid: String = result.value.uid
-	result = await auth.link_with_google().wait()
-	check(result.ok and result.value.providers == ["password", "google.com"], "linked provider joins the provider list")
 	await process_frame
 	auth.state_changed.connect(func(user: Dictionary): states.append(user))
+	result = await auth.link_with_google().wait()
+	check(result.ok and result.value.providers == ["password", "google.com"], "linked provider joins the provider list")
+	result = await auth.sign_in_with_email("player@example.com", "secret").wait()
+	check(result.ok and result.value.uid == uid, "the signed-in account can sign in again")
 
 	result = await auth.reauthenticate_with_email("player@example.com", "secret").wait()
 	check(result.ok and result.value == null and auth.current_user().uid == uid, "email reauthentication keeps the session")
@@ -64,7 +66,7 @@ func _run() -> void:
 	result = await auth.reload_user().wait()
 	check(result.ok and auth.current_user().display_name == "Ada", "reload keeps the signed-in user")
 	await process_frame
-	check(states.is_empty(), "reauthentication, unlink, profile update and reload report no state change")
+	check(states.is_empty(), "link, same-account sign-in, reauthentication, unlink, profile update and reload report no state change")
 
 	auth.sign_out()
 	result = await auth.sign_in_with_google().wait()

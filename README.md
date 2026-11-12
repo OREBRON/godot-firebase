@@ -557,8 +557,11 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   temizler) ve `reload_user()` değer döndürmez ve `state_changed` vermez; sonucu
   `current_user()` ile oku. Mock ilk e-posta girişinde hesabı açar; aynı custom
   token aynı mock hesabı döndürür.
-- Auth açılışta `state_changed` sinyalini bir kez verir (oturum yoksa `{}`).
-  Anonim kullanıcı tekrar anonim giriş yaparsa aynı uid döner ve sinyal gelmez.
+- Auth açılışta `state_changed` sinyalini bir kez verir (oturum yoksa `{}`); sonra
+  yalnız başka uid'li kullanıcı girince ve çıkışta verir. `link_with_*` uid'yi korur ve
+  sinyal vermez: bağlanan kullanıcıyı görevin değerinden (`result.value.is_anonymous`
+  `false` olur) ya da `current_user()` ile oku. Aynı hesabın tekrar girişi ve anonim
+  kullanıcının tekrar anonim girişi de aynı uid'yi döndürür ve sinyal vermez.
   `firebase/auth/mock_platform` proje ayarı (`""` varsayılan, `"android"`, `"ios"`)
   editörde o platformda olmayan sağlayıcıları native gibi `ERR_UNSUPPORTED` ile reddeder;
   değişiklik yeniden başlatmada geçerli olur.

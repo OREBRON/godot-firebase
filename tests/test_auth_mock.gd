@@ -26,6 +26,8 @@ func _run() -> void:
 
 	result = await auth.link_with_play_games("test-code").wait()
 	check(result.ok and result.value.uid == uid, "Play Games link keeps uid")
+	await process_frame
+	check(states.size() == 2 and states[-1].is_anonymous, "linking the anonymous user reports no state change")
 	result = await auth.sign_in_with_play_games("").wait()
 	check(not result.ok and result.error_code == FirebaseResult.ERR_INVALID_ARGUMENT, "Play Games requires an auth code")
 
