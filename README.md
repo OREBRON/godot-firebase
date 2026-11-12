@@ -563,6 +563,8 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
   sinyal vermez: bağlanan kullanıcıyı görevin değerinden (`result.value.is_anonymous`
   `false` olur) ya da `current_user()` ile oku. Aynı hesabın tekrar girişi ve anonim
   kullanıcının tekrar anonim girişi de aynı uid'yi döndürür ve sinyal vermez.
+  Kullanıcıda zaten olan sağlayıcıyı bağlamak, seçilen hesap aynı da olsa başkası da
+  olsa, cihazdaki gibi `FirebaseAuthMock.PROVIDER_ALREADY_LINKED` (15) ile başarısız olur.
   `firebase/auth/mock_platform` proje ayarı (`""` varsayılan, `"android"`, `"ios"`)
   editörde o platformda olmayan sağlayıcıları native gibi `ERR_UNSUPPORTED` ile reddeder;
   değişiklik yeniden başlatmada geçerli olur.

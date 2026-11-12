@@ -7,6 +7,7 @@ signal auth_state_changed(user: Dictionary)
 
 # firebase::auth::AuthError values (pinned C++ SDK).
 const CREDENTIAL_ALREADY_IN_USE := 10
+const PROVIDER_ALREADY_LINKED := 15
 const NO_SUCH_PROVIDER := 16
 const USER_MISMATCH := 22
 
@@ -151,6 +152,11 @@ func _complete_sign_in(operation: Dictionary) -> void:
 			_finish(operation.id)
 		else:
 			_finish_error(operation.id, USER_MISMATCH, "credential belongs to another account")
+		return
+	# Both platform SDKs reject a provider the user already has, whichever account
+	# the credential names, before the server can report its owner.
+	if operation.mode == LINK and _has_provider(operation.provider):
+		_finish_error(operation.id, PROVIDER_ALREADY_LINKED, "user is already linked to this provider")
 		return
 	if operation.mode == LINK and not existing_uid.is_empty() and existing_uid != operation.uid:
 		_finish_error(operation.id, CREDENTIAL_ALREADY_IN_USE, "credential belongs to another account")

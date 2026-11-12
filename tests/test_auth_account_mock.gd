@@ -1,5 +1,5 @@
 extends FirebaseTest
-## Custom token and email sign-in, reauthentication, provider list, unlink,
+## Custom token and email sign-in, reauthentication, provider list, link, unlink,
 ## profile update and reload against the auth mock.
 
 var states: Array[Dictionary] = []
@@ -74,6 +74,16 @@ func _run() -> void:
 	auth.sign_out()
 	result = await auth.sign_in_with_email("player@example.com", "secret").wait()
 	check(result.ok and result.value.uid == uid and result.value.display_name == "Ada", "profile is stored on the account")
+
+	backend.set_provider_account("google", "second")
+	result = await auth.link_with_google().wait()
+	check(result.ok and result.value.providers == ["password", "google.com"], "another Google account links after unlink")
+	result = await auth.link_with_google().wait()
+	check(not result.ok and result.error_code == FirebaseAuthMock.PROVIDER_ALREADY_LINKED, "linking the same Google account again fails")
+	# The default Google account now belongs to the user created above.
+	backend.set_provider_account("google", "default")
+	result = await auth.link_with_google().wait()
+	check(not result.ok and result.error_code == FirebaseAuthMock.PROVIDER_ALREADY_LINKED and auth.current_user().providers == ["password", "google.com"], "another user's Google account fails as already linked, not as in use")
 
 	auth.sign_out()
 	for task: FirebaseTask in [auth.reauthenticate_with_google(), auth.reauthenticate_with_email("player@example.com", "secret"), auth.unlink_provider("password"), auth.update_profile({}), auth.reload_user()]:
