@@ -41,13 +41,18 @@ func _enter_tree() -> void:
 
 
 ## Wires module APIs to `module_backends` (name -> backend or null).
-## Tests pass mocks, for example {"auth": FirebaseAuthMock.new()}.
+## Tests pass mocks, for example {"auth": FirebaseAuthMock.new()}. A backend
+## for a module whose folder is missing is dropped with an error.
 func setup(module_backends: Dictionary) -> void:
 	backends.assign(module_backends)
 	for module in MODULES:
 		var api: RefCounted = null
+		var path := _api_path(module)
+		if backends.has(module) and not ResourceLoader.exists(path):
+			push_error("Firebase: %s backend given but %s is missing; %s unavailable" % [module, path, module])
+			backends.erase(module)
 		if backends.has(module):
-			api = load(_api_path(module)).new(FirebaseRequests.new(backends[module]))
+			api = load(path).new(FirebaseRequests.new(backends[module]))
 		set(module, api)
 
 
