@@ -784,7 +784,10 @@ GoogleSignIn kaynakları `tools/google_signin_ios/Podfile` ve lock dosyasında (
 bağlanan GoogleSignIn/AppAuth/GTMAppAuth/AppCheckCore git commit'ine pinli),
 Android bridge bağımlılıkları `android/build.gradle` ve lock dosyasında,
 oyun Maven/Kotlin/R8 seçimleri `addons/firebase/export/firebase_android_gradle.gd`
-içinde sabitlenir. godot-cpp'nin 4.7 tag'i
+içinde sabitlenir. Firebase Maven sürümleri C++ SDK'nın
+`Android/firebase_dependencies.gradle` dosyasında adı geçen Firebase BoM'unkilerdir;
+`tools/versions.env` bu BoM'u sabitler, `tests/test_android_dependency_pins.py`
+bootstrap sonrasında pinleri onunla karşılaştırır. godot-cpp'nin 4.7 tag'i
 olmadığı için `master` bir commit'e sabitlenir ve `api_version=4.7` ile derlenir.
 
 ## Doğrulanmamış noktalar
