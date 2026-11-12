@@ -54,10 +54,12 @@ bool is_document_id(const Variant &p_id) {
 }
 
 // Same rules as FirebaseFirestore._validate_filters(); query_core ConflictingOps() permits
-// several inequality, "in" and "array-contains-any" filters.
+// several inequality, "in" and "array-contains-any" filters. The array-contains rules are the server's.
 String validate_filters(const Array &p_filters) {
 	int not_equal = 0;
 	int not_in = 0;
+	int array_contains = 0;
+	bool array_contains_any = false;
 	bool disjunctive = false;
 	for (int64_t i = 0; i < p_filters.size(); ++i) {
 		if (p_filters[i].get_type() != Variant::ARRAY) {
@@ -73,7 +75,9 @@ String validate_filters(const Array &p_filters) {
 		}
 		not_equal += op == "!=" ? 1 : 0;
 		not_in += op == "not-in" ? 1 : 0;
-		disjunctive = disjunctive || op == "in" || op == "array-contains-any";
+		array_contains += op == "array-contains" ? 1 : 0;
+		array_contains_any = array_contains_any || op == "array-contains-any";
+		disjunctive = disjunctive || op == "in" || array_contains_any;
 		Array values;
 		if (is_list_op(op)) {
 			const int64_t max_values = op == "not-in" ? 10 : 30;
@@ -97,7 +101,13 @@ String validate_filters(const Array &p_filters) {
 	if (not_equal > 1 || not_in > 1) {
 		return "a query supports only one != and one not-in filter";
 	}
-	return not_in > 0 && (not_equal > 0 || disjunctive) ? String("not-in cannot be combined with !=, in or array-contains-any") : String();
+	if (not_in > 0 && (not_equal > 0 || disjunctive)) {
+		return "not-in cannot be combined with !=, in or array-contains-any";
+	}
+	if (array_contains > 1 || (array_contains > 0 && array_contains_any)) {
+		return "a query supports only one array-contains filter, not combined with array-contains-any";
+	}
+	return String();
 }
 
 // Same rules as FirebaseFirestore._validate_cursor(); value conversion is checked by build_query().

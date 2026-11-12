@@ -162,12 +162,14 @@ static func _validate_filters(filters: Array) -> String:
 			reason = _validate_document_id_filter(filter[1], filter[2])
 		if not reason.is_empty():
 			return reason
-	# Query.conflictingOps() of the SDKs.
-	for op in ["!=", "not-in"]:
+	# Query.conflictingOps() of the SDKs; only the server rejects the array-contains rules.
+	for op in ["!=", "not-in", "array-contains"]:
 		if ops.count(op) > 1:
 			return "a query supports only one %s filter" % op
 	if ops.has("not-in") and (ops.has("!=") or ops.has("in") or ops.has("array-contains-any")):
 		return "not-in cannot be combined with !=, in or array-contains-any"
+	if ops.has("array-contains") and ops.has("array-contains-any"):
+		return "array-contains cannot be combined with array-contains-any"
 	return ""
 
 

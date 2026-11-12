@@ -166,6 +166,8 @@ func _query_regressions(db: FirebaseFirestore, backend: FirebaseFirestoreMock) -
 		[["a", "not-in", [1]], ["b", "!=", 2]],
 		[["a", "in", [1]], ["b", "not-in", [2]]],
 		[["a", "array-contains-any", [1]], ["b", "not-in", [2]]],
+		[["tags", "array-contains", "a"], ["tags", "array-contains", "b"]],
+		[["a", "array-contains", 1], ["b", "array-contains-any", [2]]],
 		[["a", "not-in", []]],
 		[["a", "not-in", range(11)]],
 		[["a", "array-contains-any", "x"]],
@@ -198,6 +200,7 @@ func _query_regressions(db: FirebaseFirestore, backend: FirebaseFirestoreMock) -
 		check(not invalid.ok and invalid.error_code == FirebaseResult.ERR_INVALID_ARGUMENT and backend._next_id == calls_before, "unsafe cursor rejected: %s" % str(bad))
 		check(db.listen_query("scores", func(_r): pass, [], bad[0], 0, bad[1]) == 0 and backend._next_id == calls_before, "unsafe cursor listener rejected: %s" % str(bad))
 	check((await db.query("scores", [["a", "in", [1]], ["b", "array-contains-any", [2]], ["c", "array-contains-any", [3]]]).wait()).ok, "in and array-contains-any combine in the pinned SDK")
+	check((await db.query("scores", [["a", "array-contains", 1], ["b", "in", [2]]]).wait()).ok, "array-contains combines with in")
 	check((await db.query("scores", [["a", "not-in", [1]], ["b", ">", 2]]).wait()).ok, "not-in combines with range filters")
 	var result := await db.query("scores", [["__name__", "in", ["a", "b"]]], [["__name__", "desc"]]).wait()
 	check(result.ok and result.value.map(func(s): return s.id) == ["b", "a"], "document-ID filtering and ordering")
