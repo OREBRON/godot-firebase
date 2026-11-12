@@ -16,6 +16,21 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
+fail() { echo "$1" >&2; exit 2; }
+# Checked before anything is built or written, so a typo cannot rewrite modules.txt.
+# Spaces are rejected, not trimmed: package.sh and the Android export read exact names.
+platform_list='^(ios|android|macos|linux|windows)(,(ios|android|macos|linux|windows))*$'
+module_list='^[a-z][a-z0-9_]*(,[a-z][a-z0-9_]*)*$'
+[[ $platforms =~ $platform_list ]] || fail "--platforms takes comma-separated ios,android,macos,linux,windows without spaces, got '$platforms'"
+[[ $modules =~ $module_list ]] || fail "--modules takes comma-separated product names without spaces, got '$modules'"
+seen=,
+for module in ${modules//,/ }; do
+	# A product is an API folder, as in package.sh.
+	test -f "addons/firebase/$module/firebase_$module.gd" || fail "unknown module '$module': addons/firebase/$module/firebase_$module.gd not found"
+	[[ $seen != *",$module,"* ]] || fail "module '$module' is selected twice"
+	seen+="$module,"
+done
+
 source tools/versions.env
 SCONS="${SCONS:-uvx --from scons==$SCONS_VERSION scons}"
 mkdir -p build
