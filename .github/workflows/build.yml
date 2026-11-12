@@ -144,7 +144,7 @@ jobs:
           # .godot/, compiled objects and the third_party link.
           git -C "$GITHUB_WORKSPACE" clean -ffdxq
           if [ -d "$THIRD_PARTY_CACHE" ]; then
-            rm -f "$THIRD_PARTY_CACHE"/*.zip
+            rm -f "$THIRD_PARTY_CACHE"/*.zip "$THIRD_PARTY_CACHE"/*.part
             for dir in "$THIRD_PARTY_CACHE/firebase_cpp_sdk" "$THIRD_PARTY_CACHE/Firebase"; do
               [ -f "$dir/.complete" ] || rm -rf "$dir"
             done

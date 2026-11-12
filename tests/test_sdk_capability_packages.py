@@ -213,6 +213,81 @@ echo placeholder > "build/android/libgodot_firebase.android.$target.so"
             self.assertTrue((self.root / f"addons/firebase/bin/android/libgodot_firebase.android.{target}.so").is_file())
 
 
+@unittest.skipUnless(shutil.which("shasum"), "shasum required by tools/bootstrap.sh")
+class BootstrapDownloadTests(unittest.TestCase):
+    """Runs the real tools/bootstrap.sh with stand-in git, curl and unzip and a small pinned payload."""
+    PAYLOAD = "pinned payload"
+    DOWNLOADS = ["firebase_cpp_sdk", "Firebase.zip", "firebase-bom-"]
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / "tools").mkdir()
+        shutil.copy2(ROOT / "tools/bootstrap.sh", self.root / "tools/bootstrap.sh")
+        self.sha = hashlib.sha256(self.PAYLOAD.encode()).hexdigest()
+        pins = "".join(f"FIREBASE_{name}_SHA256={self.sha}\n" for name in ["CPP", "IOS", "ANDROID_BOM"])
+        (self.root / "tools/versions.env").write_text((ROOT / "tools/versions.env").read_text() + pins)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        stubs = {
+            "git": '[ "$3 $4" != "remote get-url" ] || echo https://github.com/godotengine/godot-cpp.git\n',
+            # Writes $PAYLOAD, or part of it and fails like a dropped connection for URLs containing $INTERRUPT.
+            "curl": '''while [ "$1" != --output ]; do shift; done
+echo "$3" >> "$CURL_LOG"
+if [ -n "$INTERRUPT" ] && [[ $3 == *"$INTERRUPT"* ]]; then printf %s "${PAYLOAD:0:4}" > "$2"; exit 18; fi
+printf %s "$PAYLOAD" > "$2"
+''',
+            "unzip": 'mkdir -p "third_party/${3%%/*}"\n',
+        }
+        for name, body in stubs.items():
+            (self.bin / name).write_text("#!/usr/bin/env bash\n" + body)
+            (self.bin / name).chmod(0o755)
+        self.third_party = self.root / "third_party"
+
+    def bootstrap(self, payload=PAYLOAD, interrupt=""):
+        log = self.root / "curl.log"
+        log.unlink(missing_ok=True)
+        result = subprocess.run(["bash", "tools/bootstrap.sh"], cwd=self.root, capture_output=True, text=True,
+            env={**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}", "PAYLOAD": payload,
+                 "INTERRUPT": interrupt, "CURL_LOG": str(log)})
+        return result, log.read_text() if log.exists() else ""
+
+    def downloads(self):
+        return sorted(path.name for path in self.third_party.iterdir() if path.suffix in {".zip", ".pom", ".part"})
+
+    def test_verified_downloads_are_kept_and_not_downloaded_again(self):
+        result, requested = self.bootstrap()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(all(name in requested for name in self.DOWNLOADS), requested)
+        # Extracted archives are deleted; only the verified BoM POM stays.
+        self.assertRegex(" ".join(self.downloads()), r"^firebase-bom-[\d.]+\.pom$")
+        for directory in ["firebase_cpp_sdk", "Firebase"]:
+            self.assertIn(self.sha, (self.third_party / directory / ".complete").read_text())
+        result, requested = self.bootstrap()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(requested, "")
+
+    def test_interrupted_download_is_not_kept_and_next_run_downloads_again(self):
+        for download in self.DOWNLOADS:
+            with self.subTest(download=download):
+                shutil.rmtree(self.third_party, ignore_errors=True)
+                result, _ = self.bootstrap(interrupt=download)
+                self.assertNotEqual(result.returncode, 0)
+                # Only the partial file is left; nothing sits at the final path.
+                self.assertRegex(" ".join(self.downloads()), r"^\S+\.part$")
+                result, requested = self.bootstrap()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(download, requested)
+                self.assertFalse([name for name in self.downloads() if name.endswith(".part")])
+
+    def test_hash_mismatch_fails_and_removes_the_download(self):
+        result, _ = self.bootstrap(payload="tampered payload")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SHA-256 mismatch", result.stderr)
+        self.assertEqual(self.downloads(), [])
+
+
 class SymbolIdentityTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
