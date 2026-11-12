@@ -9,10 +9,13 @@ on:
 permissions:
   contents: read
 
-# The runner keeps third_party/ between runs; one build at a time.
+# The runner keeps third_party/ between runs; one build at a time. The group is
+# shared with sdk-capabilities.yml; queue: max keeps every waiting run in line
+# instead of cancelling it when another run joins the group.
 concurrency:
   group: godot-firebase-build
   cancel-in-progress: false
+  queue: max
 
 jobs:
   build:
