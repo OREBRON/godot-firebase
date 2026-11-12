@@ -477,7 +477,8 @@ var reward: FirebaseResult = await Firebase.functions.call_function("claimDailyR
 - Firestore filtre operatörleri: `==`, `!=`, `<`, `<=`, `>`, `>=`, `array-contains`,
   `array-contains-any`, `in`, `not-in`. `in` ve `array-contains-any` 1-30, `not-in` 1-10
   değerli dizi alır; dizideki değerler dizi olamaz. Sorguda en fazla bir `!=` ve bir `not-in`
-  olur; `not-in`, `!=`, `in` veya `array-contains-any` ile birleşmez. `not-in` null değeri ve
+  olur; `not-in`, `!=`, `in` veya `array-contains-any` ile birleşmez. Sorguda en fazla bir
+  `array-contains` olur ve `array-contains-any` ile birleşmez. `not-in` null değeri ve
   alanı olmayan dokümanı eşleştirmez. `"__name__"` alanı doküman kimliğidir.
 - Sayfalama imleci `query()`/`query_snapshot()` (`source`'tan sonra) ve `listen_query()`
   argümanıdır: `{start_at | start_after, end_at | end_before}`, her biri `order_by`'ın baştaki
