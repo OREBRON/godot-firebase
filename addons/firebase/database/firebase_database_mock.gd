@@ -3,13 +3,17 @@ extends FirebaseMockModule
 ## In-memory FirebaseDatabaseNative. Nothing is persisted.
 
 signal value_changed(listener_id: int, ok: bool, snapshot: Dictionary, error_code: int, error_message: String)
+signal children_changed(listener_id: int, ok: bool, snapshot: Dictionary, error_code: int, error_message: String)
 
 ## The whole database value. Empty containers and null descendants are absent.
 var root: Variant = null
+## Path of every value and child listener.
 var _listeners: Dictionary[int, String] = {}
 var _queries: Dictionary[int, Dictionary] = {}
-## Last snapshot sent to each listener; the SDKs raise value events only on change.
+## Last snapshot sent to each value listener; the SDKs raise value events only on change.
 var _sent: Dictionary[int, Dictionary] = {}
+## Children each child listener reported last, in query order.
+var _children_sent: Dictionary[int, Dictionary] = {}
 var _push_count := 0
 ## Test-observable startup options. The mock does not persist to disk or
 ## connect to an emulator.
@@ -250,12 +254,22 @@ func _keep_uncancelled(path: String, value: Variant, cancelled: String) -> void:
 
 
 func listen_value(path: String, query: Dictionary) -> int:
+	return _listen(value_changed, path, query)
+
+
+func listen_children(path: String, query: Dictionary) -> int:
+	return _listen(children_changed, path, query)
+
+
+func _listen(changed: Signal, path: String, query: Dictionary) -> int:
 	_use_reference()
 	var id := _take_id()
-	if _fail_listener_if_requested(value_changed, id):
+	if _fail_listener_if_requested(changed, id):
 		return id
 	_listeners[id] = path
 	_queries[id] = query.duplicate(true)
+	if changed == children_changed:
+		_children_sent[id] = {}
 	_keep_on_disk([path], query)
 	_notify(id)
 	return id
@@ -265,6 +279,7 @@ func remove_listener(id: int) -> void:
 	_listeners.erase(id)
 	_queries.erase(id)
 	_sent.erase(id)
+	_children_sent.erase(id)
 
 
 ## Local snapshots update immediately; write completion models a server ACK.
@@ -399,11 +414,7 @@ func _query(value: Variant, query: Dictionary) -> Variant:
 	var compare := _compare_keys if order == "$key" else _compare_values
 	var entries: Array = []
 	for key: String in children:
-		var by: Variant = key
-		if order == "$value":
-			by = children[key]
-		elif order != "$key":
-			by = _value_at(children[key], order)
+		var by: Variant = _sort_value(key, children[key], order)
 		if (not query.has("start_at") or compare.call(by, query.start_at) >= 0) \
 				and (not query.has("end_at") or compare.call(by, query.end_at) <= 0) \
 				and (not query.has("equal_to") or compare.call(by, query.equal_to) == 0):
@@ -419,6 +430,13 @@ func _query(value: Variant, query: Dictionary) -> Variant:
 	for entry in entries:
 		matched[entry[1]] = _delivered(children[entry[1]])
 	return null if matched.is_empty() else matched
+
+
+## What `order` sorts child `key` with value `value` by.
+static func _sort_value(key: String, value: Variant, order: String) -> Variant:
+	if order == "$key":
+		return key
+	return value if order == "$value" else _value_at(value, order)
 
 
 ## Realtime Database order: null, false, true, numbers, Strings, then maps and lists.
@@ -511,16 +529,57 @@ static func _is_list_index(key: String) -> bool:
 func _notify(listener_id: int) -> void:
 	if not _listeners.has(listener_id):
 		return
+	if _children_sent.has(listener_id):
+		_notify_children(listener_id)
+		return
 	var snapshot := _snapshot(_listeners[listener_id], _queries[listener_id])
 	if _sent.has(listener_id) and _sent[listener_id] == snapshot:
 		return
 	_sent[listener_id] = snapshot.duplicate(true)
-	_deliver_snapshot.call_deferred(listener_id, snapshot)
+	_deliver.call_deferred(value_changed, listener_id, snapshot)
 
 
-func _deliver_snapshot(listener_id: int, snapshot: Dictionary) -> void:
+## Like the SDKs' EventGenerator: "removed" children in their old order, then "added",
+## "moved" and "changed" ones, each in the new order with the key of the child before it.
+func _notify_children(listener_id: int) -> void:
+	var before := _children_sent[listener_id]
+	var query := _queries[listener_id]
+	var after := _ordered_children(_listeners[listener_id], query)
+	_children_sent[listener_id] = after
+	var events: Array[Dictionary] = []
+	for key: String in before:
+		if not after.has(key):
+			events.append({"event": "removed", "key": key, "value": before[key], "previous_key": null})
+	var keys := after.keys()
+	for event in ["added", "moved", "changed"]:
+		for index in keys.size():
+			if _raises(event, keys[index], before, after, query.get("order_by", "$key")):
+				events.append({"event": event, "key": keys[index], "value": after[keys[index]], "previous_key": keys[index - 1] if index > 0 else null})
+	for event in events:
+		_deliver.call_deferred(children_changed, listener_id, event)
+
+
+## The children of `path` that `query` matches, in its order; without a query, in key
+## order, which is the SDKs' priority order when no child has a priority.
+func _ordered_children(path: String, query: Dictionary) -> Dictionary:
+	var children: Variant = _query(_value_at(root, path), query if query else {"order_by": "$key"})
+	return children if children is Dictionary else {}
+
+
+## Whether child `key` raises `event` between the two reports. Like Android's
+## Index.indexedValueChanged(), a child moves when its sort value compares differently.
+static func _raises(event: String, key: String, before: Dictionary, after: Dictionary, order: String) -> bool:
+	if not before.has(key):
+		return event == "added"
+	if event == "moved":
+		return _compare_values(_sort_value(key, before[key], order), _sort_value(key, after[key], order)) != 0
+	# GDScript cannot compare values of different types with !=.
+	return event == "changed" and (typeof(before[key]) != typeof(after[key]) or before[key] != after[key])
+
+
+func _deliver(changed: Signal, listener_id: int, snapshot: Dictionary) -> void:
 	if _listeners.has(listener_id):
-		value_changed.emit(listener_id, true, snapshot, 0, "")
+		changed.emit(listener_id, true, snapshot, 0, "")
 
 
 ## A change at `changed` is visible to a listener on `listened` when one contains the other.
