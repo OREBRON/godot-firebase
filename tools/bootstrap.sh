@@ -26,6 +26,15 @@ verify() { # file expected_sha256
 	fi
 }
 
+# download url file: curl writes file.part, renamed only when it finished, so an
+# interrupted download is never taken for a finished one; the next run starts over.
+download() {
+	[ -f "$2" ] && return
+	rm -f "$2.part"
+	curl --fail --location --silent --show-error --output "$2.part" "$1"
+	mv "$2.part" "$2"
+}
+
 # fetch_zip url zip sha256 extracted_dir member-patterns...
 # extracted_dir/.complete lists the archive, its verified SHA-256 and the patterns;
 # a different version, pin or list is redone.
@@ -36,7 +45,7 @@ fetch_zip() {
 	marker="$(basename "$zip") $sha $*"
 	[ "$(cat "$dir/.complete" 2>/dev/null)" = "$marker" ] && return
 	rm -rf "$dir"
-	[ -f "$zip" ] || curl --fail --location --silent --show-error --output "$zip" "$url"
+	download "$url" "$zip"
 	verify "$zip" "$sha"
 	unzip -q "$zip" "$@" -d third_party
 	echo "$marker" > "$dir/.complete"
@@ -71,8 +80,8 @@ fetch_zip "https://github.com/firebase/firebase-ios-sdk/releases/download/${FIRE
 	'Firebase/FirebaseRemoteConfig/*' 'Firebase/FirebaseCrashlytics/*'
 
 bom="third_party/firebase-bom-${FIREBASE_ANDROID_BOM_VERSION}.pom"
-[ -f "$bom" ] || curl --fail --location --silent --show-error --output "$bom" \
-	"https://dl.google.com/dl/android/maven2/com/google/firebase/firebase-bom/${FIREBASE_ANDROID_BOM_VERSION}/$(basename "$bom")"
+download "https://dl.google.com/dl/android/maven2/com/google/firebase/firebase-bom/${FIREBASE_ANDROID_BOM_VERSION}/$(basename "$bom")" \
+	"$bom"
 verify "$bom" "$FIREBASE_ANDROID_BOM_SHA256"
 
 du -sh third_party/* | sed 's/^/third_party size: /'
