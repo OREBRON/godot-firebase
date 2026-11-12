@@ -681,6 +681,37 @@ bakarak gruplar; Android'de stack'siz, farklı adlı hataların ayrı issue olac
 konsolda doğrulanmadı. Ayrı izlenecek hatalara stack verin; mesaja kullanıcı ID'si
 veya zaman gibi tekil değer koymayın, custom key kullanın.
 
+Addon script hatalarını kendiliğinden raporlamaz; isteyen oyun kendi `Logger`'ını
+`record_error()`'a bağlar. Godot 4.7.2'de GDScript çalışma zamanı hataları
+`_log_error`'a `ERROR_TYPE_SCRIPT` ile, hatanın oluştuğu thread'de gelir. Motor bu
+hataları yalnız editor ve debug build'lerinde raporlar; release export'ta Logger'a
+ulaşmazlar. `push_error()` ve motor hataları her build'de `ERROR_TYPE_ERROR` olarak
+gelir ve konumları motorun C++ dosyasıdır. Addon'un kendi `Firebase: invalid
+argument` hataları da bunlardandır; örnek onları iletmez ve her script satırını
+çalışma başına en çok bir kez raporlar.
+
+```gdscript
+# Bir autoload'un _ready()'sinde: OS.add_logger(ScriptErrorReporter.new())
+class_name ScriptErrorReporter
+extends Logger
+
+var _reported := {}
+
+# Hatanın oluştuğu thread'de çağrılır; Firebase'e ana thread'de, ertelenerek gidilir.
+func _log_error(function: String, file: String, line: int, code: String, _rationale: String,
+		_editor_notify: bool, error_type: int, _backtraces: Array[ScriptBacktrace]) -> void:
+	if error_type == ERROR_TYPE_SCRIPT:
+		_report.call_deferred(function, file, line, code)
+
+func _report(function: String, file: String, line: int, code: String) -> void:
+	var site := "%s:%d" % [file, line]
+	if _reported.has(site):  # her satır çalışma başına en çok bir kez
+		return
+	_reported[site] = true
+	var stack: Array[Dictionary] = [{"function": function, "file": file, "line": line}]
+	Firebase.crashlytics.record_error("ScriptError", code, stack)
+```
+
 Crashlytics seçili build `debug_symbols=yes` kullanır, Android unstripped ELF ve
 iOS dSYM dosyalarını `build/symbols/<selection>/` altında kimlikleriyle saklar
 (`identity.json` yolları depo köküne görelidir). Addon'a giren Android kütüphanesi
