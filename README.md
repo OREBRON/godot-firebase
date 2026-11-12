@@ -632,7 +632,7 @@ var keys: PackedStringArray = (await Firebase.remote_config.get_keys("shop_").wa
 await Firebase.crashlytics.set_custom_keys({"level": 7, "mode": "puzzle"}).wait()
 # Explicit GDScript nonfatal; bütün Godot hataları otomatik raporlanmaz.
 # Stack kareleri {function, file, line}; get_stack() çıktısı olduğu gibi verilir
-# (release export'ta boş dönebilir).
+# (release export'ta debug/settings/gdscript/always_track_call_stacks kapalıysa boş).
 await Firebase.crashlytics.record_error("SaveError", "Save file unavailable", get_stack()).wait()
 ```
 
@@ -648,6 +648,13 @@ değildir. `check_unsent_reports()` collection açıkken false; kapalıyken SDK'
 Auth veya Analytics API modülleri Crashlytics için zorunlu değildir. Android'de
 pinned C++ App'in başlangıcı Analytics Java sınıflarını kullandığı için taban
 Maven bağımlılığı korunur; API klasörünü kaldırmak collection'ı kapatmaz.
+
+Android'de her `record_error` aynı Java istisna sınıfıyla (`GodotNonfatalError`)
+raporlanır; ad mesajın başındadır (`SaveError: Save file unavailable`). iOS'ta ad
+exception model adıdır. Crashlytics issue'ları sunucuda stack karelerine ve mesaja
+bakarak gruplar; Android'de stack'siz, farklı adlı hataların ayrı issue olacağı
+konsolda doğrulanmadı. Ayrı izlenecek hatalara stack verin; mesaja kullanıcı ID'si
+veya zaman gibi tekil değer koymayın, custom key kullanın.
 
 Crashlytics seçili build `debug_symbols=yes` kullanır, Android unstripped ELF ve
 iOS dSYM dosyalarını `build/symbols/<selection>/` altında kimlikleriyle saklar
