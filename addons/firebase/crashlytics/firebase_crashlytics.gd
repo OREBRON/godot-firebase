@@ -15,11 +15,11 @@ func log_message(message: String) -> FirebaseTask:
 	return _requests.send(&"log_message", [message])
 
 func set_custom_key(key: String, value: Variant) -> FirebaseTask:
-	return _send(&"set_custom_key", [key, value], validate_custom_key(key, value))
+	return _requests.send_if_valid(&"set_custom_key", [key, value], validate_custom_key(key, value))
 
 ## Sets every key in one call; one invalid key or value sets none of them.
 func set_custom_keys(keys: Dictionary) -> FirebaseTask:
-	return _send(&"set_custom_keys", [keys], validate_custom_keys(keys))
+	return _requests.send_if_valid(&"set_custom_keys", [keys], validate_custom_keys(keys))
 
 func set_user_id(user_id: String) -> FirebaseTask:
 	return _requests.send(&"set_user_id", [user_id])
@@ -30,7 +30,7 @@ func clear_user_id() -> FirebaseTask:
 ## Frames are {function, file, line}; get_stack() frames are accepted as they are.
 func record_error(name: String, message: String, stack: Array[Dictionary] = []) -> FirebaseTask:
 	var frames := _with_file_keys(stack)
-	return _send(&"record_error", [name, message, frames], validate_error(name, frames))
+	return _requests.send_if_valid(&"record_error", [name, message, frames], validate_error(name, frames))
 
 func set_collection_enabled(enabled: bool) -> FirebaseTask:
 	return _requests.send(&"set_collection_enabled", [enabled])
@@ -51,11 +51,6 @@ func send_unsent_reports() -> FirebaseTask:
 
 func delete_unsent_reports() -> FirebaseTask:
 	return _requests.send(&"delete_unsent_reports", [])
-
-func _send(method: StringName, args: Array, reason: String) -> FirebaseTask:
-	if not reason.is_empty():
-		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, reason)
-	return _requests.send(method, args)
 
 static func validate_custom_key(key: String, value: Variant) -> String:
 	if key.is_empty():

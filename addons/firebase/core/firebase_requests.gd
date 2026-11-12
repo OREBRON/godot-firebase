@@ -23,6 +23,11 @@ func send(method: StringName, args: Array = []) -> FirebaseTask:
 	return task
 
 
+## Sends the request when `reason`, a validator result, is empty; otherwise fails it with invalid().
+func send_if_valid(method: StringName, args: Array, reason: String) -> FirebaseTask:
+	return send(method, args) if reason.is_empty() else invalid(reason)
+
+
 ## Request id of a task that has not finished yet, or 0.
 func id_of(task: FirebaseTask) -> int:
 	var id: Variant = _pending.find_key(task)
@@ -38,6 +43,10 @@ func failed(code: int, message: String) -> FirebaseTask:
 	var task := FirebaseTask.new()
 	task.finish.call_deferred(FirebaseResult.failure(code, message))
 	return task
+
+
+func invalid(reason: String) -> FirebaseTask:
+	return failed(FirebaseResult.ERR_INVALID_ARGUMENT, reason)
 
 
 func _on_request_completed(id: int, ok: bool, value: Variant, error_code: int, error_message: String) -> void:

@@ -43,7 +43,7 @@ func ensure_initialized() -> FirebaseTask:
 func set_defaults(values: Dictionary) -> FirebaseTask:
 	var reason := validate_defaults(values)
 	if not reason.is_empty():
-		return _invalid(reason)
+		return _requests.invalid(reason)
 	return _requests.send(&"set_defaults", [values])
 
 
@@ -52,7 +52,7 @@ func set_defaults(values: Dictionary) -> FirebaseTask:
 ## Timeout is at most MAX_FETCH_TIMEOUT_MS to fit Android HTTP milliseconds.
 func set_settings(minimum_fetch_interval_ms: int, fetch_timeout_ms: int) -> FirebaseTask:
 	if minimum_fetch_interval_ms < 0 or fetch_timeout_ms < 0 or fetch_timeout_ms > MAX_FETCH_TIMEOUT_MS:
-		return _invalid("Remote Config interval must be nonnegative and timeout must be 0..2147483647 milliseconds")
+		return _requests.invalid("Remote Config interval must be nonnegative and timeout must be 0..2147483647 milliseconds")
 	return _requests.send(&"set_settings", [minimum_fetch_interval_ms, fetch_timeout_ms])
 
 
@@ -73,9 +73,9 @@ func fetch_and_activate() -> FirebaseTask:
 ## The native conversion flag is reported directly from the platform SDK.
 func get_value(key: String, value_type: int = TYPE_STRING) -> FirebaseTask:
 	if key.is_empty() or key.to_utf8_buffer().has(0):
-		return _invalid("Remote Config key must be non-empty and contain no NUL")
+		return _requests.invalid("Remote Config key must be non-empty and contain no NUL")
 	if not value_type in VALUE_TYPES:
-		return _invalid("Remote Config value type must be bool, int, float, String or PackedByteArray")
+		return _requests.invalid("Remote Config value type must be bool, int, float, String or PackedByteArray")
 	return _requests.send(&"get_value", [key, value_type])
 
 
@@ -83,7 +83,7 @@ func get_value(key: String, value_type: int = TYPE_STRING) -> FirebaseTask:
 ## with `prefix`; "" lists every key. Read each one with get_value().
 func get_keys(prefix: String = "") -> FirebaseTask:
 	if prefix.to_utf8_buffer().has(0):
-		return _invalid("Remote Config key prefix must contain no NUL")
+		return _requests.invalid("Remote Config key prefix must contain no NUL")
 	return _requests.send(&"get_keys", [prefix])
 
 
@@ -113,10 +113,6 @@ static func validate_defaults(values: Dictionary) -> String:
 		if value is float and not is_finite(value):
 			return "Remote Config float defaults must be finite"
 	return ""
-
-
-func _invalid(reason: String) -> FirebaseTask:
-	return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, reason)
 
 
 func _on_config_updated(updated_keys: PackedStringArray) -> void:

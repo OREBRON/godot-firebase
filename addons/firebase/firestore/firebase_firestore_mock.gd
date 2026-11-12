@@ -240,7 +240,7 @@ func _commit(ops: Array) -> int:
 		if op.op == "update" and not staged_documents.has(op.path):
 			_finish_error(id, NOT_FOUND, "No document to update: %s" % op.path)
 			return id
-		_apply(op, staged_documents)
+		_apply_op(op, staged_documents)
 		values[op.path] = staged_documents[op.path].duplicate(true) if staged_documents.has(op.path) else null
 	documents.assign(staged_documents)
 	for path in values:
@@ -252,7 +252,7 @@ func _commit(ops: Array) -> int:
 	return id
 
 
-func _apply(op: Dictionary, target_documents: Dictionary[String, Dictionary]) -> void:
+func _apply_op(op: Dictionary, target_documents: Dictionary[String, Dictionary]) -> void:
 	match op.op:
 		"delete":
 			target_documents.erase(op.path)

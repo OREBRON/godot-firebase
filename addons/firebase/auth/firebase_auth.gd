@@ -80,12 +80,12 @@ func link_with_play_games(server_auth_code: String) -> FirebaseTask:
 
 ## Pass a token minted by the game's server with the Firebase Admin SDK.
 func sign_in_with_custom_token(token: String) -> FirebaseTask:
-	return _send(&"sign_in_with_custom_token", [token], "custom token is required" if token.is_empty() else "")
+	return _requests.send_if_valid(&"sign_in_with_custom_token", [token], "custom token is required" if token.is_empty() else "")
 
 
 ## Signs in to an existing email/password account.
 func sign_in_with_email(email: String, password: String) -> FirebaseTask:
-	return _send(&"sign_in_with_email", [email, password], validate_email(email, password))
+	return _requests.send_if_valid(&"sign_in_with_email", [email, password], validate_email(email, password))
 
 
 ## Proves again that the player owns the signed-in account, for example before
@@ -113,13 +113,13 @@ func reauthenticate_with_email(email: String, password: String) -> FirebaseTask:
 ## Pass a Firebase provider ID from current_user().providers, e.g. "google.com".
 ## Read current_user() afterwards for the remaining providers.
 func unlink_provider(provider_id: String) -> FirebaseTask:
-	return _send(&"unlink_provider", [provider_id], "provider ID is required" if provider_id.is_empty() else "")
+	return _requests.send_if_valid(&"unlink_provider", [provider_id], "provider ID is required" if provider_id.is_empty() else "")
 
 
 ## Keys: display_name and photo_url (Strings). A key left out keeps its value;
 ## "" clears it. Read current_user() afterwards; state_changed is not emitted.
 func update_profile(profile: Dictionary) -> FirebaseTask:
-	return _send(&"update_profile", [profile], validate_profile(profile))
+	return _requests.send_if_valid(&"update_profile", [profile], validate_profile(profile))
 
 
 ## Fetches the account again, e.g. after it changed on another device or the
@@ -171,16 +171,10 @@ static func validate_profile(profile: Dictionary) -> String:
 	return ""
 
 
-func _send(method: StringName, args: Array, reason: String) -> FirebaseTask:
-	if not reason.is_empty():
-		return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, reason)
-	return _requests.send(method, args)
-
-
 func _reauthenticate(method: StringName, args: Array, reason := "") -> FirebaseTask:
 	if not is_signed_in():
 		return _requests.failed(FirebaseResult.ERR_NO_USER, "reauthentication needs a signed-in user")
-	return _send(method, args, reason)
+	return _requests.send_if_valid(method, args, reason)
 
 
 func _sign_in(provider: String, link: bool, server_auth_code := "") -> FirebaseTask:

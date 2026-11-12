@@ -17,13 +17,14 @@ const QUERY_LIMITS := ["limit_to_first", "limit_to_last"]
 const MAX_QUERY_LIMIT := 2147483647
 
 var _requests: FirebaseRequests
-var _listeners: Dictionary[int, Callable] = {}
+var _listeners: FirebaseListeners
 
 
 func _init(requests: FirebaseRequests) -> void:
 	_requests = requests
+	_listeners = FirebaseListeners.new(_requests.backend)
 	if _requests.backend:
-		_requests.backend.value_changed.connect(_on_value_changed)
+		_requests.backend.value_changed.connect(_listeners.deliver)
 
 
 ## Write it as a value to add `by` to the stored number on the server atomically.
@@ -41,7 +42,7 @@ static func increment(by: Variant) -> Dictionary:
 func get_value(path: String, query: Dictionary = {}) -> FirebaseTask:
 	var reason := _read_reason(path, query)
 	if not reason.is_empty():
-		return _invalid(reason)
+		return _requests.invalid(reason)
 	return _requests.send(&"get_value", [path, query])
 
 
@@ -97,15 +98,11 @@ func listen_value(path: String, callback: Callable, query: Dictionary = {}) -> i
 	if _requests.backend == null or not reason.is_empty() or not callback.is_valid():
 		push_error("Firebase: cannot listen to %s: %s" % [path, reason if reason else "no backend or invalid callback"])
 		return 0
-	var id: int = _requests.backend.listen_value(path, query)
-	if id != 0:
-		_listeners[id] = callback
-	return id
+	return _listeners.add(_requests.backend.listen_value(path, query), callback)
 
 
 func remove_listener(id: int) -> void:
-	if _listeners.erase(id):
-		_requests.backend.remove_listener(id)
+	_listeners.remove(id)
 
 
 static func is_valid_path(path: String) -> bool:
@@ -213,44 +210,31 @@ static func _is_query_bound(bound: Variant, by_key: bool) -> bool:
 
 func _request(path: String, method: StringName, args: Array) -> FirebaseTask:
 	if not is_valid_path(path):
-		return _invalid("not a database path: %s" % path)
+		return _requests.invalid("not a database path: %s" % path)
 	return _requests.send(method, args)
 
 
 func _write(path: String, method: StringName, value: Variant, args: Array, extra_depth: int = 0) -> FirebaseTask:
 	var reason := _validate_value(value, _path_depth(path) + extra_depth, [])
 	if not reason.is_empty():
-		return _invalid(reason)
+		return _requests.invalid(reason)
 	return _request(path, method, args)
 
 
 func _update(path: String, values: Dictionary, method: StringName) -> FirebaseTask:
 	for key in values:
 		if not key is String or not is_valid_path(key) or key.is_empty():
-			return _invalid("child path must be a non-empty valid path: %s" % str(key))
+			return _requests.invalid("child path must be a non-empty valid path: %s" % str(key))
 		var slash: int = key.find("/")
 		while slash != -1:
 			if values.has(key.left(slash)):
-				return _invalid("update paths must not contain both a parent and its child")
+				return _requests.invalid("update paths must not contain both a parent and its child")
 			slash = key.find("/", slash + 1)
 		var reason := _validate_value(values[key], _path_depth(path) + _path_depth(key), [])
 		if not reason.is_empty():
-			return _invalid(reason)
+			return _requests.invalid(reason)
 	return _request(path, method, [path, values])
 
 
 static func _path_depth(path: String) -> int:
 	return 0 if path.is_empty() else path.split("/").size()
-
-
-func _invalid(reason: String) -> FirebaseTask:
-	return _requests.failed(FirebaseResult.ERR_INVALID_ARGUMENT, reason)
-
-
-func _on_value_changed(listener_id: int, ok: bool, snapshot: Dictionary, error_code: int, error_message: String) -> void:
-	var callback: Callable = _listeners.get(listener_id, Callable())
-	# The SDK stops a listener after an error; a freed callback object never calls remove_listener().
-	if not ok or not callback.is_valid():
-		remove_listener(listener_id)
-	if callback.is_valid():
-		callback.call(FirebaseResult.success(snapshot) if ok else FirebaseResult.failure(error_code, error_message))
