@@ -122,7 +122,12 @@ Eksik LFS binary, import/script hatası ve timeout başarısız sayılır.
    çıktısını build öncesinde temizle; LFS desktop stub'larını koru ve
    dağıtılacak tüm mobil platformları aynı modül listesiyle derle.
    Mevcut paketleyici eski platform çıktısını veya mixed build'i reddetmez.
-3. Proje ayarlarında eklentiyi aç. `Firebase` autoload'u eklenir.
+3. Proje ayarlarında eklentiyi aç. `Firebase` autoload'u eklenir ve oyun boyunca
+   yaşar (sahne değişimi ve `reload_current_scene()` onu korur); oyun çalışırken
+   onu serbest bırakma veya yerine aynı adla yeni node ekleme. Cihazda eski Auth
+   nesnesi (ör. saklanan `Firebase.auth`) hâlâ tutulurken ya da bir giriş
+   sürerken yeni örnek oturumu devralamaz ve Auth o çalıştırma boyunca
+   kullanılamaz kalır.
 4. Firebase konsolundan `GoogleService-Info.plist` indir, `res://` köküne koy
    (dosya adı birebir aynı kalmalı; `BUNDLE_ID` export preset'inin
    `application/bundle_identifier` değeriyle eşleşmeli, aksi halde export Xcode
