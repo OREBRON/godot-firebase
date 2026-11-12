@@ -3,13 +3,9 @@
 #
 #   scons platform=ios arch=arm64 ios_simulator=no target=template_release modules=auth
 #   scons platform=android arch=arm64 target=template_release modules=auth
-#   scons platform=macos arch=arm64 target=template_debug
-#
-# macOS builds an editor stub without Firebase: it only keeps the editor from
-# reporting a missing library, and the addon uses its mocks there.
 #
 # Dependencies come from tools/bootstrap.sh; tools/build.sh runs every variant.
-# tools/build_desktop_stub.py is the lightweight desktop build (no SDK/bindings).
+# tools/build_desktop_stub.py builds the desktop editor stubs (no SDK/bindings).
 
 import glob
 import os
@@ -53,25 +49,22 @@ if unknown or not modules or len(set(modules)) != len(modules):
     Exit("modules must be a non-empty subset of %s, got %s" % (",".join(MODULES), env["modules"]))
 
 platform = env["platform"]
-if platform not in ("ios", "android", "macos"):
-    Exit("platform=%s is not supported (ios, android, macos)" % platform)
+if platform not in ("ios", "android"):
+    Exit("platform=%s is not supported (ios, android); desktop stubs come from tools/build_desktop_stub.py" % platform)
 
 env.Append(CPPPATH=["src", FIREBASE_CPP + "/include"])
+env.Append(CPPDEFINES=["GODOT_FIREBASE_" + name.upper() for name in modules])
 sources = ["src/register_types.cpp"]
-if platform == "macos":
-    env.Append(CPPDEFINES=["GODOT_FIREBASE_EDITOR_STUB"])
-else:
-    env.Append(CPPDEFINES=["GODOT_FIREBASE_" + name.upper() for name in modules])
-    sources += Glob("src/core/*.cpp")
-    if platform == "ios":
-        sources += Glob("src/core/*.mm")
-    for name in modules:
-        sources += Glob("src/%s/*.cpp" % name)
-    if "auth" in modules:
-        sources += ["src/auth/platform/platform_credentials_ios.mm" if platform == "ios" else "src/auth/platform/platform_credentials_android.cpp"]
+sources += Glob("src/core/*.cpp")
+if platform == "ios":
+    sources += Glob("src/core/*.mm")
+for name in modules:
+    sources += Glob("src/%s/*.cpp" % name)
+if "auth" in modules:
+    sources += ["src/auth/platform/platform_credentials_ios.mm" if platform == "ios" else "src/auth/platform/platform_credentials_android.cpp"]
 
-    if "crashlytics" in modules:
-        sources += ["src/crashlytics/platform/crashlytics_ios.mm" if platform == "ios" else "src/crashlytics/platform/crashlytics_android.cpp"]
+if "crashlytics" in modules:
+    sources += ["src/crashlytics/platform/crashlytics_ios.mm" if platform == "ios" else "src/crashlytics/platform/crashlytics_android.cpp"]
 
 cpp_libraries = [lib for name in modules for lib in MODULES[name]["cpp"]] + CORE["cpp"]
 
@@ -156,8 +149,6 @@ if platform == "ios":
     env.Append(LIBS=["c++", "z", "sqlite3"])
 
 suffix = ".%s.%s%s" % (platform, env["target"], ".simulator" if platform == "ios" and env["ios_simulator"] else "")
-if platform == "macos":
-    suffix = ".macos.%s" % env["arch"]
 library_name = "libgodot_firebase%s%s" % (suffix, env["SHLIBSUFFIX"])
 # The framework wrapper sets the final @rpath before SDK signing. Reserve room
 # for its longer install name; the intermediate dylib still has a usable ID.
