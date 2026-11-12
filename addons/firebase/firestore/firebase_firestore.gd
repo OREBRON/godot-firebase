@@ -102,20 +102,15 @@ func batch(ops: Array) -> FirebaseTask:
 ## A failed result is the last one: the listener is already removed when it arrives.
 ## Returns an id for remove_listener(), or 0 when the listener could not start.
 func listen_doc(path: String, callback: Callable, include_metadata_changes: bool = false) -> int:
-	if _requests.backend == null or not FirebaseValue.is_document_path(path):
-		push_error("Firebase: cannot listen to %s" % path)
-		return 0
-	return _listeners.add(_requests.backend.listen_doc(path, include_metadata_changes), callback)
+	var reason := "" if FirebaseValue.is_document_path(path) else "not a document path"
+	return _listeners.start(path, reason, callback, &"listen_doc", [path, include_metadata_changes])
 
 
 ## Like listen_doc() for a query: each result value is {documents, metadata} as
 ## query_snapshot() returns, sent now and whenever the matching documents change.
 func listen_query(collection_path: String, callback: Callable, filters: Array = [], order_by: Array = [], limit: int = 0, cursor: Dictionary = {}, include_metadata_changes: bool = false) -> int:
 	var reason := _validate_query(collection_path, filters, order_by, limit, cursor)
-	if _requests.backend == null or not reason.is_empty():
-		push_error("Firebase: cannot listen to %s: %s" % [collection_path, reason if reason else "no backend"])
-		return 0
-	return _listeners.add(_requests.backend.listen_query(collection_path, filters, order_by, limit, cursor, include_metadata_changes), callback)
+	return _listeners.start(collection_path, reason, callback, &"listen_query", [collection_path, filters, order_by, limit, cursor, include_metadata_changes])
 
 
 func remove_listener(id: int) -> void:
